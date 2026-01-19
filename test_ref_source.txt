@@ -1,0 +1,30 @@
+# Test Document with References
+
+## Introduction
+
+This is a test document to verify formatting.
+
+## Main Content
+
+1. First Item: This is the first item in the list with enough content to see if it's being formatted as bold.
+2. Second Item: This is the second item in the list.
+
+Some body text about items.
+
+- Simple bullet point
+- Another simple point
+- This is a longer bullet point with more than 30 words to test if it gets converted to bold format as per the requirements
+
+## References
+
+Bennett, D. (2021). The Future of Internships: Adapting to a Changing World. Journal of Internship Studies, 15(3), 45-62.
+
+Davis, K. (2020). Virtual Internships: Opportunities and Challenges. International Journal of Education, 28(2), 123-145.
+
+Gault, J. L., & Duey, M. (2010). Effects of Business Internships on Students' Professional Development and Career Prospects. Journal of Career Development, 37(4), 766-784.
+
+Lukman, Y. (2021). The University Internship Program and Its Impact on Student Success. Educational Research Review, 12(1), 89-105.
+
+Ndamase, M. (2021). The Impact of Internship Programs on Student Competencies. African Journal of Education, 19(2), 234-256.
+
+## End of Document

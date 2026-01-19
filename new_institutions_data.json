@@ -1,0 +1,195 @@
+{
+  "bust": {
+    "id": "bust",
+    "name": "Bamenda University of Science and Technology",
+    "short": "BUO",
+    "logo": "bust_logo.png",
+    "faculties": [
+      {
+        "name": "Faculty of Education",
+        "departments": [
+          "Foundations of Education",
+          "Guidance and Counseling",
+          "Educational Administration",
+          "Teacher Education Arts and Science",
+          "Special Needs Education",
+          "Community Development and Adult Education",
+          "Philosophy",
+          "Physics",
+          "Chemistry",
+          "Mathematics",
+          "Microbiology",
+          "Biology",
+          "Zoology",
+          "English",
+          "French",
+          "History",
+          "Geography",
+          "Home Economics, Fashion and Design",
+          "Communication",
+          "Food Science and Nutrition",
+          "Education Commerce",
+          "Psychology of Education",
+          "Sociology of Education",
+          "Policy, History and Evaluation of Education",
+          "Human Development"
+        ]
+      },
+      {
+        "name": "Faculty of Economics, Law and Management Sciences",
+        "departments": [
+          "Accounting",
+          "Banking and Finance",
+          "Business Management",
+          "Marketing",
+          "Executive Secretarial Studies",
+          "Insurance",
+          "Public Service and Administration",
+          "Human Resource Management",
+          "Logistics and Transport",
+          "International Law",
+          "Public Law",
+          "Administrative Law",
+          "Public Administration",
+          "Intellectual Property Law",
+          "Business Law",
+          "International Maritime Law",
+          "Transport and Maritime Law",
+          "Law of Security and Logistics",
+          "Economics",
+          "Business Administration",
+          "Finance and Accounting",
+          "Management",
+          "Dispute Resolution",
+          "International Relations",
+          "Political Science"
+        ]
+      },
+      {
+        "name": "Faculty of Health Sciences",
+        "departments": [
+          "Nursing",
+          "Medical Laboratory Science",
+          "Health Care Management",
+          "Pharmacy",
+          "Public Health",
+          "Nursing Educator",
+          "Health Systems Management",
+          "Reproductive Health",
+          "Medical Biochemistry",
+          "Medical Microbiology",
+          "Medical Pathology",
+          "Medical Virology",
+          "Pharmacology/Toxicology"
+        ]
+      },
+      {
+        "name": "Faculty of Engineering & Technology",
+        "departments": [
+          "Civil Engineering",
+          "Electrical Power Systems Engineering",
+          "Electronics Engineering",
+          "Mechanical Engineering",
+          "Agricultural Engineering",
+          "Food Science and Technology",
+          "Water Engineering"
+        ]
+      },
+      {
+        "name": "Faculty of Agriculture & Rural Development",
+        "departments": [
+          "Agricultural Engineering",
+          "Agricultural Economics",
+          "Animal Science / Animal Health and Medicine",
+          "Environmental Science",
+          "Food Science and Technology",
+          "Rural Development and Administration",
+          "Home Economics, Food and Event Management",
+          "Fashion, Clothing and Textiles",
+          "Tourism and Hotel Management",
+          "Agronomy and Soil Science",
+          "Forestry, Wildlife and Fisheries",
+          "Environmental Science and Water Resource Management"
+        ]
+      }
+    ]
+  },
+  "catholic": {
+    "id": "cucb",
+    "name": "The Catholic University of Cameroon, Bamenda",
+    "short": "TCU",
+    "logo": "cucb_logo.png",
+    "faculties": [
+      {
+        "name": "FACULTY OF BUSINESS AND MANAGEMENT SCIENCES",
+        "departments": [
+          "Accounting",
+          "Banking and Finance",
+          "Economics",
+          "Economics and Management",
+          "Insurance and Risk Management",
+          "Management and Entrepreneurship",
+          "Marketing",
+          "Microfinance Management",
+          "Project Management, Design and Implementation",
+          "Banking, Tax Administration and Financial Services",
+          "Human Resource Management and Development",
+          "Health Economics"
+        ]
+      },
+      {
+        "name": "FACULTY OF HUMANITIES AND SOCIAL SCIENCES",
+        "departments": [
+          "Philosophy",
+          "Anthropology",
+          "Geography and Environmental Studies"
+        ]
+      },
+      {
+        "name": "FACULTY OF SCIENCES",
+        "departments": [
+          "Biochemistry",
+          "Computer Science",
+          "Mathematics",
+          "Microbiology",
+          "Software Engineering",
+          "Computer Networking and Security",
+          "Information Communication Technology"
+        ]
+      },
+      {
+        "name": "SCHOOL OF ENGINEERING",
+        "departments": [
+          "Petroleum Engineering",
+          "Chemical Engineering",
+          "Civil Engineering",
+          "Mechanical Engineering",
+          "Electrical Engineering"
+        ]
+      },
+      {
+        "name": "SCHOOL OF HEALTH SCIENCES",
+        "departments": [
+          "Medicine",
+          "Nursing",
+          "Biomedical Sciences",
+          "Medical Laboratory Science"
+        ]
+      },
+      {
+        "name": "SCHOOL OF TROPICAL AGRICULTURE AND NATURAL RESOURCES",
+        "departments": [
+          "Animal Science and Biotechnology",
+          "Nutrition Food Science and Technology",
+          "Agronomy",
+          "Agricultural Economics",
+          "Animal Production Technology",
+          "Crop Production Technology",
+          "Agricultural Production Technology",
+          "Food Technology",
+          "Nutrition and Dietetics"
+        ]
+      }
+    ]
+  }
+}

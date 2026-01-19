@@ -1,0 +1,32 @@
+INTERNSHIP PROGRAM OVERVIEW
+
+1. Types of Internships:
+   1. Paid Internships: Paid internships involve the intern receiving financial compensation for their work. Larger corporations and government agencies typically offer paid internships to their interns. This helps to attract more qualified interns and shows that the organization values the work of the interns.
+   
+   2. Unpaid Internships: Unpaid internships do not provide financial compensation to the intern for their work. Instead, interns may receive academic credit or gain valuable work experience and skills that will help them in their future career.
+   
+   3. Virtual Internships: Virtual internships, also known as remote internships, allow interns to work remotely from their own location rather than having to physically go to an office or workplace.
+
+2. Aims and Objectives:
+   1. Personal Development: One of the primary aims of an internship is to help individuals gain a better understanding of their own interests, strengths, and areas for improvement. Through hands-on experience in a real work environment, interns are able to assess their personal preferences, work habits, and career goals.
+   
+   2. Educational Development: Internships are designed to complement academic learning with practical experience, bridging the gap between theory and practice. The objectives of educational development through internships include applying classroom knowledge to real-world scenarios, mastering industry-specific skills, and gaining insight into the latest trends and advancements in the field.
+   
+   3. Professional Development: Internships play a crucial role in preparing individuals for the demands of the workforce and equipping them with the necessary skills to succeed in their chosen career paths.
+
+Simple Bullets:
+• Quick item one
+• Quick item two
+• Item three with a bit more text but still under thirty words total
+
+Complex Bullets:
+• Long Topic Title: This is a longer item that has more than thirty words in the explanation portion. It should be converted to bold format with the content separated below rather than staying as a traditional bullet point. This ensures better readability.
+
+• Another Complex Item: Multiple sentences here to demonstrate substantive content. When bullet points contain substantial explanations like this, they should be converted to bold titles with body text below, not kept as regular bullets.
+
+a. Lettered Item A: Here is a substantial explanation that spans multiple lines about this topic. Since it exceeds the thirty word threshold and has a title, it should be formatted as bold with separate body content. This improves document hierarchy and readability significantly compared to traditional bullet formatting.
+
+b. Lettered Item B: This is another multi-word explanation that demonstrates the smart detection system. It will be properly converted from bullet/letter format to bold title with indented body content below.
+
+CONCLUSION
+The formatting system successfully handles diverse list types and intelligently converts appropriate items to bold format for better document structure.

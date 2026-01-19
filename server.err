@@ -1,0 +1,25 @@
+INFO:werkzeug:[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.174:5000
+INFO:werkzeug:[33mPress CTRL+C to quit[0m
+INFO:werkzeug: * Restarting with stat
+WARNING:werkzeug: * Debugger is active!
+INFO:werkzeug: * Debugger PIN: 627-830-014
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:32] "[35m[1mPOST /api/auth/signup HTTP/1.1[0m" 201 -
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:34] "POST /api/auth/login HTTP/1.1" 200 -
+C:\Users\user\Desktop\PATTERN\pattern-formatter\backend\pattern_formatter_backend.py:79: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  return User.query.get(int(user_id))
+C:\Users\user\Desktop\PATTERN\pattern-formatter\backend\pattern_formatter_backend.py:11307: LegacyAPIWarning: The Query.get() method is considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  user = User.query.get(current_user.id)
+INFO:__main__:Generated smart filename: test_doc_formatted
+INFO:__main__:Document saved to C:\Users\user\Desktop\PATTERN\pattern-formatter\backend\outputs\c27487a3-5e3d-4dc7-afd7-3cdb91956e90_formatted.docx
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:36] "POST /upload HTTP/1.1" 200 -
+INFO:__main__:Generated smart filename: test_doc_formatted
+INFO:__main__:Document saved to C:\Users\user\Desktop\PATTERN\pattern-formatter\backend\outputs\ccc73012-2ed7-4bd4-ab46-f5c0b5df3fcf_formatted.docx
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:39] "POST /upload HTTP/1.1" 200 -
+INFO:__main__:Generated smart filename: test_doc_formatted
+INFO:__main__:Document saved to C:\Users\user\Desktop\PATTERN\pattern-formatter\backend\outputs\547bf1a4-2152-42b7-a67b-423d6c7481a9_formatted.docx
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:41] "POST /upload HTTP/1.1" 200 -
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:43] "[31m[1mPOST /upload HTTP/1.1[0m" 403 -
+INFO:werkzeug:127.0.0.1 - - [05/Jan/2026 13:32:45] "GET /api/auth/status HTTP/1.1" 200 -
