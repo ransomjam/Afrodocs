@@ -1,0 +1,3276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AfroDocs</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css" rel="stylesheet">
+
+    <!-- CDN fallback: try local /vendor/* copies if CDN resources time out -->
+    <script>
+    (function(){
+        function loadScript(src, onload, onerror){
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = onload || function(){};
+            s.onerror = onerror || function(){};
+            document.head.appendChild(s);
+            return s;
+        }
+        function loadCSS(href){
+            var l = document.createElement('link');
+            l.rel = 'stylesheet';
+            l.href = href;
+            l.onerror = function(){ showResourceError(); };
+            document.head.appendChild(l);
+            return l;
+        }
+        function showResourceError(){
+            if(document.getElementById('resource-error')) return;
+            var el = document.createElement('div');
+            el.id = 'resource-error';
+            el.innerHTML = '<strong>Resources failed to load.</strong> The app could not load some external scripts (CDN blocked or offline).\n\nPlease ensure internet access or download the vendor files into <code>/vendor</code> and restart the app.';
+            el.style.position = 'fixed';
+            el.style.left = '12px';
+            el.style.right = '12px';
+            el.style.bottom = '12px';
+            el.style.padding = '12px 16px';
+            el.style.background = '#fff3cd';
+            el.style.color = '#222';
+            el.style.border = '1px solid #ffeeba';
+            el.style.borderRadius = '6px';
+            el.style.zIndex = 99999;
+            el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+            document.body.appendChild(el);
+        }
+        function tryLocalFallback(){
+            // If ReactDOM didn't load from CDN, attempt local vendor copy
+            if(typeof ReactDOM === 'undefined'){
+                loadScript('/vendor/react-dom.development.js', function(){console.info('Loaded local react-dom')}, showResourceError);
+            }
+            // If Babel didn't load, attempt local vendor
+            if(typeof Babel === 'undefined'){
+                loadScript('/vendor/babel.min.js', function(){console.info('Loaded local babel')}, showResourceError);
+            }
+            // If lucide CSS not present (no link with 'lucide'), add local file
+            if(!document.querySelector('link[href*="lucide"]')){
+                loadCSS('/vendor/lucide.min.css');
+            }
+            // If fonts or tailwind fail to load, we can't easily polyfill here; show message after timeout
+            setTimeout(function(){
+                if(typeof ReactDOM === 'undefined' || typeof Babel === 'undefined'){
+                    showResourceError();
+                }
+            }, 2500);
+        }
+        // Try fallback shortly after load in case CDNs time out
+        window.addEventListener('load', tryLocalFallback);
+    })();
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ocean: {
+                            DEFAULT: '#1E5A8E',
+                            dark: '#0D2F4A',
+                        },
+                        teal: {
+                            DEFAULT: '#00B4A6',
+                            light: '#7DD3C0',
+                        },
+                        amber: {
+                            DEFAULT: '#F2A93B',
+                        },
+                        coral: {
+                            DEFAULT: '#FF6B6B',
+                        },
+                        midnight: '#1A1F2E',
+                        slate: '#4A5568',
+                        mist: '#CBD5E0', // Lighter for better contrast
+                        cloud: '#F7FAFC',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Poppins', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    boxShadow: {
+                        'glow': '0 0 15px rgba(0, 180, 166, 0.3)',
+                        'glass': '0 4px 20px 0 rgba(0, 0, 0, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(13, 47, 74, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4A5568;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+        
+        /* Drag over effect */
+        .drag-over {
+            border-color: #00B4A6 !important;
+            background-color: rgba(0, 180, 166, 0.1) !important;
+            box-shadow: 0 0 20px rgba(0, 180, 166, 0.15);
+        }
+        
+        /* Animation keyframes */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 15px rgba(0, 180, 166, 0.2); }
+            50% { box-shadow: 0 0 25px rgba(0, 180, 166, 0.4); }
+        }
+        
+        .processing-glow {
+            animation: pulse-glow 2s infinite;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0D2F4A;
+            color: #E2E8F0;
+        }
+        
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Inter', sans-serif;
+            letter-spacing: -0.025em;
+        }
+
+        /* Glassmorphism utilities - Professional Grade */
+        .glass-panel {
+            background: rgba(13, 47, 74, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s ease;
+            color: #F7FAFC;
+        }
+
+        .glass-input:focus {
+            background: rgba(0, 0, 0, 0.5);
+            border-color: #00B4A6;
+            box-shadow: 0 0 0 1px rgba(0, 180, 166, 0.3);
+        }
+        
+        /* Form label helper */
+        .form-label {
+            color: #CBD5E0;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.375rem;
+            display: block;
+        }
+        
+        @media (min-width: 768px) {
+            .form-label {
+                font-size: 1rem;
+            }
+        }
+
+        /* Document Preview Styles - Exact Replica */
+        .document-preview-container {
+            background-color: #525659;
+            padding: 2rem;
+            overflow: auto; /* Allow scrolling in both directions */
+            max-height: 800px;
+            border-radius: 0.75rem;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center; /* Center the page on large screens */
+            align-items: flex-start;
+        }
+
+        .document-page {
+            background-color: white;
+            color: black;
+            /* Fixed A4 dimensions to ensure identical structure on all devices */
+            width: 210mm; 
+            min-height: 297mm;
+            flex-shrink: 0; /* Prevent shrinking on mobile */
+            margin: 0 auto;
+            padding: 25.4mm; /* 1 inch margins */
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 12pt;
+            line-height: 1.5; /* Exact match to backend */
+            text-align: justify;
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        .document-page p {
+            margin-bottom: 0;
+            text-indent: 0; /* Backend uses first_line_indent for some, but 0 for others. Default to 0 and add class for indent */
+        }
+        
+        .document-page .indent-para {
+            text-indent: 0.5in;
+        }
+
+        .document-page h1 {
+            font-size: 12pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 12pt;
+            color: black;
+        }
+
+        .document-page h2, .document-page h3, .document-page h4 {
+            font-size: 12pt;
+            font-weight: bold;
+            text-align: left;
+            margin-top: 12pt;
+            margin-bottom: 6pt;
+            color: black;
+        }
+
+        .document-page .figure-caption {
+            font-style: italic;
+            text-align: center;
+            margin-top: 6pt;
+            margin-bottom: 12pt;
+        }
+
+        .document-page .table-caption {
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 6pt;
+        }
+
+        .document-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12pt;
+            font-size: 12pt;
+        }
+
+        .document-page th, .document-page td {
+            border: 1px solid black;
+            padding: 4pt;
+            vertical-align: top;
+        }
+
+        .document-page th {
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .document-page .block-quote {
+            margin-left: 0.5in;
+            margin-right: 0.5in;
+            font-style: italic;
+            margin-top: 6pt;
+            margin-bottom: 6pt;
+        }
+
+        .document-page .hanging-indent {
+            padding-left: 0.5in;
+            text-indent: -0.25in;
+        }
+        
+        .document-page .glossary-indent {
+            padding-left: 0.25in;
+            text-indent: -0.25in;
+        }
+
+        .document-page .math-display {
+            text-align: center;
+            margin-top: 12pt;
+            margin-bottom: 12pt;
+        }
+
+        /* Scanner Animation */
+        @keyframes scan {
+            0% { top: 0%; opacity: 0; }
+            15% { opacity: 1; }
+            85% { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        
+        .scanner-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #00B4A6;
+            box-shadow: 0 0 15px #00B4A6, 0 0 30px #00B4A6;
+            animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            z-index: 20;
+        }
+        
+        .scanner-beam {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: linear-gradient(to bottom, rgba(0, 180, 166, 0.3), transparent);
+            animation: scan 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            z-index: 19;
+        }
+
+        .tech-grid {
+            background-image: 
+                linear-gradient(rgba(0, 180, 166, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 180, 166, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useRef, useCallback, useEffect } = React;
+
+        // Icon components (simplified SVG icons)
+        const Icons = {
+            Loader: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                </svg>
+            ),
+            X: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            ),
+            Users: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            ),
+            User: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+            ),
+            Copy: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            ),
+            Upload: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+            ),
+            FileText: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+            ),
+            Download: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            ),
+            Check: ({ size = 16, className = "" }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            ),
+            CheckCircle: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            ),
+            SuccessCheck: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            ),
+            Zap: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            ),
+            Eye: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            ),
+            AlertCircle: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+            ),
+            Heading: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 12h12"></path>
+                    <path d="M6 4v16"></path>
+                    <path d="M18 4v16"></path>
+                </svg>
+            ),
+            List: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+            ),
+            Table: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"></path>
+                </svg>
+            ),
+            Book: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+            ),
+            Settings: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+            ),
+            Scan: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
+            ),
+            Layout: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            ),
+            ChevronDown: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9l6 6 6-6"/>
+                </svg>
+            ),
+            Share: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="3"></circle>
+                    <circle cx="6" cy="12" r="3"></circle>
+                    <circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+            ),
+            Refresh: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+            ),
+            Maximize: () => (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+            ),
+            Star: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+            )
+        };
+
+        // API Configuration
+        // Use current origin to ensure same-origin requests (avoids CORS issues)
+        const API_BASE = window.location.origin || 'http://localhost:5000';
+
+        // PDF Preview Modal Component
+        const PdfPreviewModal = ({ url, onClose, viewParam = 'FitH' }) => {
+            if (!url) return null;
+
+            // Determine effective view parameter based on screen size
+            // On mobile (< 768px), force FitH (Fit Horizontal) for better readability
+            // On desktop, respect the passed viewParam (which might be FitV for cover pages)
+            const isMobile = window.innerWidth < 768;
+            const effectiveViewParam = isMobile ? 'FitH' : viewParam;
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 md:p-8">
+                    <div className="bg-ocean-dark w-full h-full max-h-screen sm:max-h-[95vh] md:max-w-6xl rounded-lg sm:rounded-2xl shadow-2xl flex flex-col border border-teal/30 overflow-hidden">
+                        <div className="flex items-center justify-between p-2 sm:p-3 md:p-4 border-b border-white/10 bg-black/20 flex-shrink-0">
+                            <h3 className="text-white font-bold text-sm sm:text-base md:text-lg flex items-center gap-1 sm:gap-2">
+                                <span className="text-teal scale-75 sm:scale-90 md:scale-100"><Icons.Eye /></span>
+                                <span className="hidden sm:inline">Document</span> Preview
+                            </h3>
+                            <button 
+                                onClick={onClose}
+                                className="p-1 sm:p-2 hover:bg-white/10 rounded-full text-mist hover:text-white transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="sm:w-6 sm:h-6">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="flex-1 relative bg-slate-900 overflow-hidden" onContextMenu={(e) => e.preventDefault()}>
+                            <iframe 
+                                src={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=${effectiveViewParam}`}
+                                className="w-full h-full border-0"
+                                title="PDF Preview"
+                            />
+                            {/* Overlay to prevent drag/drop or right click interactions if needed */}
+                            <div className="absolute inset-0 pointer-events-none" />
+                        </div>
+                        <div className="p-2 sm:p-3 bg-black/40 text-center text-xs text-mist border-t border-white/5 flex-shrink-0">
+                            Preview Mode - Download Disabled
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Auth Component
+        const AuthPage = ({ onLogin }) => {
+            const [isLogin, setIsLogin] = React.useState(true);
+            const [username, setUsername] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [email, setEmail] = React.useState('');
+            const [referralCode, setReferralCode] = React.useState('');
+            const [institution, setInstitution] = React.useState('The University of Bamenda');
+
+            React.useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                const ref = params.get('ref');
+                if (ref) {
+                    setReferralCode(ref);
+                    setIsLogin(false); // Switch to signup if ref is present
+                }
+            }, []);
+            const [customInstitution, setCustomInstitution] = React.useState('');
+            const [contact, setContact] = React.useState('');
+            const [error, setError] = React.useState('');
+            const [loading, setLoading] = React.useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                setLoading(true);
+
+                const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+                const finalInstitution = institution === 'Other (Specify)' ? customInstitution : institution;
+                
+                const payload = { username, password };
+                if (!isLogin) {
+                    payload.institution = finalInstitution;
+                    payload.contact = contact;
+                    payload.email = email;
+                    payload.referral_code = referralCode;
+                }
+                
+                try {
+                    const response = await fetch(`${API_BASE}${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        credentials: 'include'
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        if (isLogin) {
+                            onLogin(data.username);
+                        } else {
+                            // Auto login after signup or switch to login
+                            setIsLogin(true);
+                            setError('Account created! Please log in.');
+                        }
+                    } else {
+                        setError(data.error || 'Authentication failed');
+                    }
+                } catch (err) {
+                    setError('Network error. Please try again.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="glass-panel rounded-xl p-8 w-full max-w-md">
+                        <div className="text-center mb-8">
+                            <div className="flex justify-center mb-4">
+                                <div className="bg-teal/20 p-3 rounded-xl">
+                                    <span className="text-teal scale-150"><Icons.FileText size={32} /></span>
+                                </div>
+                            </div>
+                            <h2 className="text-2xl font-bold text-white mb-2">
+                                {isLogin ? 'Welcome Back' : 'Create Account'}
+                            </h2>
+                            <p className="text-slate-400">
+                                {isLogin ? 'Sign in to continue to AfroDocs' : 'Join AfroDocs to format your documents'}
+                            </p>
+                        </div>
+
+                        {error && (
+                            <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-3 rounded-lg mb-6 text-sm text-center">
+                                {error}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Username</label>
+                                <input 
+                                    type="text" 
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
+                                    placeholder="Enter username"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                                <input 
+                                    type="password" 
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
+                                    placeholder="Enter password"
+                                    required
+                                />
+                            </div>
+
+                            {!isLogin && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Email (Optional)</label>
+                                    <input 
+                                        type="email" 
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
+                                        placeholder="Enter email"
+                                    />
+                                </div>
+                            )}
+
+                            {!isLogin && (
+                                <>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-1">Institution</label>
+                                        <select 
+                                            value={institution}
+                                            onChange={(e) => setInstitution(e.target.value)}
+                                            className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none bg-midnight"
+                                        >
+                                            <option value="The University of Bamenda">The University of Bamenda</option>
+                                            <option value="The University of Buea">The University of Buea</option>
+                                            <option value="Other (Specify)">Other (Specify)</option>
+                                        </select>
+                                    </div>
+                                    {institution === 'Other (Specify)' && (
+                                        <div>
+                                            <input 
+                                                type="text" 
+                                                value={customInstitution}
+                                                onChange={(e) => setCustomInstitution(e.target.value)}
+                                                className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none mt-2"
+                                                placeholder="Specify Institution"
+                                                required
+                                            />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-1">Contact</label>
+                                        <input 
+                                            type="text" 
+                                            value={contact}
+                                            onChange={(e) => setContact(e.target.value)}
+                                            className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
+                                            placeholder="Phone or Email"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-300 mb-1">Referral Code (Optional)</label>
+                                        <input 
+                                            type="text" 
+                                            value={referralCode}
+                                            onChange={(e) => setReferralCode(e.target.value)}
+                                            className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
+                                            placeholder="Enter referral code"
+                                        />
+                                    </div>
+                                </>
+                            )}
+                            
+                            <button 
+                                type="submit" 
+                                disabled={loading}
+                                className="w-full bg-teal hover:bg-teal-light text-white font-bold py-2.5 rounded-lg transition-all shadow-lg shadow-teal/20 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                            >
+                                {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+                            </button>
+                        </form>
+
+                        <div className="mt-6 text-center">
+                            <button 
+                                onClick={() => { setIsLogin(!isLogin); setError(''); }}
+                                className="text-teal hover:text-teal-light text-sm font-medium transition-colors"
+                            >
+                                {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+                            </button>
+                        </div>
+                        
+                        <div className="mt-8 pt-6 border-t border-white/10 text-center">
+                            <p className="text-xs text-slate-500">
+                                Note: On the free demo server, accounts may be reset periodically.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Fallback Data
+        const FALLBACK_INSTITUTIONS = [
+            {
+            "id": "uba",
+            "name": "The University of Bamenda",
+            "short": "UBa",
+            "logo": "uba_logo.png",
+            "faculties": [
+                {
+                "name": "College of Technology",
+                "departments": [
+                    "Telecommunications",
+                    "Agribusiness Marketing Management",
+                    "Agribusiness Project Management",
+                    "Integrated Development and Management Studies",
+                    "Agricultural Power Engineering",
+                    "Water Resource Engineering",
+                    "Maintenance and Production Engineering",
+                    "Animal Nutrition and Feeding",
+                    "Animal Production Technology",
+                    "Biotechnology and Animal Science: Reproductive Physiology and Animal Health",
+                    "Biotechnology and Animal Science: Animal Nutrition and Feeding",
+                    "Reproductive Physiology and Animal Health",
+                    "Wildlife Resource Management",
+                    "Forest Resource Management",
+                    "Wildlife Resources Management",
+                    "Forest Resource Management - Forest Economics",
+                    "Computer Engineering - Data Science",
+                    "Computer Engineering - Information Technology and Cyber Security",
+                    "Crop Production Technology",
+                    "Electrical Power Engineering",
+                    "Food Science and Human Nutrition",
+                    "Food Science and Bioresource Technology",
+                    "Nutritional Sciences",
+                    "Food and Bioresource Technology",
+                    "Environmental Technology",
+                    "Bioenergy Engineering",
+                    "Satellite Communications",
+                    "Renewable Energy Engineering",
+                    "Didactics, Curriculum Development and Teaching",
+                    "Computer Engineering",
+                    "Computer Networks and Systems Maintenance",
+                    "Computer Software Engineering",
+                    "Software Engineering",
+                    "Electrical and Electronics Engineering",
+                    "Electric and Power Engineering",
+                    "Electric Power Engineering",
+                    "Electronic Engineering",
+                    "Telecommunication"
+                ]
+                },
+                {
+                "name": "Faculty of Arts",
+                "departments": [
+                    "International Studies",
+                    "Translation",
+                    "Communication and Development Studies",
+                    "Geography and Planning",
+                    "Economic and Social Development History",
+                    "Heritage and Cultural History",
+                    "History and Public Policy: Option - Decentralization and Local Governance",
+                    "English Language",
+                    "Literatures in English",
+                    "Linguistics and African Languages",
+                    "Applied Linguistics",
+                    "Theatre, Television and Film Studies",
+                    "Visual Arts and History of Arts",
+                    "Philosophy",
+                    "English Language and Literature Teaching",
+                    "Literature and Digital cultures",
+                    "Communication",
+                    "Evaluation and Measurement",
+                    "Subject Didactics",
+                    "History and Archaeology",
+                    "Cameroonian Languages and Cultures",
+                    "African Renaissance Studies",
+                    "Mother Tongue Education",
+                    "Music and Dance",
+                    "Bilingual Letters",
+                    "Functional Language Enhancement",
+                    "Intercultural Communication and Mediation Studies",
+                    "Multilingual and Intercultural Communication",
+                    "Literary and Digital Cultures",
+                    "Language and Literature Teaching"
+                ]
+                },
+                {
+                "name": "Faculty of Economics and Management Sciences",
+                "departments": [
+                    "Accounting",
+                    "Management",
+                    "Economics",
+                    "Health Economics, Policy and Management",
+                    "Environmental Economics, Policy and Management",
+                    "Marketing",
+                    "Human Resource Management",
+                    "Banking and Finance",
+                    "Finance and Investment",
+                    "Islamic Banking and Finance",
+                    "Quantitative Finance"
+                ]
+                },
+                {
+                "name": "Faculty of Education",
+                "departments": [
+                    "Environmental Education",
+                    "History of Education",
+                    "Philosophy of Education",
+                    "Sociology of Education",
+                    "Educational Measurement and Evaluation",
+                    "Applied Developmental Psychology",
+                    "Community Psychology",
+                    "Educational Psychology",
+                    "Teacher Education",
+                    "Educational Leadership and Management",
+                    "Higher Education Development & Governance",
+                    "Economics and Finance of Education",
+                    "Educational Technology",
+                    "Curriculum Planning and Design",
+                    "Pedagogy",
+                    "Inclusive Education",
+                    "Physical Education and Animation",
+                    "Health Psychology",
+                    "Clinical Counseling",
+                    "Counselling",
+                    "Teaching Science, Technology, Engineering and Mathematics",
+                    "Educational Leadership",
+                    "Educational Foundations",
+                    "Secondary Education",
+                    "Nomadic Teacher Education",
+                    "STEM Education",
+                    "Inspection & Supervision of Instructions",
+                    "Curriculum Pedagogy",
+                    "Braille and Sign Language",
+                    "Recreation and Leisure Studies",
+                    "Guidance and Counselling",
+                    "Social and Organizational Psychology",
+                    "Social Work",
+                    "Psychology of Education",
+                    "Supervision of Instruction",
+                    "Early Childhood Development",
+                    "Early Childhood Care and Education",
+                    "Measurement and Evaluation",
+                    "Primary Education",
+                    "Technical Education",
+                    "Economics of Education",
+                    "Educational Leadership in Basic Education",
+                    "Educational Leadership in Secondary Education",
+                    "School Principalship",
+                    "Library, Archival and Information Science",
+                    "Physical and Health Education",
+                    "Sport Psychology",
+                    "Coaching",
+                    "Wellness and Fitness Instruction",
+                    "Bereavement Counseling",
+                    "Industrial and Organizational Psychology",
+                    "School Counseling",
+                    "Health Counselling",
+                    "Distance Education"
+                ]
+                },
+                {
+                "name": "Faculty of Health Sciences",
+                "departments": [
+                    "Chemical Pathology",
+                    "Pharmacology and Toxicology",
+                    "Medical Laboratory Science",
+                    "Midwifery Science",
+                    "Medical-Surgical Nursing",
+                    "Psychiatric Nursing",
+                    "Paediatric Nursing",
+                    "Oncology Nursing",
+                    "Public Health",
+                    "Biomedical Sciences",
+                    "Medicine",
+                    "Pharmacology",
+                    "Medical Laboratory Sciences (BMLS)",
+                    "Nursing/Midwifery",
+                    "Nursing Science",
+                    "Nursing",
+                    "Midwifery",
+                    "Community Health",
+                    "Pharmacy"
+                ]
+                },
+                {
+                "name": "Faculty of Law and Political Science",
+                "departments": [
+                    "Regional Integration",
+                    "Internal Public Law",
+                    "Public International Law",
+                    "Public Administration and Policy",
+                    "Negotiation, Mediation and Peace Building",
+                    "International Relations and Strategic Studies",
+                    "Capacité en Droit",
+                    "Political Science",
+                    "English Private Law",
+                    "Property Law",
+                    "Human Rights Law",
+                    "Public Law",
+                    "Public Policy and Public Administration",
+                    "Comparative Politics",
+                    "Anthropological Politics",
+                    "International Law",
+                    "Natural Resource Law",
+                    "Law",
+                    "Business Communication",
+                    "Executive Studies in Business Negotiations and Contract Management",
+                    "Energy, Petroleum and Mineral Law",
+                    "Public Administration"
+                ]
+                },
+                {
+                "name": "Faculty of Science",
+                "departments": [
+                    "Thermal Engineering",
+                    "Environmental Science",
+                    "Probability and Statistics",
+                    "Applied Mathematics",
+                    "Physics",
+                    "Food and Industrial Microbiology",
+                    "Applied Botany",
+                    "Applied Zoology",
+                    "Biochemistry",
+                    "Chemistry",
+                    "Geology",
+                    "Mathematics and Statistics",
+                    "Microbiology",
+                    "Geoscience",
+                    "Applied Parasitology and Vector Biology",
+                    "Medical Microbiology and Infectious Diseases",
+                    "Industrial and Urban Waste Management",
+                    "Applied Geology",
+                    "Petroleum Geoscience",
+                    "Biodiversity, Conservation and Management",
+                    "Medicinal Plants"
+                ]
+                },
+                {
+                "name": "Higher Institute of Commerce and Management",
+                "departments": [
+                    "Real Estate Management",
+                    "Development Finance",
+                    "Project Management",
+                    "Accounting and Finance",
+                    "Insurance and Security",
+                    "Marketing",
+                    "Money and Banking",
+                    "Management and Entrepreneurship",
+                    "Human Resource Management",
+                    "Executive Secretariat Duties",
+                    "Environmental Accounting",
+                    "Tax Accounting",
+                    "Public Sector Accounting",
+                    "Microfinance",
+                    "Inventory and Supply Chain Management",
+                    "Information and Communication Management",
+                    "Local Government Management",
+                    "Logistic Management",
+                    "Supply Chain Management",
+                    "Executive MBA"
+                ]
+                },
+                {
+                "name": "Higher Institute of Transport and Logistics",
+                "departments": [
+                    "Transportation",
+                    "Port and Shipping Management",
+                    "Logistics and Supply Chain Management",
+                    "Tourism and Sustainable Environmental Management",
+                    "Transit and Logistics",
+                    "Tourism and Hospitality management",
+                    "Maritime Transport",
+                    "Tourism and cultural Heritage Development",
+                    "Customs",
+                    "Land Transport",
+                    "Transport and Logistics Management",
+                    "Air Transport"
+                ]
+                },
+                {
+                    "name": "National Higher Polytechnic Institute",
+                    "departments": [
+                        "Ports and Shipping Management",
+                        "Logistics and Transport",
+                        "Project Management",
+                        "Marketing",
+                        "Corporate Governance and Financial Law",
+                        "Software Engineering and Embedded System",
+                        "Executive Secretariat Studies",
+                        "Structural Engineering",
+                        "Geotechnical Engineering and Transportation Engineering",
+                        "Wood Science & Technology",
+                        "Agricultural Machinery and Power Engineering",
+                        "Automation and Control",
+                        "Electric Power and Energy Systems",
+                        "Bakery and Food Processing Technology",
+                        "Crop Production Technology",
+                        "Urban Planning and Surveys Engineering",
+                        "Community Development",
+                        "Conflict Management and Peace Building",
+                        "Fashion Clothing and Textile",
+                        "Sexual and Reproductive Health",
+                        "Adult and Geriatric Nursing Practice",
+                        "Mechanical and Production Engineering",
+                        "Nutrition and Dietetics"
+                    ]
+                }
+            ]
+            },
+            {
+            "id": "ub",
+            "name": "University of Buea",
+            "short": "UB",
+            "logo": "ub_logo.png",
+            "faculties": [
+                {
+                "name": "Faculty of Science",
+                "departments": [
+                    "Biochemistry",
+                    "Botany",
+                    "Chemistry",
+                    "Computer Science",
+                    "Environmental Science",
+                    "Geology",
+                    "Mathematics",
+                    "Microbiology",
+                    "Physics",
+                    "Zoology"
+                ]
+                },
+                {
+                "name": "Faculty of Engineering and Technology",
+                "departments": [
+                    "Computer Engineering",
+                    "Electrical and Electronic Engineering",
+                    "Telecommunications Engineering"
+                ]
+                },
+                {
+                    "name": "Faculty of Social and Management Sciences",
+                    "departments": [
+                        "Accounting",
+                        "Banking and Finance",
+                        "Economics",
+                        "Journalism and Mass Communication",
+                        "Management",
+                        "Political Science",
+                        "Sociology and Anthropology",
+                        "Women and Gender Studies"
+                    ]
+                }
+            ]
+            }
+        ];
+
+        // --- Cover Page Generator Component ---
+        const CoverPageGenerator = ({ mergeJobId, setPdfPreviewUrl, pdfPreviewUrl, setPdfViewParam, setShowPdfModal }) => {
+            const [formData, setFormData] = useState({
+                university: 'Bamenda',  // Add university selector
+                documentType: 'Assignment',
+                institution: '',
+                faculty: '',
+                department: '',
+                courseCode: '',
+                courseTitle: '',
+                title: '',
+                studentName: '',
+                studentId: '',
+                instructor: '',
+                date: new Date().toISOString().split('T')[0],
+                level: '300 Level',
+                assignmentNumber: '',
+                supervisor: '',
+                coSupervisor: '',
+                fieldSupervisor: '',
+                academicSupervisor: '',
+                defenseDate: '',
+                groupMembers: [],
+                projectDuration: ''
+            });
+
+            const [institutions, setInstitutions] = useState([]);
+            const [faculties, setFaculties] = useState([]);
+            const [departments, setDepartments] = useState([]);
+            const [courseSuggestions, setCourseSuggestions] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [generatedFile, setGeneratedFile] = useState(null);
+            const [previewMode, setPreviewMode] = useState(false);
+
+            // Load institutions on mount
+            React.useEffect(() => {
+                fetch(`${API_BASE}/api/institutions`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.institutions && data.institutions.length > 0) {
+                            setInstitutions(data.institutions);
+                        } else {
+                            console.warn("API returned empty institutions, using fallback");
+                            setInstitutions(FALLBACK_INSTITUTIONS);
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Failed to load institutions", err);
+                        setInstitutions(FALLBACK_INSTITUTIONS);
+                    })
+                    .finally(() => {
+                        // Load saved profile after institutions are set (or fallback used)
+                        const saved = localStorage.getItem('coverpage_profile');
+                        if (saved) {
+                            try {
+                                const profile = JSON.parse(saved);
+                                // We need to use the institutions data we just set (or fallback)
+                                // But state update is async. So we use the data directly here.
+                                // However, we can't easily access the data variable in catch/finally if it was in then.
+                                // So we'll do the profile loading inside the then/catch blocks or use a separate effect.
+                                // Actually, let's just do it in a separate effect that depends on institutions.
+                            } catch (e) {
+                                console.error("Error loading profile", e);
+                            }
+                        }
+                    });
+            }, []);
+
+            // Effect to load profile once institutions are available
+            React.useEffect(() => {
+                if (institutions.length > 0) {
+                    const saved = localStorage.getItem('coverpage_profile');
+                    if (saved) {
+                        try {
+                            const profile = JSON.parse(saved);
+                            
+                            // Find the institution object to get faculties
+                            const inst = institutions.find(i => i.id === profile.institution);
+                            const loadedFaculties = inst ? inst.faculties : [];
+                            
+                            // Find the faculty object to get departments
+                            const fac = loadedFaculties.find(f => f.name === profile.faculty);
+                            const loadedDepartments = fac ? fac.departments : [];
+                            
+                            setFaculties(loadedFaculties);
+                            setDepartments(loadedDepartments);
+                            
+                            setFormData(prev => ({
+                                ...prev,
+                                studentName: profile.studentName || '',
+                                studentId: profile.studentId || '',
+                                institution: profile.institution || '',
+                                faculty: profile.faculty || '',
+                                department: profile.department || '',
+                                level: profile.level || '300 Level'
+                            }));
+                        } catch (e) {
+                            console.error("Error loading profile", e);
+                        }
+                    }
+                }
+            }, [institutions]);
+
+            // Handle Institution Change
+            const handleInstitutionChange = (e) => {
+                const instId = e.target.value;
+                const inst = institutions.find(i => i.id === instId);
+                setFormData(prev => ({ ...prev, institution: instId, faculty: '', department: '' }));
+                setFaculties(inst ? inst.faculties : []);
+                setDepartments([]);
+            };
+
+            // Handle Faculty Change
+            const handleFacultyChange = (e) => {
+                const facName = e.target.value;
+                const fac = faculties.find(f => f.name === facName);
+                setFormData(prev => ({ ...prev, faculty: facName, department: '' }));
+                setDepartments(fac ? fac.departments : []);
+            };
+
+            // Handle Course Code Auto-complete
+            const handleCourseCodeChange = (e) => {
+                const val = e.target.value;
+                setFormData(prev => ({ ...prev, courseCode: val }));
+                
+                if (val.length >= 3) {
+                    fetch(`${API_BASE}/api/courses/search?q=${val}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            setCourseSuggestions(data);
+                            // Auto-fill title if exact match
+                            const exact = data.find(c => c.code === val);
+                            if (exact) {
+                                setFormData(prev => ({ ...prev, courseTitle: exact.title }));
+                            }
+                        });
+                } else {
+                    setCourseSuggestions([]);
+                }
+            };
+
+            const handleInputChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleSubmit = async () => {
+                setLoading(true);
+                try {
+                    // Save profile
+                    localStorage.setItem('coverpage_profile', JSON.stringify({
+                        studentName: formData.studentName,
+                        studentId: formData.studentId,
+                        institution: formData.institution,
+                        faculty: formData.faculty,
+                        department: formData.department,
+                        level: formData.level
+                    }));
+
+                    const response = await fetch(`${API_BASE}/api/coverpage/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...formData, mergeJobId }),
+                        credentials: 'include'
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        setGeneratedFile(data);
+                        
+                        // Update PDF preview URL immediately
+                        const pdfFilename = data.filename ? data.filename.replace(/\.docx$/i, '.pdf') : 'formatted_document.pdf';
+                        const previewUrl = `${API_BASE}/download-pdf/${data.job_id}/${encodeURIComponent(pdfFilename)}?inline=true`;
+                        setPdfViewParam(mergeJobId ? 'FitH' : 'FitV');
+                        setPdfPreviewUrl(previewUrl);
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Failed to generate cover page');
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Render Fields based on Document Type
+            const renderDynamicFields = () => {
+                const type = formData.documentType;
+                
+                if (type === 'Assignment') {
+                    return (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Level</label>
+                                    <div className="relative">
+                                        <select name="level" value={formData.level} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 pr-8 text-teal focus:border-teal outline-none appearance-none cursor-pointer text-base">
+                                            <option value="200 Level" className="bg-ocean-dark text-white">200 Level</option>
+                                            <option value="300 Level" className="bg-ocean-dark text-white">300 Level</option>
+                                            <option value="400 Level" className="bg-ocean-dark text-white">400 Level</option>
+                                            <option value="500 Level" className="bg-ocean-dark text-white">500 Level</option>
+                                            <option value="Others" className="bg-ocean-dark text-white">Others</option>
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-teal">
+                                            <Icons.ChevronDown />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="form-label">Instructor</label>
+                                    <input type="text" name="instructor" value={formData.instructor} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="Dr. Charles Smith" />
+                                </div>
+                            </div>
+
+                            {/* Custom Level Input for Assignment */}
+                            {formData.level === "Others" && (
+                                <div>
+                                    <label className="form-label">Enter Level</label>
+                                    <input 
+                                        type="text" 
+                                        name="levelCustom" 
+                                        value={formData.levelCustom || ''} 
+                                        onChange={handleInputChange} 
+                                        className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                        placeholder="e.g., 600 Level, Masters Level, etc." 
+                                    />
+                                </div>
+                            )}
+                        </>
+                    );
+                } else if (type === 'Thesis' || type === 'Dissertation' || type === 'Research Proposal') {
+                    return (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Supervisor</label>
+                                    <input type="text" name="supervisor" value={formData.supervisor} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="Dr. Supervisor" />
+                                </div>
+                                <div>
+                                    <label className="form-label">Co-Supervisor (Optional)</label>
+                                    <input type="text" name="coSupervisor" value={formData.coSupervisor} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="Prof. Co-Supervisor" />
+                                </div>
+                            </div>
+                        </>
+                    );
+                } else if (type === 'Internship Report') {
+                    return (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Academic Supervisor</label>
+                                    <input type="text" name="academicSupervisor" value={formData.academicSupervisor} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="Dr. Academic Supervisor" />
+                                </div>
+                                <div>
+                                    <label className="form-label">Field Supervisor</label>
+                                    <input type="text" name="fieldSupervisor" value={formData.fieldSupervisor} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="Mr./Ms. Field Supervisor" />
+                                </div>
+                                <div>
+                                    <label className="form-label">Level</label>
+                                    <div className="relative">
+                                        <select name="level" value={formData.level} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 pr-8 text-teal focus:border-teal outline-none appearance-none cursor-pointer text-base">
+                                            <option value="300 Level" className="bg-ocean-dark text-white">300 Level</option>
+                                            <option value="400 Level" className="bg-ocean-dark text-white">400 Level</option>
+                                            <option value="500 Level" className="bg-ocean-dark text-white">500 Level</option>
+                                            <option value="Others" className="bg-ocean-dark text-white">Others</option>
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-teal">
+                                            <Icons.ChevronDown />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Custom Level Input for Thesis/Dissertation */}
+                            {formData.level === "Others" && (
+                                <div>
+                                    <label className="form-label">Enter Level</label>
+                                    <input 
+                                        type="text" 
+                                        name="levelCustom" 
+                                        value={formData.levelCustom || ''} 
+                                        onChange={handleInputChange} 
+                                        className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                        placeholder="e.g., Masters, PhD, Post-Doctoral, etc." 
+                                    />
+                                </div>
+                            )}
+                        </>
+                    );
+                }
+                return null;
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto">
+                    <div className="glass-panel rounded-xl p-4 md:p-6">
+                        <h2 className="text-xl md:text-2xl font-bold text-white mb-4 md:mb-6 flex items-center gap-3 font-display border-b border-white/10 pb-3 md:pb-4">
+                            Provide Cover Page info
+                        </h2>
+
+                        <div className="space-y-4">
+                            {/* Document Type */}
+                            <div>
+                                <label className="form-label">Document Type *</label>
+                                <div className="relative">
+                                    <select name="documentType" value={formData.documentType} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 pr-8 text-teal focus:border-teal outline-none appearance-none cursor-pointer text-base">
+                                        <option value="Assignment" className="bg-ocean-dark text-white">Assignment</option>
+                                        <option value="Internship Report" className="bg-ocean-dark text-white">Internship Report</option>
+                                        <option value="Thesis" className="bg-ocean-dark text-white">Thesis / Dissertation</option>
+                                        <option value="Research Proposal" className="bg-ocean-dark text-white">Research Proposal</option>
+                                        <option value="Others" className="bg-ocean-dark text-white">Others</option>
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-teal">
+                                        <Icons.ChevronDown />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Custom Document Type Input */}
+                            {formData.documentType === "Others" && (
+                                <div>
+                                    <label className="form-label">Enter Document Type</label>
+                                    <input 
+                                        type="text" 
+                                        name="documentTypeCustom" 
+                                        value={formData.documentTypeCustom || ''} 
+                                        onChange={handleInputChange} 
+                                        className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                        placeholder="e.g., Lab Report, Project Report, etc." 
+                                    />
+                                </div>
+                            )}
+
+                            {/* Institution & Faculty */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Institution *</label>
+                                    <div className="relative">
+                                        <select name="institution" value={formData.institution} onChange={handleInstitutionChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 pr-8 text-teal focus:border-teal outline-none appearance-none cursor-pointer text-base">
+                                            <option value="" className="bg-ocean-dark text-white">Select Institution</option>
+                                            {institutions.map(inst => (
+                                                <option key={inst.id} value={inst.id} className="bg-ocean-dark text-white">{inst.name}</option>
+                                            ))}
+                                            <option value="Others" className="bg-ocean-dark text-white">Others</option>
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-teal">
+                                            <Icons.ChevronDown />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="form-label">Faculty/School *</label>
+                                    <div className="relative">
+                                        <select name="faculty" value={formData.faculty} onChange={handleFacultyChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 pr-8 text-teal focus:border-teal outline-none appearance-none cursor-pointer text-base" disabled={!formData.institution}>
+                                            <option value="" className="bg-ocean-dark text-white">Select Faculty</option>
+                                            {faculties.map(fac => (
+                                                <option key={fac.name} value={fac.name} className="bg-ocean-dark text-white">{fac.name}</option>
+                                            ))}
+                                            <option value="Others" className="bg-ocean-dark text-white">Others</option>
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-teal">
+                                            <Icons.ChevronDown />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Custom Institution Input */}
+                            {formData.institution === "Others" && (
+                                <div>
+                                    <label className="form-label">Enter Institution Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="institutionCustom" 
+                                        value={formData.institutionCustom || ''} 
+                                        onChange={handleInputChange} 
+                                        className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                        placeholder="Enter your institution name" 
+                                    />
+                                </div>
+                            )}
+
+                            {/* Custom Faculty Input */}
+                            {formData.faculty === "Others" && (
+                                <div>
+                                    <label className="form-label">Enter Faculty/School Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="facultyCustom" 
+                                        value={formData.facultyCustom || ''} 
+                                        onChange={handleInputChange} 
+                                        className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                        placeholder="Enter your faculty/school name" 
+                                    />
+                                </div>
+                            )}
+
+                            {/* Department & Course */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className={['Assignment'].includes(formData.documentType) ? "" : "md:col-span-2"}>
+                                    <label className="form-label">Department *</label>
+                                    <div className="relative">
+                                        <select name="department" value={formData.department} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 pr-8 text-teal focus:border-teal outline-none appearance-none cursor-pointer text-base" disabled={!formData.faculty}>
+                                            <option value="" className="bg-ocean-dark text-white">Select Department</option>
+                                            {departments.map(dept => (
+                                                <option key={dept} value={dept} className="bg-ocean-dark text-white">{dept}</option>
+                                            ))}
+                                            <option value="Others" className="bg-ocean-dark text-white">Others</option>
+                                        </select>
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-teal">
+                                            <Icons.ChevronDown />
+                                        </div>
+                                    </div>
+                                </div>
+                                {['Assignment'].includes(formData.documentType) && (
+                                    <div className="relative">
+                                        <label className="form-label">Course Code</label>
+                                        <input 
+                                            type="text" 
+                                            name="courseCode" 
+                                            value={formData.courseCode} 
+                                            onChange={handleCourseCodeChange} 
+                                            className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                            placeholder="e.g. COMP301"
+                                            autoComplete="off"
+                                        />
+                                        {courseSuggestions.length > 0 && (
+                                            <div className="absolute z-10 w-full bg-ocean-dark border border-slate rounded-lg mt-2 shadow-2xl max-h-48 overflow-y-auto p-2">
+                                                {courseSuggestions.map(course => (
+                                                    <div 
+                                                        key={course.code} 
+                                                        className="p-2 hover:bg-ocean rounded-md cursor-pointer text-teal text-sm transition-colors"
+                                                        onClick={() => {
+                                                            setFormData(prev => ({ ...prev, courseCode: course.code, courseTitle: course.title }));
+                                                            setCourseSuggestions([]);
+                                                        }}
+                                                    >
+                                                        <span className="font-bold">{course.code}</span> - {course.title}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Custom Department Input */}
+                            {formData.department === "Others" && (
+                                <div>
+                                    <label className="form-label">Enter Department Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="departmentCustom" 
+                                        value={formData.departmentCustom || ''} 
+                                        onChange={handleInputChange} 
+                                        className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" 
+                                        placeholder="Enter your department name" 
+                                    />
+                                </div>
+                            )}
+
+                            {/* Course Title & Assignment Title */}
+                            {['Assignment'].includes(formData.documentType) && (
+                                <div>
+                                    <label className="form-label">Course Title</label>
+                                    <input type="text" name="courseTitle" value={formData.courseTitle} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="Data Structures and Algorithms" />
+                                </div>
+                            )}
+                            <div>
+                                <label className="form-label">Title *</label>
+                                <input type="text" name="title" value={formData.title} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="e.g. Binary Search Tree Implementation" />
+                            </div>
+
+                            {/* Dynamic Fields */}
+                            {renderDynamicFields()}
+
+                            {/* Student Info */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="form-label">Student Name *</label>
+                                    <input type="text" name="studentName" value={formData.studentName} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="John Doe" />
+                                </div>
+                                <div>
+                                    <label className="form-label">Matriculation Number *</label>
+                                    <input type="text" name="studentId" value={formData.studentId} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" placeholder="FE21A001" />
+                                </div>
+                            </div>
+
+                            {/* Date */}
+                            <div>
+                                <label className="form-label">Submission Date</label>
+                                <input type="date" name="date" value={formData.date} onChange={handleInputChange} className="w-full glass-input rounded-lg p-2 md:p-2.5 text-white placeholder-white/30 focus:border-teal outline-none text-base" />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-4 pt-4">
+                                <button 
+                                    onClick={handleSubmit} 
+                                    disabled={loading}
+                                    className="flex-1 bg-gradient-to-r from-ocean to-teal text-white py-2 md:py-3 rounded-lg font-semibold text-base shadow-lg shadow-ocean/30 hover:shadow-ocean/50 hover:scale-[1.01] hover:from-ocean-dark hover:to-ocean transition-all disabled:opacity-50 disabled:hover:scale-100"
+                                >
+                                    {loading ? 'Creating...' : 'Create Cover Page'}
+                                </button>
+                            </div>
+
+                            {/* Result */}
+                            {generatedFile && (
+                                <div className="mt-6 bg-teal/10 border border-teal/30 rounded-xl p-3 md:p-4 flex flex-col gap-4 backdrop-blur-sm">
+                                    <div className="flex items-center gap-2 md:gap-3">
+                                        <div className="bg-teal/20 p-1.5 rounded-full">
+                                            <span className="text-teal"><Icons.CheckCircle /></span>
+                                        </div>
+                                        <span className="text-teal-light font-medium text-sm md:text-base">
+                                            {mergeJobId ? 'Cover Page + Document Generated!' : `${generatedFile.filename} generated!`}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className="flex flex-col gap-3">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button 
+                                                onClick={() => {
+                                                    const downloadUrl = `${API_BASE}${generatedFile.downloadUrl}?inline=false`;
+                                                    const link = document.createElement('a');
+                                                    link.href = downloadUrl;
+                                                    link.download = ''; 
+                                                    document.body.appendChild(link);
+                                                    link.click();
+                                                    document.body.removeChild(link);
+                                                }}
+                                                className="flex items-center justify-center gap-2 bg-teal hover:bg-teal-light text-white px-3 py-2 rounded-lg text-sm md:text-base font-bold shadow-lg shadow-teal/20 transition-all hover:-translate-y-0.5 text-center w-full"
+                                            >
+                                                <span className="scale-75 md:scale-100"><Icons.Download /></span>
+                                                Download DOCX
+                                            </button>
+                                            <button 
+                                                onClick={async () => {
+                                                    // Use URL-based filename for robust handling
+                                                    const pdfFilename = generatedFile.filename ? generatedFile.filename.replace(/\.docx$/i, '.pdf') : 'formatted_document.pdf';
+                                                    const downloadUrl = `${API_BASE}/download-pdf/${generatedFile.job_id}/${encodeURIComponent(pdfFilename)}?inline=false`;
+                                                    
+                                                    try {
+                                                        const response = await fetch(downloadUrl);
+                                                        if (!response.ok) throw new Error('Download failed');
+                                                        
+                                                        const link = document.createElement('a');
+                                                        link.href = downloadUrl;
+                                                        link.download = pdfFilename;
+                                                        document.body.appendChild(link);
+                                                        link.click();
+                                                        document.body.removeChild(link);
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                        alert('Download failed');
+                                                    }
+                                                }}
+                                                className="flex items-center justify-center gap-2 bg-teal hover:bg-teal-light text-white px-3 py-2 rounded-lg text-sm md:text-base font-bold shadow-lg shadow-teal/20 transition-all hover:-translate-y-0.5 text-center w-full"
+                                            >
+                                                <span className="scale-75 md:scale-100"><Icons.Download /></span>
+                                                Download PDF
+                                            </button>
+                                        </div>
+
+                                        {/* Inline Preview - Responsive for all devices */}
+                                        <div className="glass-panel rounded-xl overflow-hidden h-[300px] sm:h-[400px] md:h-[600px] flex flex-col border border-teal/30 shadow-2xl mt-4">
+                                            <div className="flex items-center justify-between border-b border-white/10 bg-black/20 p-2 sm:p-3 md:p-4">
+                                                <div className="font-bold text-white flex items-center gap-1 sm:gap-2 text-sm sm:text-base md:text-lg">
+                                                    <span className="text-teal scale-75 sm:scale-90 md:scale-100"><Icons.Eye /></span>
+                                                    <span className="hidden sm:inline">Document</span> Preview
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowPdfModal(true)}
+                                                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 bg-white/5 text-mist hover:text-white hover:bg-white/10 rounded-lg transition-all duration-300 border border-white/10 hover:border-white/30 text-xs sm:text-sm"
+                                                    title="Full Screen"
+                                                >
+                                                    <Icons.Maximize className="scale-75 sm:scale-90 md:scale-100" />
+                                                    <span className="hidden sm:inline">Full Screen</span>
+                                                </button>
+                                            </div>
+
+                                            <div className="flex-1 relative bg-slate-900">
+                                                {pdfPreviewUrl ? (
+                                                    <iframe 
+                                                        src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=${window.innerWidth < 768 ? 'FitH' : 'FitV'}`}
+                                                        className="w-full h-full border-0"
+                                                        title="PDF Preview"
+                                                    />
+                                                ) : (
+                                                    <div className="flex items-center justify-center h-full text-mist flex-col gap-4">
+                                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal"></div>
+                                                        <p className="text-sm sm:text-base">Loading preview...</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Document Preview Component
+        const DocumentPreview = ({ data }) => {
+            if (!data || data.length === 0) {
+                return (
+                    <div className="text-center text-mist p-12 bg-black/20 rounded-xl border border-white/5">
+                        <p>No preview data available.</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="document-preview-container custom-scrollbar">
+                    <div className="document-page">
+                        {data.map((section, idx) => (
+                            <div key={idx} className="section-block">
+                                {/* Heading */}
+                                {section.heading && section.heading !== 'Untitled' && (
+                                    section.level === 1 ? (
+                                        <h1>{section.heading}</h1>
+                                    ) : (
+                                        <div className={`font-bold text-left mb-3 mt-4 text-[12pt]`}>
+                                            {section.heading}
+                                        </div>
+                                    )
+                                )}
+
+                                {/* Content */}
+                                {section.content && section.content.map((item, i) => {
+                                    // Paragraph
+                                    if (item.type === 'paragraph') {
+                                        return <p key={i} className="mb-0">{item.text}</p>;
+                                    }
+                                    
+                                    // Block Quote
+                                    if (item.type === 'block_quote') {
+                                        return <p key={i} className="block-quote">{item.text.replace(/^[>\s]+/, '')}</p>;
+                                    }
+
+                                    // Abbreviation
+                                    if (item.type === 'abbreviation') {
+                                        const match = item.text.match(/([A-Z]{2,})\s*[-–:=]\s*(.+)/);
+                                        if (match) {
+                                            return (
+                                                <p key={i} className="mb-0">
+                                                    <strong>{match[1]}</strong> – {match[2]}
+                                                </p>
+                                            );
+                                        }
+                                        return <p key={i} className="mb-0">{item.text}</p>;
+                                    }
+
+                                    // Copyright
+                                    if (item.type === 'copyright_content') {
+                                        return <p key={i} className="text-center italic mb-0">{item.text}</p>;
+                                    }
+
+                                    // Signature Line
+                                    if (item.type === 'signature_line') {
+                                        return (
+                                            <p key={i} className="text-right mt-8 mb-0">
+                                                {item.text || '________________________'}
+                                            </p>
+                                        );
+                                    }
+
+                                    // Running Header
+                                    if (item.type === 'running_header') {
+                                        return <p key={i} className="text-center text-gray-500 mb-4 text-sm">{item.text}</p>;
+                                    }
+
+                                    // Math
+                                    if (item.type === 'math_expression' || item.type === 'math_model') {
+                                        const isDisplay = item.subtype === 'display_math' || item.type === 'math_model';
+                                        const cleanText = item.text.replace(/^\$\$|\$\$$|^\$|\$$|^\\\[|\\\]$|^\\\(|\\\)$/g, '');
+                                        return (
+                                            <p key={i} className={isDisplay ? "math-display" : "mb-0"}>
+                                                {cleanText}
+                                            </p>
+                                        );
+                                    }
+
+                                    // Footnote / Glossary
+                                    if (item.type === 'footnote_entry' || item.type === 'footnote_endnote') {
+                                        return <p key={i} className="hanging-indent">{item.text}</p>;
+                                    }
+                                    if (item.type === 'glossary_entry') {
+                                        return (
+                                            <p key={i} className="glossary-indent">
+                                                {item.term ? <strong>{item.term}: </strong> : null}
+                                                {item.definition || item.text}
+                                            </p>
+                                        );
+                                    }
+                                    
+                                    // Definition (Legacy)
+                                    if (item.type === 'definition') {
+                                        return (
+                                            <p key={i} className="glossary-indent">
+                                                <strong>{item.term}:</strong> {item.definition}
+                                            </p>
+                                        );
+                                    }
+                                    
+                                    // Lists
+                                    if (item.type === 'bullet_list') {
+                                        return (
+                                            <ul key={i} className="list-disc pl-12 mb-4">
+                                                {item.items.map((li, l) => {
+                                                    // Handle both string items and object items (enhanced bullets)
+                                                    const content = typeof li === 'object' && li !== null 
+                                                        ? (li.content || li.text || JSON.stringify(li)) 
+                                                        : li;
+                                                    return <li key={l} className="pl-2">{content}</li>;
+                                                })}
+                                            </ul>
+                                        );
+                                    }
+                                    if (item.type === 'numbered_list') {
+                                        return (
+                                            <ol key={i} className="list-decimal pl-12 mb-4">
+                                                {item.items.map((li, l) => {
+                                                    // Handle both string items and object items
+                                                    const content = typeof li === 'object' && li !== null 
+                                                        ? (li.content || li.text || JSON.stringify(li)) 
+                                                        : li;
+                                                    return <li key={l} className="pl-2">{content}</li>;
+                                                })}
+                                            </ol>
+                                        );
+                                    }
+
+                                    // Key Points (Warning, Note, etc.)
+                                    if (item.type === 'key_point') {
+                                        const isExample = item.key_point_type === 'example';
+                                        return (
+                                            <p key={i} className={`my-2 ${isExample ? 'italic' : 'font-bold'}`}>
+                                                {item.emoji_prefix} {item.text}
+                                            </p>
+                                        );
+                                    }
+
+                                    // Captions
+                                    if (item.type === 'caption_format' || item.type === 'figure_equation') {
+                                        // Check if it's a figure or table caption based on text content
+                                        const isTable = /^(Table|Tbl)/i.test(item.text);
+                                        return (
+                                            <p key={i} className={isTable ? "table-caption" : "figure-caption"}>
+                                                {item.text}
+                                            </p>
+                                        );
+                                    }
+
+                                    // Tables
+                                    if (item.type === 'table' || (item.rows && item.rows.length > 0)) {
+                                        return (
+                                            <div key={i} className="mb-4">
+                                                {item.caption && <p className="table-caption">{item.caption}</p>}
+                                                <table style={{lineHeight: '1.0'}}>
+                                                    <tbody>
+                                                        {item.rows.map((row, r) => (
+                                                            <tr key={r}>
+                                                                {row.map((cell, c) => (
+                                                                    r === 0 ? <th key={c}>{cell}</th> : <td key={c}>{cell}</td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        );
+                                    }
+
+                                    return null;
+                                })}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // Formatting Options Modal Component
+        const FormattingOptionsModal = ({ isOpen, onClose, onApply, options, setOptions }) => {
+            if (!isOpen) return null;
+
+            const handleApply = () => {
+                onApply(options);
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-midnight border border-teal/30 rounded-xl w-full max-w-sm shadow-2xl">
+                        <div className="p-4 border-b border-teal/20 flex justify-between items-center">
+                            <h2 className="text-lg font-bold text-white">Formatting</h2>
+                            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                                <Icons.X size={20} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-4 space-y-4">
+                            {/* TOC Toggle */}
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                                <input
+                                    type="checkbox"
+                                    checked={options.includeTOC}
+                                    onChange={(e) => setOptions({...options, includeTOC: e.target.checked})}
+                                    className="w-4 h-4 cursor-pointer accent-teal"
+                                />
+                                <span className="text-white text-sm">Table of Contents</span>
+                            </label>
+
+                            {/* Font Size - Compact */}
+                            <div className="flex items-center justify-between gap-2">
+                                <label className="text-white text-sm w-24">Font Size</label>
+                                <select
+                                    value={options.fontSize}
+                                    onChange={(e) => setOptions({...options, fontSize: e.target.value})}
+                                    className="flex-1 glass-input rounded-lg p-2 text-white text-sm focus:border-teal outline-none"
+                                >
+                                    <option value="10">10pt</option>
+                                    <option value="11">11pt</option>
+                                    <option value="12">12pt</option>
+                                    <option value="14">14pt</option>
+                                    <option value="16">16pt</option>
+                                </select>
+                            </div>
+
+                            {/* Line Spacing - Compact */}
+                            <div className="flex items-center justify-between gap-2">
+                                <label className="text-white text-sm w-24">Spacing</label>
+                                <select
+                                    value={options.lineSpacing}
+                                    onChange={(e) => setOptions({...options, lineSpacing: e.target.value})}
+                                    className="flex-1 glass-input rounded-lg p-2 text-white text-sm focus:border-teal outline-none"
+                                >
+                                    <option value="1.0">1.0</option>
+                                    <option value="1.15">1.15</option>
+                                    <option value="1.5">1.5</option>
+                                    <option value="2.0">2.0</option>
+                                </select>
+                            </div>
+
+                            {/* Margins Toggle Section */}
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                    <label className="text-white text-sm w-24">Margins</label>
+                                    <button
+                                        onClick={() => setOptions({
+                                            ...options, 
+                                            useIndividualMargins: !options.useIndividualMargins
+                                        })}
+                                        className="text-xs px-3 py-1.5 rounded bg-white/10 hover:bg-white/20 text-teal transition-colors font-medium"
+                                    >
+                                        {options.useIndividualMargins ? 'Uniform' : 'Custom'}
+                                    </button>
+                                </div>
+
+                                {!options.useIndividualMargins ? (
+                                    <input
+                                        type="number"
+                                        value={options.marginCm}
+                                        onChange={(e) => setOptions({...options, marginCm: e.target.value})}
+                                        min="0.5"
+                                        max="5"
+                                        step="0.5"
+                                        className="w-full glass-input rounded-lg p-2 text-white text-sm focus:border-teal outline-none"
+                                        placeholder="2.5 cm"
+                                    />
+                                ) : (
+                                    <div className="grid grid-cols-4 gap-1.5">
+                                        <input
+                                            type="number"
+                                            value={options.marginLeft}
+                                            onChange={(e) => setOptions({...options, marginLeft: e.target.value})}
+                                            min="0.5"
+                                            max="5"
+                                            step="0.5"
+                                            className="glass-input rounded p-2 text-white text-xs focus:border-teal outline-none text-center"
+                                            placeholder="L"
+                                            title="Left"
+                                        />
+                                        <input
+                                            type="number"
+                                            value={options.marginTop}
+                                            onChange={(e) => setOptions({...options, marginTop: e.target.value})}
+                                            min="0.5"
+                                            max="5"
+                                            step="0.5"
+                                            className="glass-input rounded p-2 text-white text-xs focus:border-teal outline-none text-center"
+                                            placeholder="T"
+                                            title="Top"
+                                        />
+                                        <input
+                                            type="number"
+                                            value={options.marginBottom}
+                                            onChange={(e) => setOptions({...options, marginBottom: e.target.value})}
+                                            min="0.5"
+                                            max="5"
+                                            step="0.5"
+                                            className="glass-input rounded p-2 text-white text-xs focus:border-teal outline-none text-center"
+                                            placeholder="B"
+                                            title="Bottom"
+                                        />
+                                        <input
+                                            type="number"
+                                            value={options.marginRight}
+                                            onChange={(e) => setOptions({...options, marginRight: e.target.value})}
+                                            min="0.5"
+                                            max="5"
+                                            step="0.5"
+                                            className="glass-input rounded p-2 text-white text-xs focus:border-teal outline-none text-center"
+                                            placeholder="R"
+                                            title="Right"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-2 pt-3">
+                                <button
+                                    onClick={onClose}
+                                    className="flex-1 px-4 py-2 bg-white/5 text-white text-sm rounded-lg hover:bg-white/10 transition-colors font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleApply}
+                                    className="flex-1 px-4 py-2 bg-gradient-to-r from-ocean to-teal text-white text-sm rounded-lg hover:from-ocean-dark hover:to-ocean transition-all duration-300 font-medium"
+                                >
+                                    Process
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Pricing Modal Component
+        const PricingModal = ({ isOpen, onClose, onSelectPlan }) => {
+            if (!isOpen) return null;
+
+            const plans = [
+                {
+                    id: 'student',
+                    name: 'Student Package',
+                    price: '100 FCFA',
+                    amount: 100,
+                    features: ['500 pages', 'No watermark', 'Valid for 3 months'],
+                    color: 'teal'
+                },
+                {
+                    id: 'campus',
+                    name: 'Campus Pro',
+                    price: '250 FCFA',
+                    amount: 250,
+                    features: ['1,500 pages', 'No watermark', 'Valid for 6 months'],
+                    color: 'amber',
+                    popular: true
+                },
+                {
+                    id: 'enterprise',
+                    name: 'Enterprise',
+                    price: '500 FCFA',
+                    amount: 500,
+                    features: ['10,000 pages/mo', 'No watermark', 'Priority Support'],
+                    color: 'purple-500'
+                }
+            ];
+
+            return (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-midnight border border-white/10 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="p-6 border-b border-white/10 flex justify-between items-center sticky top-0 bg-midnight z-10">
+                            <h2 className="text-2xl font-bold text-white">Upgrade Your Plan</h2>
+                            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                                <Icons.X size={24} />
+                            </button>
+                        </div>
+                        
+                        <div className="p-6 grid md:grid-cols-3 gap-6">
+                            {plans.map(plan => (
+                                <div key={plan.id} className={`bg-black/20 border border-white/10 rounded-xl p-6 hover:border-${plan.color}/50 transition-all hover:-translate-y-1 relative overflow-hidden group`}>
+                                    {plan.popular && (
+                                        <div className="absolute top-0 right-0 bg-amber text-black text-[10px] font-bold px-2 py-0.5 rounded-bl">POPULAR</div>
+                                    )}
+                                    <h3 className={`text-xl font-bold text-${plan.color} mb-2`}>{plan.name}</h3>
+                                    <div className="text-3xl font-bold text-white mb-4">{plan.price}</div>
+                                    <ul className="mb-6 flex-grow space-y-3">
+                                        {plan.features.map((feature, idx) => (
+                                            <li key={idx} className="flex items-center text-slate-300 text-sm">
+                                                <span className={`text-${plan.color} mr-2`}><Icons.Check size={16} /></span>
+                                                {feature}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <button
+                                        onClick={() => onSelectPlan(0, plan.amount)}
+                                        className={`w-full py-3 px-4 bg-${plan.color}/20 text-${plan.color} rounded-lg hover:bg-${plan.color}/30 transition-colors font-bold text-sm border border-${plan.color}/20`}
+                                    >
+                                        Buy Now
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main Application Component
+        const PatternDocFormatter = () => {
+            const [viewMode, setViewMode] = useState('formatter'); // 'formatter' or 'coverpage'
+            const [file, setFile] = useState(null);
+            const [processing, setProcessing] = useState(false);
+            const [progress, setProgress] = useState(0);
+            const [status, setStatus] = useState('');
+            const [result, setResult] = useState(null);
+            const [preview, setPreview] = useState(null);
+            const [error, setError] = useState(null);
+            const [dragOver, setDragOver] = useState(false);
+            const [activeTab, setActiveTab] = useState('preview');
+            const [mergeJobId, setMergeJobId] = useState(null);
+            const [pastedText, setPastedText] = useState('');
+            const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+            const [elapsedTime, setElapsedTime] = useState(0);
+            const [showShare, setShowShare] = useState(false);
+            const [showProfile, setShowProfile] = useState(false);
+            const fileInputRef = useRef(null);
+            const [shareBlob, setShareBlob] = useState(null);
+            const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
+            const [showPdfModal, setShowPdfModal] = useState(false);
+            const [pdfViewParam, setPdfViewParam] = useState('FitH');
+            const [showPricingModal, setShowPricingModal] = useState(false);
+            // Formatting options states
+            const [showFormattingModal, setShowFormattingModal] = useState(false);
+            const [pendingFile, setPendingFile] = useState(null);
+            const [formattingOptions, setFormattingOptions] = useState({
+                includeTOC: false,
+                fontSize: '12',
+                lineSpacing: '1.5',
+                marginCm: '2.5',
+                useIndividualMargins: false,
+                marginLeft: '2.5',
+                marginTop: '2.5',
+                marginBottom: '2.5',
+                marginRight: '2.5'
+            });
+
+            const handleUpgrade = async (pages, amount) => {
+                setShowPricingModal(false);
+                try {
+                    const response = await fetch('/api/payment/initiate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ amount, pages })
+                    });
+                    const data = await response.json();
+                    if (data.link) {
+                        window.location.href = data.link;
+                    } else {
+                        setError('Failed to initiate payment');
+                    }
+                } catch (err) {
+                    setError('Payment error: ' + err.message);
+                }
+            };
+
+            // Check for payment success on load
+            useEffect(() => {
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('payment') === 'success') {
+                    setStatus('Verifying payment...');
+                    setProcessing(true);
+                    
+                    fetch(`${API_BASE}/api/payment/verify-pending`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include'
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        setProcessing(false);
+                        if (data.success && data.message.includes('Verified')) {
+                            setShowSuccessMessage(true);
+                            setStatus('Payment Successful! Balance updated.');
+                            // Clear URL param
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                            // Reload page after short delay to refresh user state if needed
+                            setTimeout(() => window.location.reload(), 2000);
+                        } else {
+                            setStatus('Payment verification complete.');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Verification failed', err);
+                        setProcessing(false);
+                    });
+                }
+            }, []);
+
+            // Pre-fetch blob for sharing
+            useEffect(() => {
+                if (result && result.job_id) {
+                    fetch(`${API_BASE}/download/${result.job_id}`, { credentials: 'include' })
+                        .then(res => {
+                            if (res.ok) return res.blob();
+                            throw new Error('Fetch failed');
+                        })
+                        .then(blob => setShareBlob(blob))
+                        .catch(err => console.error("Pre-fetch failed", err));
+                } else {
+                    setShareBlob(null);
+                }
+            }, [result]);
+
+            // Timer effect
+            useEffect(() => {
+                let interval;
+                if (processing) {
+                    const startTime = Date.now();
+                    interval = setInterval(() => {
+                        setElapsedTime(Date.now() - startTime);
+                    }, 10);
+                } else {
+                    setElapsedTime(0);
+                }
+                return () => clearInterval(interval);
+            }, [processing]);
+
+            // Handle file selection
+            const handleFileSelect = useCallback(async (selectedFile) => {
+                if (!selectedFile) return;
+
+                // Validate file type
+                const validTypes = ['.txt', '.docx', '.md', '.doc'];
+                const fileExt = '.' + selectedFile.name.split('.').pop().toLowerCase();
+                
+                if (!validTypes.includes(fileExt)) {
+                    setError('Invalid file type. Please upload .txt, .docx, or .md files.');
+                    return;
+                }
+
+                // Store pending file and show formatting modal
+                setPendingFile(selectedFile);
+                setPastedText(''); // Clear pasted text if any
+                setError(null);
+                setShowFormattingModal(true);
+            }, []);
+
+            // Process file after formatting options are selected
+            const processFileWithOptions = async (selectedFile, options) => {
+                setFile(selectedFile);
+                setProcessing(true);
+                setProgress(0);
+                setStatus('Uploading file...');
+                setResult(null);
+                setPreview(null);
+                setError(null);
+                setShowSuccessMessage(false);
+                setShowFormattingModal(false);
+                setPendingFile(null);
+
+                // Simulate initial progress
+                let progressInterval = setInterval(() => {
+                    setProgress(prev => Math.min(prev + 10, 90));
+                }, 200);
+
+                try {
+                    // Create form data with formatting options
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    formData.append('include_toc', String(options.includeTOC));
+                    formData.append('font_size', String(options.fontSize));
+                    formData.append('line_spacing', String(options.lineSpacing));
+                    
+                    // Add margin parameters
+                    if (options.useIndividualMargins) {
+                        formData.append('margin_left', String(options.marginLeft));
+                        formData.append('margin_top', String(options.marginTop));
+                        formData.append('margin_bottom', String(options.marginBottom));
+                        formData.append('margin_right', String(options.marginRight));
+                    } else {
+                        formData.append('margin_cm', String(options.marginCm));
+                    }
+
+                    setStatus('Processing document with pattern matching...');
+
+                    // Upload to backend
+                    const response = await fetch(`${API_BASE}/upload`, {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include'
+                    });
+
+                    clearInterval(progressInterval);
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        if (errorData.error === 'LIMIT_REACHED') {
+                            setError('Free tier limit reached (300 pages/month). Please upgrade to continue.');
+                        } else {
+                            throw new Error(errorData.error || 'Upload failed');
+                        }
+                        setProcessing(false);
+                        return;
+                    }
+
+                    const data = await response.json();
+                    
+                    setProgress(100);
+                    setStatus('Complete!');
+                    setResult(data);
+                    setPreview(data.preview || '');
+                    setShowSuccessMessage(true);
+
+                    // Check for limit warning
+                    if (data.limit_reached) {
+                        setError('Limit Reached! You have used all your free pages. This document was processed, but you need to upgrade to process more.');
+                    }
+
+                    // Auto-open preview
+                    const pdfFilename = data.filename ? data.filename.replace(/\.docx$/i, '.pdf') : 'formatted_document.pdf';
+                    const previewUrl = `${API_BASE}/download-pdf/${data.job_id}/${encodeURIComponent(pdfFilename)}?inline=true`;
+                    setPdfPreviewUrl(previewUrl);
+
+                } catch (err) {
+                    clearInterval(progressInterval);
+                    console.error('Upload error:', err);
+                    setError(err.message || 'Failed to process document. Make sure the backend server is running.');
+                    setStatus('Error occurred');
+                } finally {
+                    setProcessing(false);
+                }
+            };
+
+            const handlePayment = async (amount, planName) => {
+                try {
+                    setProcessing(true);
+                    setStatus(`Initiating payment for ${planName}...`);
+                    
+                    const response = await fetch(`${API_BASE}/api/payment/initiate`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ amount })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.link) {
+                        window.location.href = data.link;
+                    } else {
+                        setError(data.message || 'Payment initiation failed');
+                        setProcessing(false);
+                    }
+                } catch (err) {
+                    setError('Payment error: ' + err.message);
+                    setProcessing(false);
+                }
+            };
+
+            const handlePasteSubmit = () => {
+                if (!pastedText.trim()) return;
+                
+                const blob = new Blob([pastedText], { type: 'text/plain' });
+                const file = new File([blob], "pasted_document.txt", { type: "text/plain" });
+                
+                // Store pending file and show formatting modal
+                setPendingFile(file);
+                setShowFormattingModal(true);
+            };
+
+            // File input change handler
+            const handleFileInputChange = (event) => {
+                const selectedFile = event.target.files[0];
+                handleFileSelect(selectedFile);
+            };
+
+            // Drag and drop handlers
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                setDragOver(true);
+            };
+
+            const handleDragLeave = (e) => {
+                e.preventDefault();
+                setDragOver(false);
+            };
+
+            const handleDrop = (e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const droppedFile = e.dataTransfer.files[0];
+                handleFileSelect(droppedFile);
+            };
+
+            // Download handler
+            const handleDownload = async (format = 'docx') => {
+                if (!result || !result.job_id) return;
+
+                setShowSuccessMessage(false);
+
+                if (format === 'pdf') {
+                    setStatus('Converting to PDF...');
+                    // Use URL-based filename for robust handling
+                    const pdfFilename = result.filename ? result.filename.replace(/\.docx$/i, '.pdf') : 'formatted_document.pdf';
+                    const downloadUrl = `${API_BASE}/download-pdf/${result.job_id}/${encodeURIComponent(pdfFilename)}?inline=false`;
+
+                    try {
+                        // Check if conversion works first
+                        const response = await fetch(downloadUrl);
+                        if (!response.ok) {
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || 'PDF conversion failed');
+                        }
+                        
+                        // Trigger download using the URL which contains the filename
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = pdfFilename; 
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    } catch (err) {
+                        alert(`PDF Error: ${err.message}`);
+                    } finally {
+                        setStatus('');
+                    }
+                } else {
+                    // For DOCX, standard download
+                    const downloadUrl = `${API_BASE}/download/${result.job_id}?inline=false`;
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = ''; 
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            };
+
+            // Share handler
+            const handleShare = async () => {
+                if (!result || !result.job_id) return;
+                
+                try {
+                    setStatus('Preparing to share...');
+                    
+                    let blob = shareBlob;
+                    if (!blob) {
+                        const response = await fetch(`${API_BASE}/download/${result.job_id}`, { credentials: 'include' });
+                        if (!response.ok) throw new Error('Download failed');
+                        blob = await response.blob();
+                    }
+
+                    const fileToShare = new File([blob], `formatted_${file?.name || 'document'}.docx`, { type: blob.type });
+                    
+                    if (navigator.share && navigator.canShare({ files: [fileToShare] })) {
+                        await navigator.share({
+                            files: [fileToShare],
+                            title: 'Formatted Document',
+                            text: 'Here is your formatted document from AfroDocs.'
+                        });
+                        setStatus('Shared successfully!');
+                    } else {
+                        // Fallback for desktop or unsupported browsers
+                        alert('Sharing is not supported on this device/browser. The file has been downloaded.');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    // Don't show error if user cancelled share
+                    if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+                        setError('Failed to share: ' + err.message);
+                    }
+                } finally {
+                    setStatus('');
+                }
+            };
+
+            // Reset handler
+            const handleReset = () => {
+                setFile(null);
+                setProcessing(false);
+                setProgress(0);
+                setStatus('');
+                setResult(null);
+                setPreview(null);
+                setError(null);
+                setMergeJobId(null);
+                setShowSuccessMessage(false);
+                setShowShare(false);
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = '';
+                }
+            };
+
+            // Auth State
+            const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+            const [currentUser, setCurrentUser] = React.useState(null);
+            const [checkingAuth, setCheckingAuth] = React.useState(true);
+            const [showAdmin, setShowAdmin] = React.useState(false);
+            const [userList, setUserList] = React.useState([]);
+
+            React.useEffect(() => {
+                // Check auth status on load
+                fetch(`${API_BASE}/api/auth/status`, { credentials: 'include' })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.isAuthenticated) {
+                            setIsAuthenticated(true);
+                            setCurrentUser(data);
+                        }
+                    })
+                    .catch(err => console.error("Auth check failed", err))
+                    .finally(() => setCheckingAuth(false));
+            }, []);
+
+            const handleLogin = (username) => {
+                setIsAuthenticated(true);
+                // Fetch full user details
+                fetch(`${API_BASE}/api/auth/status`, { credentials: 'include' })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.isAuthenticated) {
+                            setCurrentUser(data);
+                        }
+                    });
+            };
+
+            const handleLogout = async () => {
+                try {
+                    await fetch(`${API_BASE}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+                    setIsAuthenticated(false);
+                    setCurrentUser(null);
+                    setShowAdmin(false);
+                    handleReset(); // Reset app state
+                } catch (err) {
+                    console.error("Logout failed", err);
+                }
+            };
+
+            const fetchUsers = async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/api/admin/users`, { credentials: 'include' });
+                    if (res.ok) {
+                        const data = await res.json();
+                        setUserList(data);
+                        setShowAdmin(true);
+                    } else {
+                        alert('Unauthorized access');
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+            };
+
+            const handleDeleteUser = async (userId) => {
+                if (!confirm('Are you sure you want to delete this user?')) return;
+                try {
+                    const res = await fetch(`${API_BASE}/api/admin/users/${userId}`, { method: 'DELETE', credentials: 'include' });
+                    if (res.ok) {
+                        fetchUsers(); // Refresh list
+                    } else {
+                        const data = await res.json();
+                        alert(data.error || 'Failed to delete user');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Network error');
+                }
+            };
+
+            const [selectedUserDocs, setSelectedUserDocs] = useState(null);
+            const [loadingDocs, setLoadingDocs] = useState(false);
+
+            const handleViewDocs = async (userId, username) => {
+                setLoadingDocs(true);
+                try {
+                    const res = await fetch(`${API_BASE}/api/admin/users/${userId}/documents`, { credentials: 'include' });
+                    if (res.ok) {
+                        const docs = await res.json();
+                        setSelectedUserDocs({ username, docs });
+                    } else {
+                        alert('Failed to fetch documents');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('Network error');
+                } finally {
+                    setLoadingDocs(false);
+                }
+            };
+
+            const handleDownloadDoc = (filename) => {
+                window.open(`${API_BASE}/api/download/${filename}`, '_blank');
+            };
+
+            if (checkingAuth) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-midnight text-teal">
+                        <div className="animate-spin"><Icons.Loader size={40} /></div>
+                    </div>
+                );
+            }
+
+            if (!isAuthenticated) {
+                return <AuthPage onLogin={handleLogin} />;
+            }
+
+            // Admin View
+            if (showAdmin) {
+                return (
+                    <div className="min-h-screen bg-midnight p-6 text-white">
+                        <div className="max-w-6xl mx-auto">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-bold text-teal">User Management</h2>
+                                <button onClick={() => setShowAdmin(false)} className="text-slate-400 hover:text-white">
+                                    <Icons.X />
+                                </button>
+                            </div>
+                            <div className="glass-panel rounded-xl overflow-hidden">
+                                <table className="w-full text-left">
+                                    <thead className="bg-ocean-dark text-teal border-b border-white/10">
+                                        <tr>
+                                            <th className="p-4">ID</th>
+                                            <th className="p-4">Username</th>
+                                            <th className="p-4">Institution</th>
+                                            <th className="p-4">Contact</th>
+                                            <th className="p-4">Docs</th>
+                                            <th className="p-4">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {userList.map(user => (
+                                            <tr key={user.id} className="hover:bg-white/5">
+                                                <td className="p-4 text-slate-400">#{user.id}</td>
+                                                <td className="p-4 font-medium">{user.username}</td>
+                                                <td className="p-4 text-sm text-slate-300">{user.institution || '-'}</td>
+                                                <td className="p-4 text-sm text-slate-300">{user.contact || '-'}</td>
+                                                <td className="p-4 text-sm text-teal">{user.documents_generated || 0}</td>
+                                                <td className="p-4 flex gap-2">
+                                                    <button 
+                                                        onClick={() => handleViewDocs(user.id, user.username)}
+                                                        className="text-teal hover:text-white text-sm bg-teal/10 px-3 py-1 rounded hover:bg-teal/20 transition-colors"
+                                                    >
+                                                        View Docs
+                                                    </button>
+                                                    {user.username !== 'admin' && (
+                                                        <button 
+                                                            onClick={() => handleDeleteUser(user.id)}
+                                                            className="text-red-400 hover:text-red-300 text-sm bg-red-500/10 px-3 py-1 rounded hover:bg-red-500/20 transition-colors"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Documents Modal */}
+                        {selectedUserDocs && (
+                            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                                <div className="glass-panel rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+                                    <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                                        <h3 className="text-xl font-bold text-white">
+                                            Documents: <span className="text-teal">{selectedUserDocs.username}</span>
+                                        </h3>
+                                        <button onClick={() => setSelectedUserDocs(null)} className="text-slate-400 hover:text-white">
+                                            <Icons.X />
+                                        </button>
+                                    </div>
+                                    <div className="p-6 overflow-y-auto flex-1">
+                                        {selectedUserDocs.docs.length === 0 ? (
+                                            <p className="text-slate-400 text-center py-8">No documents found for this user.</p>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {selectedUserDocs.docs.map(doc => (
+                                                    <div key={doc.id} className="bg-white/5 rounded-lg p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
+                                                        <div className="flex items-center gap-3 overflow-hidden">
+                                                            <div className="bg-ocean/20 p-2 rounded-lg text-ocean-light">
+                                                                <Icons.FileText size={20} />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-sm font-medium text-white truncate">{doc.original_filename || doc.filename}</p>
+                                                                <p className="text-xs text-slate-400">{new Date(doc.created_at).toLocaleString()}</p>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={() => handleDownloadDoc(doc.filename)}
+                                                            className="flex items-center gap-2 text-xs font-bold text-teal hover:text-white bg-teal/10 hover:bg-teal/20 px-3 py-2 rounded-lg transition-colors"
+                                                        >
+                                                            <Icons.Download size={14} />
+                                                            Download
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            // Stats data for display
+            const statsData = result ? [
+                { label: 'Headings', value: result.stats?.headings || 0, icon: Icons.Heading, color: 'text-teal' },
+                { label: 'Paragraphs', value: result.stats?.paragraphs || 0, icon: Icons.FileText, color: 'text-ocean' },
+                { label: 'References', value: result.stats?.references || 0, icon: Icons.Book, color: 'text-teal-light' },
+                { label: 'Tables', value: result.stats?.tables || 0, icon: Icons.Table, color: 'text-amber' },
+                { label: 'Lists', value: result.stats?.lists || 0, icon: Icons.List, color: 'text-coral' },
+            ] : [];
+
+            return (
+                <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-ocean-dark via-[#0F385C] to-midnight p-4 md:p-6 text-white flex flex-col">
+                    <div className="max-w-5xl mx-auto w-full flex-1 flex flex-col">
+                        {/* Header - Compact & Modern */}
+                        <div className="flex items-center justify-between mb-6 pt-2 relative">
+                            {/* Left: Logo & Title */}
+                            <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-to-r from-ocean to-teal rounded-lg flex items-center justify-center shadow-lg shadow-ocean/30 p-1">
+                                    <img src="logo/logo.png" alt="AfroDocs Logo" className="h-full w-full object-contain" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <h1 className="text-xl md:text-3xl font-bold text-white tracking-tight font-display">
+                                        AfroDocs
+                                    </h1>
+                                    <p className="text-white/60 text-[10px] md:text-xs font-medium tracking-wide">
+                                        Automatic Document Formatting
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Right: Actions */}
+                            <div className="flex items-center gap-3">
+                                {currentUser?.username === 'admin' && (
+                                    <button 
+                                        onClick={fetchUsers}
+                                        className="flex items-center gap-2 text-xs md:text-sm text-teal hover:text-white transition-colors bg-teal/10 hover:bg-teal/20 px-3 py-1.5 rounded-lg border border-teal/30"
+                                    >
+                                        <Icons.Users size={14} />
+                                        <span className="hidden md:inline">Manage Users</span>
+                                    </button>
+                                )}
+                                
+                                {currentUser && (
+                                    <div className="hidden md:flex items-center px-3 py-1.5 bg-white/5 rounded-lg border border-white/10 mr-2">
+                                        <div className={`w-2 h-2 rounded-full mr-2 ${currentUser.pages_balance > 0 ? 'bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.5)]' : 'bg-teal shadow-[0_0_8px_rgba(20,184,166,0.5)]'}`}></div>
+                                        <span className="text-xs font-medium text-slate-300">
+                                            {currentUser.pages_balance > 0 ? 'Pro Account' : 'Free Account'}
+                                        </span>
+                                    </div>
+                                )}
+
+                                <div className="relative">
+                                    <button 
+                                        onClick={() => setShowProfile(!showProfile)}
+                                        className="flex items-center gap-2 text-xs md:text-sm text-white hover:text-teal transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg border border-white/10"
+                                    >
+                                        <Icons.User size={16} />
+                                        <span className="hidden md:inline">{currentUser?.username}</span>
+                                        <Icons.ChevronDown />
+                                    </button>
+
+                                    {/* Profile Dropdown */}
+                                    {showProfile && (
+                                        <div className="absolute right-0 top-full mt-2 w-64 bg-midnight border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden glass-panel">
+                                            <div className="p-4 border-b border-white/10">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="bg-teal/20 p-2 rounded-full">
+                                                        <Icons.User size={20} className="text-teal" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-white">{currentUser?.username}</p>
+                                                        <p className="text-xs text-slate-400 capitalize">{currentUser?.plan} Plan</p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 text-xs text-slate-300">
+                                                    <div className="flex justify-between mb-1">
+                                                        <span className="text-purple-400">Paid Pages Balance</span>
+                                                        <span className="text-purple-400 font-bold">{currentUser?.pages_balance || 0}</span>
+                                                    </div>
+                                                    <div className="w-full bg-white/10 rounded-full h-1.5 mb-3">
+                                                        <div 
+                                                            className="bg-purple-500 h-1.5 rounded-full" 
+                                                            style={{width: '100%'}} 
+                                                        ></div>
+                                                    </div>
+
+                                                    <div className="flex justify-between mb-1">
+                                                        <span>Monthly Free Pages</span>
+                                                        <span>{currentUser?.pages_this_month || 0}/300</span>
+                                                    </div>
+                                                    <div className="w-full bg-white/10 rounded-full h-1.5 mb-3">
+                                                        <div 
+                                                            className="bg-teal h-1.5 rounded-full" 
+                                                            style={{width: `${Math.min((currentUser?.pages_this_month || 0) / 300 * 100, 100)}%`}}
+                                                        ></div>
+                                                    </div>
+
+                                                    <button
+                                                        onClick={() => setShowPricingModal(true)}
+                                                        className="w-full mt-1 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded text-xs font-bold hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                                                    >
+                                                        <Icons.Star size={12} />
+                                                        Upgrade Plan
+                                                    </button>
+                                                </div>
+                                                {currentUser?.referral_code && (
+                                                    <div className="mt-3 pt-3 border-t border-white/10">
+                                                        <p className="text-xs text-slate-400 mb-1">Referral Link</p>
+                                                        <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded border border-white/5">
+                                                            <code className="text-xs text-teal font-mono flex-1 truncate">
+                                                                {window.location.origin}/?ref={currentUser.referral_code}
+                                                            </code>
+                                                            <button 
+                                                                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/?ref=${currentUser.referral_code}`)}
+                                                                className="text-slate-400 hover:text-white"
+                                                                title="Copy Link"
+                                                            >
+                                                                <Icons.Copy size={12} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="p-2 bg-black/20">
+                                                <button 
+                                                    onClick={handleLogout}
+                                                    className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-white/5 rounded-lg transition-colors"
+                                                >
+                                                    Sign Out
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                    {/* Main Content */}
+                    <main className="flex-1 max-w-6xl mx-auto w-full p-6">
+                        {/* Error Message */}
+                        {error && (
+                            <div className="mb-6 bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl flex flex-col gap-3 animate-fade-in">
+                                <div className="flex items-center gap-3">
+                                    <Icons.X size={20} />
+                                    <div>
+                                        <p className="font-medium">Error</p>
+                                        <p className="text-sm opacity-90">{error}</p>
+                                    </div>
+                                </div>
+                                
+                                {error.toLowerCase().includes('limit reached') && (
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {/* Student Package */}
+                                        <div className="bg-black/40 border border-white/10 rounded-lg p-4 hover:border-teal/50 transition-colors">
+                                            <h3 className="text-teal font-bold text-lg mb-1">Student Package</h3>
+                                            <p className="text-2xl font-bold text-white mb-2">100 FCFA</p>
+                                            <ul className="text-xs text-slate-300 space-y-1 mb-4">
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-teal"/> 500 pages</li>
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-teal"/> No watermark</li>
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-teal"/> Valid for 3 months</li>
+                                            </ul>
+                                            <button onClick={() => handlePayment(100, 'Student Package')} className="w-full py-2 bg-teal/20 hover:bg-teal/30 text-teal rounded text-xs font-bold transition-colors border border-teal/20">
+                                                Buy Now
+                                            </button>
+                                        </div>
+
+                                        {/* Campus Pro */}
+                                        <div className="bg-black/40 border border-white/10 rounded-lg p-4 hover:border-amber/50 transition-colors relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 bg-amber text-black text-[10px] font-bold px-2 py-0.5 rounded-bl">POPULAR</div>
+                                            <h3 className="text-amber font-bold text-lg mb-1">Campus Pro</h3>
+                                            <p className="text-2xl font-bold text-white mb-2">250 FCFA</p>
+                                            <ul className="text-xs text-slate-300 space-y-1 mb-4">
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-amber"/> 1,500 pages</li>
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-amber"/> No watermark</li>
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-amber"/> Valid for 6 months</li>
+                                            </ul>
+                                            <button onClick={() => handlePayment(250, 'Campus Pro')} className="w-full py-2 bg-amber/20 hover:bg-amber/30 text-amber rounded text-xs font-bold transition-colors border border-amber/20">
+                                                Buy Now
+                                            </button>
+                                        </div>
+
+                                        {/* Enterprise Plan */}
+                                        <div className="bg-black/40 border border-white/10 rounded-lg p-4 hover:border-purple-500/50 transition-colors">
+                                            <h3 className="text-purple-400 font-bold text-lg mb-1">Enterprise</h3>
+                                            <p className="text-2xl font-bold text-white mb-2">500 FCFA<span className="text-xs font-normal text-slate-400">/mo</span></p>
+                                            <ul className="text-xs text-slate-300 space-y-1 mb-4">
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-purple-400"/> 10,000 pages/mo</li>
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-purple-400"/> No watermark</li>
+                                                <li className="flex items-center gap-2"><Icons.Check size={12} className="text-purple-400"/> Priority Support</li>
+                                            </ul>
+                                            <button onClick={() => handlePayment(500, 'Enterprise')} className="w-full py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded text-xs font-bold transition-colors border border-purple-500/20">
+                                                Buy Now
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+
+                        {/* Navigation - Compact */}
+                        <div className="max-w-xs mx-auto mb-6 w-full">
+                            <div className="bg-black/20 p-1 rounded-lg flex relative backdrop-blur-md border border-white/10 shadow-lg">
+                                <button 
+                                    onClick={() => setViewMode('formatter')}
+                                    className={`flex-1 py-2 px-3 md:py-2.5 md:px-4 rounded-md text-sm md:text-base font-bold transition-all duration-200 ${
+                                        viewMode === 'formatter' 
+                                        ? 'bg-gradient-to-r from-ocean to-teal text-white shadow-md' 
+                                        : 'text-mist hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    Formatter
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode('coverpage')}
+                                    className={`flex-1 py-2 px-3 md:py-2.5 md:px-4 rounded-md text-sm md:text-base font-bold transition-all duration-200 ${
+                                        viewMode === 'coverpage' 
+                                        ? 'bg-gradient-to-r from-ocean to-teal text-white shadow-md' 
+                                        : 'text-mist hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    Cover Page
+                                </button>
+                            </div>
+                        </div>
+
+                        {viewMode === 'coverpage' ? (
+                            <CoverPageGenerator 
+                                mergeJobId={mergeJobId} 
+                                setPdfPreviewUrl={setPdfPreviewUrl} 
+                                pdfPreviewUrl={pdfPreviewUrl}
+                                setPdfViewParam={setPdfViewParam}
+                                setShowPdfModal={setShowPdfModal}
+                            />
+                        ) : (
+                            <>
+
+
+
+                                {/* Upload Area */}
+                                <div className={`glass-panel rounded-xl p-5 mb-6 transition-all duration-500 ${processing ? 'processing-glow' : 'hover:shadow-glow'}`}>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".txt,.docx,.md,.doc"
+                                        onChange={handleFileInputChange}
+                                        className="hidden"
+                                    />
+                                    
+                                    <div
+                                        onClick={() => {
+                                            if (processing || showSuccessMessage) return;
+                                            
+                                            if (result) {
+                                                // Reset to initial state
+                                                setFile(null);
+                                                setProcessing(false);
+                                                setProgress(0);
+                                                setStatus('');
+                                                setResult(null);
+                                                setPreview(null);
+                                                setError(null);
+                                                setShowSuccessMessage(false);
+                                                setShowShare(false);
+                                                setMergeJobId(null);
+                                                if (fileInputRef.current) fileInputRef.current.value = '';
+                                            } else {
+                                                fileInputRef.current?.click();
+                                            }
+                                        }}
+                                        onDragOver={!showSuccessMessage ? handleDragOver : undefined}
+                                        onDragLeave={!showSuccessMessage ? handleDragLeave : undefined}
+                                        onDrop={!showSuccessMessage ? handleDrop : undefined}
+                                        className={`w-full py-4 border-2 rounded-xl transition-all duration-300 group relative overflow-hidden
+                                            ${showSuccessMessage 
+                                                ? 'border-teal bg-teal/10 cursor-default' 
+                                                : `border-dashed cursor-pointer ${dragOver ? 'drag-over border-teal bg-teal/10' : 'border-white/10 hover:border-teal/50 hover:bg-white/5'}`
+                                            }
+                                            ${processing ? 'border-teal/50 bg-black/20 cursor-wait border-solid' : ''}`}
+                                    >
+                                        {processing ? (
+                                            file ? (
+                                                <div className="relative w-full h-48 md:h-64 flex flex-col items-center justify-center overflow-hidden">
+                                                    {/* Tech Grid Background */}
+                                                    <div className="absolute inset-0 tech-grid opacity-30"></div>
+                                                    
+                                                    {/* Corner Brackets */}
+                                                    <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-teal"></div>
+                                                    <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-teal"></div>
+                                                    <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-teal"></div>
+                                                    <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-teal"></div>
+
+                                                    {/* Document Icon */}
+                                                    <div className="relative z-10 text-white/20 scale-[1.5] md:scale-[2]">
+                                                        <Icons.FileText />
+                                                    </div>
+                                                    
+                                                    {/* Scanner Elements */}
+                                                    <div className="scanner-line"></div>
+                                                    <div className="scanner-beam"></div>
+                                                    
+                                                    {/* Status Text */}
+                                                    <div className="absolute bottom-4 left-0 right-0 text-center">
+                                                        <p className="text-teal font-mono text-xs tracking-widest animate-pulse">Processing</p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center py-12">
+                                                    <div className="animate-spin mb-4"><Icons.Loader size={32} className="text-teal"/></div>
+                                                    <p className="text-white font-medium">{status}</p>
+                                                </div>
+                                            )
+                                        ) : showSuccessMessage ? (
+                                            <div className="flex flex-col items-center justify-center py-1">
+                                                <div className="mb-2 text-teal">
+                                                    <Icons.SuccessCheck />
+                                                </div>
+                                                <p className="text-sm md:text-base font-medium text-white mb-0.5">
+                                                    Done, Edited successfully
+                                                </p>
+                                                <p className="text-mist text-xs text-center px-4 break-words max-w-md mx-auto">
+                                                    {file ? file.name : 'Document'} processed
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center gap-1">
+                                                <div className={`p-2 rounded-full bg-white/5 group-hover:bg-teal/10 transition-colors duration-300`}>
+                                                    <span className="text-teal group-hover:scale-105 transition-transform duration-300 block">
+                                                        {result ? <Icons.Refresh /> : <Icons.Upload />}
+                                                    </span>
+                                                </div>
+                                                <div className="text-white text-center">
+                                                    <p className="text-lg md:text-xl font-normal mb-1 group-hover:text-teal transition-colors">
+                                                        {result ? 'Process Another Document' : (file && !result ? file.name : 'Click to upload or drop file here')}
+                                                    </p>
+                                                    <p className="text-mist text-sm font-normal">
+                                                        Supports .txt, .docx, .md files • Max 50MB
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Timer */}
+                                    {processing && (
+                                        <div className="mt-4 text-center">
+                                            <p className="text-teal font-mono text-xl font-bold tracking-widest tabular-nums" style={{ textShadow: '0 0 10px rgba(0, 180, 166, 0.5)' }}>
+                                                {(() => {
+                                                    const mins = Math.floor(elapsedTime / 60000).toString().padStart(2, '0');
+                                                    const secs = Math.floor((elapsedTime % 60000) / 1000).toString().padStart(2, '0');
+                                                    const ms = Math.floor((elapsedTime % 1000) / 10).toString().padStart(2, '0');
+                                                    return `${mins}:${secs}:${ms}`;
+                                                })()}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Paste Text Area - Only show if no result */}
+                                    {!result && !processing && (
+                                        <div className="mt-4 border-t border-white/10 pt-4">
+                                            <p className="text-center text-mist text-xs mb-2 font-bold uppercase tracking-wider">OR PASTE TEXT HERE</p>
+                                            <div className="relative">
+                                                <textarea
+                                                    autoFocus
+                                                    value={pastedText}
+                                                    onChange={(e) => setPastedText(e.target.value)}
+                                                    placeholder="Paste your document content here..."
+                                                    className="w-full h-64 glass-input rounded-xl p-4 text-sm md:text-base text-white placeholder-white/30 focus:border-teal outline-none resize-y"
+                                                />
+                                                {pastedText && (
+                                                    <button
+                                                        onClick={handlePasteSubmit}
+                                                        className="absolute bottom-4 right-4 bg-teal text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-light transition-colors shadow-lg"
+                                                    >
+                                                        PROCESS TEXT
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Action buttons */}
+                                    {result && (
+                                        <div className="flex flex-col gap-3 mt-6">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button
+                                                    onClick={() => handleDownload('docx')}
+                                                    className="flex items-center justify-center gap-1 md:gap-2 px-2 py-2 md:px-6 md:py-3 bg-gradient-to-r from-ocean to-teal text-white rounded-lg hover:from-ocean-dark hover:to-ocean transition-all duration-300 shadow-lg hover:shadow-ocean/50 hover:-translate-y-0.5 font-semibold text-xs md:text-base w-full whitespace-nowrap"
+                                                >
+                                                    <span className="scale-75 md:scale-100"><Icons.Download /></span>
+                                                    Download DOCX
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownload('pdf')}
+                                                    className="flex items-center justify-center gap-1 md:gap-2 px-2 py-2 md:px-6 md:py-3 bg-gradient-to-r from-ocean to-teal text-white rounded-lg hover:from-ocean-dark hover:to-ocean transition-all duration-300 shadow-lg hover:shadow-ocean/50 hover:-translate-y-0.5 font-semibold text-xs md:text-base w-full whitespace-nowrap"
+                                                >
+                                                    <span className="scale-75 md:scale-100"><Icons.Download /></span>
+                                                    Download PDF
+                                                </button>
+                                            </div>
+                                            
+                                            {/* Secondary actions removed as they are now in the preview header */}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Results */}
+                                {result && (
+                                    <div className="space-y-6">
+                                        {/* Document Preview (Replaces Structure) */}
+                                        <div className="glass-panel rounded-xl overflow-hidden h-[800px] flex flex-col border border-teal/30 shadow-2xl">
+                                            <div className="flex items-center justify-between border-b border-white/10 bg-black/20 p-4">
+                                                <div className="font-bold text-white flex items-center gap-2 text-lg">
+                                                    <span className="text-teal"><Icons.Eye /></span>
+                                                    Document Preview
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <button
+                                                        onClick={() => setShowPdfModal(true)}
+                                                        className="flex items-center gap-2 px-3 py-2 bg-white/5 text-mist hover:text-white hover:bg-white/10 rounded-lg transition-all duration-300 border border-white/10 hover:border-white/30 text-sm"
+                                                        title="Full Screen"
+                                                    >
+                                                        <Icons.Maximize />
+                                                        <span className="hidden md:inline">Full Screen</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const currentJobId = result.job_id;
+                                                            setShowSuccessMessage(false);
+                                                            setShowShare(false);
+                                                            if (fileInputRef.current) {
+                                                                fileInputRef.current.value = '';
+                                                            }
+                                                            setMergeJobId(currentJobId);
+                                                            setViewMode('coverpage');
+                                                        }}
+                                                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-ocean to-teal text-white rounded-lg hover:from-ocean-dark hover:to-ocean transition-all duration-300 shadow-lg hover:shadow-ocean/50 hover:-translate-y-0.5 font-semibold text-sm"
+                                                    >
+                                                        <span className="text-xl">+</span> Add Cover Page
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex-1 relative bg-slate-900">
+                                                {pdfPreviewUrl ? (
+                                                    <iframe 
+                                                        src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=${window.innerWidth < 768 ? 'FitH' : 'FitV'}`}
+                                                        className="w-full h-full border-0"
+                                                        title="PDF Preview"
+                                                    />
+                                                ) : (
+                                                    <div className="flex items-center justify-center h-full text-mist flex-col gap-4">
+                                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal"></div>
+                                                        <p>Loading preview...</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Features - shown when no result */}
+                                {/* Removed as per user request */}
+
+                                {/* Pattern Recognition Info */}
+                                {/* Removed as per user request */}
+
+                                {/* Footer */}
+                                {/* Removed as per user request */}
+                            </>
+                        )}
+                    </main>
+
+                        {/* Footer */}
+                        <div className="mt-auto pt-12 pb-4 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="text-mist/50 font-mono text-xs">
+                                AfroDocs Version 1.0
+                            </div>
+                            <a 
+                                href="https://wa.me/237671308991" 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 bg-white/5 hover:bg-teal/10 text-mist hover:text-teal px-4 py-2 rounded-full transition-all duration-300 border border-white/10 hover:border-teal/30 group backdrop-blur-sm hover:shadow-[0_0_15px_rgba(0,180,166,0.2)]"
+                            >
+                                <div className="p-1 rounded-full bg-white/5 group-hover:bg-teal/20 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-mist group-hover:text-teal transition-colors">
+                                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                    </svg>
+                                </div>
+                                <span className="font-medium text-sm tracking-wide">Contact Support</span>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    {/* PDF Preview Modal */}
+                    <PdfPreviewModal 
+                        url={showPdfModal ? pdfPreviewUrl : null} 
+                        onClose={() => setShowPdfModal(false)} 
+                        viewParam={pdfViewParam}
+                    />
+
+                    {/* Formatting Options Modal */}
+                    <FormattingOptionsModal 
+                        isOpen={showFormattingModal} 
+                        onClose={() => {
+                            setShowFormattingModal(false);
+                            setPendingFile(null);
+                            setPastedText('');
+                        }}
+                        onApply={(options) => {
+                            if (pendingFile) {
+                                processFileWithOptions(pendingFile, options);
+                                setPendingFile(null);
+                            }
+                        }}
+                        options={formattingOptions}
+                        setOptions={setFormattingOptions}
+                    />
+
+                    {/* Pricing Modal */}
+                    <PricingModal 
+                        isOpen={showPricingModal} 
+                        onClose={() => setShowPricingModal(false)} 
+                        onSelectPlan={handleUpgrade}
+                    />
+                </div>
+            );
+        };
+
+        // Render the application
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<PatternDocFormatter />);
+    </script>
+</body>
+</html>

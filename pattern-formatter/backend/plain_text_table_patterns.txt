@@ -1,0 +1,102 @@
+# Plain Text Table Detection Patterns
+
+## Overview
+This document describes the enhanced plain text table detection patterns implemented in the PatternEngine class. These patterns enable detection of various table formats commonly found in chat interfaces and plain text documents.
+
+## Implementation Details
+
+### Pattern Categories
+The system detects 10 different types of plain text table formats:
+
+1. **Spaced Columns** (confidence: 0.7)
+   - Pattern: `^([^\s]+(?:\s{2,6}[^\s]+)+)$`
+   - Detects tables with 2-6 spaces between columns
+   - Example: `Variable    Mean    SD      N`
+
+2. **Pipe-Delimited** (confidence: 0.9)
+   - Pattern: `^\s*\|\s*([^\|]+(?:\s*\|\s*[^\|]+)+)\s*\|\s*$`
+   - Detects markdown-style tables with pipes
+   - Example: `| Name | Value | Unit |`
+
+3. **Tab-Separated** (confidence: 0.8)
+   - Pattern: `^([^\t]+\t[^\t]+(?:\t[^\t]+)*)$`
+   - Detects TSV format tables
+   - Example: `Name\tValue\tUnit`
+
+4. **Comma-Separated** (confidence: 0.6)
+   - Pattern: `^([^,]+,[^,]+(?:,[^,]+)*)$`
+   - Detects simple CSV format tables
+   - Example: `Name,Value,Unit`
+
+5. **Numbered Rows** (confidence: 0.7)
+   - Pattern: `^\s*\d+\.\s+[^\d]+\s+\d+\.\s+[^\d]+(?:\s+\d+\.\s+[^\d]+)*$`
+   - Detects numbered list patterns
+   - Example: `1. Introduction 2. Methods 3. Results`
+
+6. **Key-Value Pairs** (confidence: 0.6)
+   - Pattern: `^([^:]+:\s*[^:]+(?:\s+[^:]+:\s*[^:]+)*)$`
+   - Detects colon-separated key-value pairs
+   - Example: `Name: John Age: 25 City: NY`
+
+7. **Numeric Columns** (confidence: 0.8)
+   - Pattern: `^(\s*\d+(?:\.\d+)?(?:\s+\d+(?:\.\d+)?)+)$`
+   - Detects tables with numeric data
+   - Example: `25.3    4.2     150`
+
+8. **Header Candidates** (confidence: 0.5)
+   - Pattern: `^([A-Z][a-z]*(?:\s+[A-Z][a-z]*)+)$`
+   - Detects potential table headers
+   - Example: `MEAN    SD      N`
+
+9. **Separator Lines** (confidence: 0.9)
+   - Pattern: `^[\-\=\+\*\s]{3,}$`
+   - Detects table separator lines
+   - Example: `----    ----    ----`
+
+10. **Mixed Patterns** (confidence: 0.6)
+    - Pattern: `^([A-Za-z]+\s+\d+(?:\.\d+)?(?:\s+[A-Za-z]+\s+\d+(?:\.\d+)?)*)$`
+    - Detects mixed alphanumeric patterns
+    - Example: `Temp 23.5 Pres 1013`
+
+### Integration Points
+
+#### PatternEngine Class
+- **_initialize_patterns()**: Added all 10 plain text table patterns
+- **_detect_separator_style()**: Helper method to identify table border styles
+- **_extract_cells()**: Helper method to extract cell content based on delimiter type
+- **_structure_document()**: Modified to group plain text table rows and validate consistency
+
+#### WordGenerator Class
+- **_add_section_content()**: Added handling for `plain_text_table` section type
+- **_add_plain_text_table()**: New method for rendering plain text tables in Word documents
+- **_get_cell_content_type()**: Helper method for intelligent cell alignment (numeric right, statistical center, text left)
+
+### Processing Pipeline
+1. **Analysis Phase**: Patterns detect potential table rows with confidence scoring
+2. **Structuring Phase**: Rows are grouped into tables with delimiter consistency validation
+3. **Rendering Phase**: Tables are converted to Word tables with academic formatting
+
+### Academic Formatting Rules
+- **Font**: Times New Roman, 12pt
+- **Headers**: Bold, centered
+- **Alignment**:
+  - Numeric content: Right-aligned
+  - Statistical content: Center-aligned
+  - Text content: Left-aligned
+- **Table Style**: 'Table Grid'
+- **Spacing**: 6pt after table
+
+### Test Results
+Pattern testing confirmed detection of:
+- ✅ Spaced column tables (statistics tables)
+- ✅ Pipe-delimited tables (markdown format)
+- ✅ Tab-separated tables (TSV format)
+- ✅ Numbered row patterns
+- ✅ Key-value pair tables
+- ✅ Numeric data tables
+- ✅ Header row identification
+- ✅ Separator line detection
+- ✅ Mixed alphanumeric patterns
+
+### Priority and Placement
+Plain text table detection occurs **after** markdown table detection but **before** paragraph processing, ensuring proper precedence in the document structuring pipeline.
