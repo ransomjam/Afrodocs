@@ -2166,13 +2166,22 @@
             const [formattingOptions, setFormattingOptions] = useState({
                 includeTOC: false,
                 fontSize: '12',
-                lineSpacing: '1.5',
+                lineSpacing: '1.5',#
+// <<<<<<< codex/examine-codebase-84o2ei
                 marginCm: '2.5',
                 useIndividualMargins: true,
                 marginLeft: '3.0',
                 marginTop: '2.5',
                 marginBottom: '2.5',
                 marginRight: '2.5'
+// =======
+                marginCm: '3.0',
+                useIndividualMargins: false,
+                marginLeft: '3.0',
+                marginTop: '3.0',
+                marginBottom: '3.0',
+                marginRight: '3.0'
+// >>>>>>> main
             });
 
             const handleUpgrade = async (pages, amount) => {
