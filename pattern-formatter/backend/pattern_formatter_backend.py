@@ -1559,7 +1559,7 @@ class HeadingNumberer:
         """
         clean = re.sub(r'^#+\s*', '', text).strip()
         # Match: "1.2 Title" or "1.2.3 Title" or "A.1 Title"
-        return bool(re.match(r'^(\d+\.)+\d+\s+', clean) or re.match(r'^[A-Z]\.(\d+\.)*\d+\s+', clean))
+        return bool(re.match(r'^(\d+\.)+\d+[\.)]?\s+', clean) or re.match(r'^[A-Z]\.(\d+\.)*\d+[\.)]?\s+', clean))
     
     def extract_existing_number(self, text):
         """
@@ -1571,12 +1571,12 @@ class HeadingNumberer:
         clean = re.sub(r'^#+\s*', '', text).strip()
         
         # Match hierarchical number
-        match = re.match(r'^((?:\d+\.)+\d+)\s+(.+)$', clean)
+        match = re.match(r'^((?:\d+\.)+\d+)[\.)]?\s+(.+)$', clean)
         if match:
             return match.group(1), match.group(2)
         
         # Match appendix number
-        match = re.match(r'^([A-Z]\.(?:\d+\.)*\d+)\s+(.+)$', clean)
+        match = re.match(r'^([A-Z]\.(?:\d+\.)*\d+)[\.)]?\s+(.+)$', clean)
         if match:
             return match.group(1), match.group(2)
         
@@ -5065,6 +5065,12 @@ class PatternEngine:
             'APPENDICES', 'APPENDIX',
             'REFERENCES', 'REFERENCE',
             'BIBLIOGRAPHY',
+            'INTRODUCTION',
+            'LITERATURE REVIEW',
+            'METHODOLOGY', 'RESEARCH METHODOLOGY',
+            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
+            'DISCUSSION', 'FINDINGS AND DISCUSSION',
+            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS',
         ]
         
         # Check for exact front matter match
@@ -5103,12 +5109,19 @@ class PatternEngine:
             'DEDICATION',
             'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT',
             'ABSTRACT',
+            'RESUME', 'RÉSUMÉ',
             'TABLE OF CONTENTS', 'CONTENTS',
             'LIST OF TABLES',
             'LIST OF FIGURES',
             'LIST OF ABBREVIATIONS', 'ABBREVIATIONS',
             'GLOSSARY',
             'APPENDICES', 'APPENDIX',
+            'INTRODUCTION',
+            'LITERATURE REVIEW',
+            'METHODOLOGY', 'RESEARCH METHODOLOGY',
+            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
+            'DISCUSSION', 'FINDINGS AND DISCUSSION',
+            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS',
         ]
         
         # Back matter sections to center
@@ -5543,7 +5556,7 @@ class PatternEngine:
         is_chapter, chapter_num, chapter_title = self.is_chapter_heading(trimmed)
         if is_chapter:
             # Treat chapter headings as level-1 headings for consistency with tests
-            analysis['type'] = 'heading'
+            analysis['type'] = 'chapter_heading'
             analysis['level'] = 1
             analysis['chapter_num'] = chapter_num
             analysis['chapter_title'] = chapter_title  # May be None if title is on separate line
@@ -10297,7 +10310,7 @@ class WordGenerator:
         self.line_spacing = line_spacing
         # Handle margins - support both dict (individual sides) and scalar (uniform)
         if margins is None:
-            self.margins = {'left': 2.5, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
+            self.margins = {'left': 3.0, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
         elif isinstance(margins, dict):
             self.margins = margins
         else:
@@ -11946,7 +11959,13 @@ class WordGenerator:
         # Force page break for specific sections (Resume, Acknowledgements) - BUT NOT FOR SHORT DOCUMENTS
         force_break_headings = [
             'RESUME', 'RÉSUMÉ', 'RÉSUME', 'RESUMÉ', 
-            'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT', 'ACKNOWLEDGMENT'
+            'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT', 'ACKNOWLEDGMENT',
+            'INTRODUCTION',
+            'LITERATURE REVIEW',
+            'METHODOLOGY', 'RESEARCH METHODOLOGY',
+            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
+            'DISCUSSION', 'FINDINGS AND DISCUSSION',
+            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS'
         ]
         # Check if heading matches any of these words - skip for short documents
         if not self.is_short_document and any(h in heading_text for h in force_break_headings):
@@ -13755,6 +13774,41 @@ class WordGenerator:
                 para.paragraph_format.line_spacing = self.line_spacing
                 para.paragraph_format.space_after = Pt(3)
     
+    def _normalize_table_rows(self, table_data):
+        """Normalize table rows from different detection formats."""
+        rows = table_data.get('rows')
+        has_header = table_data.get('has_header', False)
+
+        if rows:
+            normalized = []
+            for row in rows:
+                if not isinstance(row, list):
+                    continue
+                normalized.append([
+                    str(cell).strip() if cell is not None else '' for cell in row
+                ])
+            return normalized, has_header
+
+        content = table_data.get('content', [])
+        normalized = []
+        saw_separator = False
+        for entry in content:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get('type') == 'separator':
+                saw_separator = True
+                continue
+            cells = entry.get('cells')
+            if isinstance(cells, list):
+                normalized.append([
+                    str(cell).strip() if cell is not None else '' for cell in cells
+                ])
+
+        if saw_separator and normalized:
+            has_header = True
+
+        return normalized, has_header
+
     def _add_table(self, table_data):
         """Add a table with academic formatting (proper alignment, column sizing)"""
         # Add caption if exists (above table, centered, bold) - WITH SEQ field for LOT
@@ -13784,16 +13838,20 @@ class WordGenerator:
                     caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     caption.paragraph_format.space_after = Pt(6)
         
+        rows, has_header = self._normalize_table_rows(table_data)
+
         # Add table
-        if table_data.get('rows') and len(table_data['rows']) > 0:
-            # Determine number of columns
-            num_cols = max(len(row) for row in table_data['rows']) if table_data['rows'] else 1
-            num_rows = len(table_data['rows'])
+        if rows:
+            # Ensure rows have consistent column counts
+            num_cols = max(len(row) for row in rows) if rows else 1
+            num_rows = len(rows)
+            if num_cols > 0:
+                rows = [row + [''] * (num_cols - len(row)) for row in rows]
             
             if num_cols > 0 and num_rows > 0:
                 # Analyze column content types for alignment
                 engine = PatternEngine()
-                column_types = engine.get_column_content_types(table_data['rows'])
+                column_types = engine.get_column_content_types(rows)
                 
                 # Ensure we have types for all columns
                 while len(column_types) < num_cols:
@@ -13801,14 +13859,15 @@ class WordGenerator:
                 
                 table = self.doc.add_table(rows=num_rows, cols=num_cols)
                 table.style = 'Table Grid'
+                table.alignment = WD_TABLE_ALIGNMENT.CENTER
                 
-                # Set table to auto-fit contents
-                table.autofit = True
+                # Set table to fixed widths so columns remain stable
+                table.autofit = False
                 
                 # Calculate column widths based on content length
                 # Find max character count for each column
                 col_max_lengths = [0] * num_cols
-                for row_data in table_data['rows']:
+                for row_data in rows:
                     for col_idx, cell_text in enumerate(row_data):
                         if col_idx < num_cols:
                             cell_content = str(cell_text).strip() if cell_text else ''
@@ -13837,7 +13896,7 @@ class WordGenerator:
                         row.cells[col_idx].width = col_width
                 
                 # Fill table with proper alignment
-                for row_idx, row_data in enumerate(table_data['rows']):
+                for row_idx, row_data in enumerate(rows):
                     for col_idx, cell_text in enumerate(row_data):
                         if col_idx < num_cols:  # Safety check
                             cell = table.rows[row_idx].cells[col_idx]
@@ -13852,7 +13911,7 @@ class WordGenerator:
                                     run.font.size = Pt(self.font_size)
                                 
                                 # Header row (row 0): centered and bold
-                                if row_idx == 0:
+                                if row_idx == 0 and has_header:
                                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                     for run in paragraph.runs:
                                         run.bold = True
@@ -14075,6 +14134,8 @@ def upload_document():
     margin_bottom = request.form.get('margin_bottom')
     margin_right = request.form.get('margin_right')
     uniform_margin = request.form.get('margin_cm', '2.5')
+    uniform_margin_provided = 'margin_cm' in request.form
+    margin_left_provided = margin_left is not None and margin_left.strip()
     
     # Validate formatting parameters
     try:
@@ -14099,6 +14160,9 @@ def upload_document():
                     margins[side] = uniform_margin
             else:
                 margins[side] = uniform_margin
+
+        if not uniform_margin_provided and not margin_left_provided:
+            margins['left'] = 3.0
         
         # Ensure reasonable values
         font_size = max(8, min(28, font_size))  # 8pt to 28pt
@@ -14108,7 +14172,7 @@ def upload_document():
     except (ValueError, TypeError):
         font_size = 12
         line_spacing = 1.5
-        margins = {'left': 2.5, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
+        margins = {'left': 3.0, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
     
     # Log formatting options for debugging
     logger.info(f"Formatting options: TOC={include_toc}, FontSize={font_size}pt, LineSpacing={line_spacing}, Margins=[L:{margins['left']}cm T:{margins['top']}cm B:{margins['bottom']}cm R:{margins['right']}cm]")
