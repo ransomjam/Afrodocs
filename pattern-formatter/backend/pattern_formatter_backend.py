@@ -5016,8 +5016,8 @@ class PatternEngine:
         if not re.match(r'^\s*#\s+', text) or re.match(r'^\s*##', text):
             return False
         
-        # Extract heading content
-        clean_text = re.sub(r'^#+\s*', '', text).strip().upper()
+        # Extract heading content and normalize numbering
+        clean_text = self._normalize_heading_text(text)
         clean_text = clean_text.rstrip(' .:,;')
         
         # Main heading keywords
@@ -5041,6 +5041,17 @@ class PatternEngine:
         
         return False
 
+    def _normalize_heading_text(self, text):
+        """Normalize heading text by stripping markdown markers and leading numbering."""
+        clean_text = re.sub(r'^#+\s*', '', text).strip()
+        clean_text = re.sub(
+            r'^\(?((?:\d+(?:\.\d+)*)|(?:[A-Z](?:\.\d+)*)|(?:[IVXLC]+))[\.)]?\s+',
+            '',
+            clean_text,
+            flags=re.IGNORECASE
+        )
+        return clean_text.strip().upper()
+
     def should_start_on_new_page(self, text):
         """
         Check if a heading should start on a new page.
@@ -5050,7 +5061,7 @@ class PatternEngine:
             return False
             
         # Strip markdown heading markers and whitespace
-        clean_text = re.sub(r'^#+\s*', '', text).strip().upper()
+        clean_text = self._normalize_heading_text(text)
         
         # Front matter sections that require new pages
         front_matter_sections = [
@@ -5099,7 +5110,7 @@ class PatternEngine:
             return False
         
         # Strip markdown heading markers and whitespace
-        clean_text = re.sub(r'^#+\s*', '', text).strip().upper()
+        clean_text = self._normalize_heading_text(text)
         
         # Remove any trailing colon or punctuation for matching
         match_text = clean_text.rstrip(':.')
@@ -12179,11 +12190,8 @@ class WordGenerator:
         # Get heading text and number it
         heading_text = section['heading']
         level = min(section['level'], 3)
-        
-        # Number the heading using HeadingNumberer
-        numbering_result = self.heading_numberer.number_heading(heading_text, target_level=level)
-        numbered_heading = numbering_result.get('formatted', heading_text)
-        
+        numbered_heading = heading_text
+
         # Track heading for TOC
         self._track_heading_for_toc(heading_text, level, numbered_heading)
         
