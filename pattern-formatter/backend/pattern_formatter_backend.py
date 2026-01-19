@@ -13755,6 +13755,41 @@ class WordGenerator:
                 para.paragraph_format.line_spacing = self.line_spacing
                 para.paragraph_format.space_after = Pt(3)
     
+    def _normalize_table_rows(self, table_data):
+        """Normalize table rows from different detection formats."""
+        rows = table_data.get('rows')
+        has_header = table_data.get('has_header', False)
+
+        if rows:
+            normalized = []
+            for row in rows:
+                if not isinstance(row, list):
+                    continue
+                normalized.append([
+                    str(cell).strip() if cell is not None else '' for cell in row
+                ])
+            return normalized, has_header
+
+        content = table_data.get('content', [])
+        normalized = []
+        saw_separator = False
+        for entry in content:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get('type') == 'separator':
+                saw_separator = True
+                continue
+            cells = entry.get('cells')
+            if isinstance(cells, list):
+                normalized.append([
+                    str(cell).strip() if cell is not None else '' for cell in cells
+                ])
+
+        if saw_separator and normalized:
+            has_header = True
+
+        return normalized, has_header
+
     def _add_table(self, table_data):
         """Add a table with academic formatting (proper alignment, column sizing)"""
         # Add caption if exists (above table, centered, bold) - WITH SEQ field for LOT
@@ -13784,16 +13819,20 @@ class WordGenerator:
                     caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     caption.paragraph_format.space_after = Pt(6)
         
+        rows, has_header = self._normalize_table_rows(table_data)
+
         # Add table
-        if table_data.get('rows') and len(table_data['rows']) > 0:
-            # Determine number of columns
-            num_cols = max(len(row) for row in table_data['rows']) if table_data['rows'] else 1
-            num_rows = len(table_data['rows'])
+        if rows:
+            # Ensure rows have consistent column counts
+            num_cols = max(len(row) for row in rows) if rows else 1
+            num_rows = len(rows)
+            if num_cols > 0:
+                rows = [row + [''] * (num_cols - len(row)) for row in rows]
             
             if num_cols > 0 and num_rows > 0:
                 # Analyze column content types for alignment
                 engine = PatternEngine()
-                column_types = engine.get_column_content_types(table_data['rows'])
+                column_types = engine.get_column_content_types(rows)
                 
                 # Ensure we have types for all columns
                 while len(column_types) < num_cols:
@@ -13801,14 +13840,15 @@ class WordGenerator:
                 
                 table = self.doc.add_table(rows=num_rows, cols=num_cols)
                 table.style = 'Table Grid'
+                table.alignment = WD_TABLE_ALIGNMENT.CENTER
                 
-                # Set table to auto-fit contents
-                table.autofit = True
+                # Set table to fixed widths so columns remain stable
+                table.autofit = False
                 
                 # Calculate column widths based on content length
                 # Find max character count for each column
                 col_max_lengths = [0] * num_cols
-                for row_data in table_data['rows']:
+                for row_data in rows:
                     for col_idx, cell_text in enumerate(row_data):
                         if col_idx < num_cols:
                             cell_content = str(cell_text).strip() if cell_text else ''
@@ -13837,7 +13877,7 @@ class WordGenerator:
                         row.cells[col_idx].width = col_width
                 
                 # Fill table with proper alignment
-                for row_idx, row_data in enumerate(table_data['rows']):
+                for row_idx, row_data in enumerate(rows):
                     for col_idx, cell_text in enumerate(row_data):
                         if col_idx < num_cols:  # Safety check
                             cell = table.rows[row_idx].cells[col_idx]
@@ -13852,7 +13892,7 @@ class WordGenerator:
                                     run.font.size = Pt(self.font_size)
                                 
                                 # Header row (row 0): centered and bold
-                                if row_idx == 0:
+                                if row_idx == 0 and has_header:
                                     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                                     for run in paragraph.runs:
                                         run.bold = True
