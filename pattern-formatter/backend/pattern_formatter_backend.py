@@ -1042,7 +1042,7 @@ class ImageInserter:
             if img_data.get('caption'):
                 caption_para = self.doc.add_paragraph()
                 caption_run = caption_para.add_run(img_data['caption'])
-                caption_run.italic = True
+                caption_run.italic = False
                 caption_run.font.name = 'Times New Roman'
                 caption_run.font.size = Pt(max(8, self.font_size - 2))
                 caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -1996,14 +1996,14 @@ class FigureFormatter:
     Features:
     - Comprehensive pattern-based figure detection
     - Sequential numbering validation with gap/duplicate detection
-    - Proper formatting (Times New Roman, 12pt, italic)
+    - Proper formatting (Times New Roman, 12pt, no italics)
     - Caption placement validation (below figure)
     - List of Figures tracking for LOF generation
     
     Formatting rules:
     - Font: Times New Roman
     - Size: 12pt
-    - Style: Italic for captions
+    - Style: Plain text for captions
     - Placement: Caption BELOW figure
     - Numbering: "Figure X:" or "Figure X.Y:" for sub-figures
     """
@@ -4614,16 +4614,8 @@ class PatternEngine:
         if clean_text.startswith('**') or clean_text.startswith('*'):
             return text
         
-        # Apply formatting based on type
-        if point_type in ['warning']:
-            # Warnings get bold
-            emphasized = f"**{clean_text}**"
-        elif point_type in ['example']:
-            # Examples get italic
-            emphasized = f"*{clean_text}*"
-        else:
-            # Most key points get bold
-            emphasized = f"**{clean_text}**"
+        # Apply formatting based on type (asterisks and italics are forbidden)
+        emphasized = clean_text
         
         # Add emoji prefix if provided
         if emoji:
@@ -5601,8 +5593,51 @@ class PatternEngine:
             return False
         return title[0].isupper()
 
+    def _rewrite_numeric_bullet_markers(self, text):
+        """Rewrite numeric + asterisk markers into bullets before list parsing."""
+        if not text:
+            return text, False
+        if self._matches_heading_patterns(text):
+            return text, False
+        patterns = [
+            r'^\s*\d+\s*\*\s+(.+)$',
+            r'^\s*\d+(?:\.\d+)\s*\*\s+(.+)$',
+            r'^\s*\d+(?:\.\d+)\s+(.+)$',
+        ]
+        for pattern in patterns:
+            match = re.match(pattern, text)
+            if match:
+                return f"• {match.group(1).strip()}", True
+        return text, False
+
+    def _rewrite_asterisk_bullet(self, text):
+        """Convert leading asterisk bullets to standard bullet markers."""
+        if not text:
+            return text, False
+        match = re.match(r'^\s*\*\s+(.+)$', text)
+        if match:
+            return f"• {match.group(1).strip()}", True
+        return text, False
+
+    def _matches_heading_patterns(self, text):
+        """Check if a line matches existing heading detectors."""
+        if not text:
+            return False
+        if any(p.match(text) for p in self.patterns.get('heading_1', [])):
+            return True
+        if any(p.match(text) for p in self.patterns.get('heading_2', [])):
+            return True
+        if any(p.match(text) for p in self.patterns.get('heading_3', [])):
+            return True
+        if any(p.match(text) for p in self.patterns.get('heading_hierarchy', [])):
+            return True
+        return False
+
     def analyze_line(self, line, line_num, prev_line='', next_line='', context=None):
         """Analyze a single line with multiple pattern checks"""
+        original_line = line
+        line, _ = self._rewrite_numeric_bullet_markers(line)
+        line, _ = self._rewrite_asterisk_bullet(line)
         # FIRST: Clean heading spaces before analysis
         if line.lstrip().startswith('#'):
             line = self.clean_heading_spaces(line)
@@ -5632,7 +5667,7 @@ class PatternEngine:
             'line_num': line_num,
             'type': 'paragraph',
             'content': trimmed,
-            'original': line,
+            'original': original_line,
             'level': 0,
             'confidence': 0.0,
         }
@@ -6071,7 +6106,9 @@ class PatternEngine:
         
         for pattern in self.patterns['numbered_list']:
             if pattern.match(trimmed):
-                if self._is_heading_like_numbered_line(trimmed) and not self._has_adjacent_list_context(prev_line, next_line):
+                if (self._matches_heading_patterns(trimmed)
+                        or (self._is_heading_like_numbered_line(trimmed)
+                            and not self._has_adjacent_list_context(prev_line, next_line))):
                     analysis['type'] = 'heading'
                     analysis['level'] = 2
                     analysis['confidence'] = 0.90
@@ -6422,7 +6459,7 @@ class PatternEngine:
                     analysis['confidence'] = 0.90
                 return analysis
         
-        # Priority 14: Check for inline formatting (bold/italic)
+        # Priority 14: Check for inline formatting (bold only, no italics)
         # Check for markdown-style formatting but exclude lines that start with list markers
         if not re.match(r'^[\*\-•]\s', trimmed):  # Not a bullet list
             for pattern in self.patterns['inline_formatting']:
@@ -6432,7 +6469,7 @@ class PatternEngine:
                     analysis['content'] = trimmed
                     # Determine formatting type
                     if '***' in trimmed or '___' in trimmed:
-                        analysis['formatting'] = {'bold_italic': True, 'bold': False, 'italic': False}
+                        analysis['formatting'] = {'bold_italic': False, 'bold': True, 'italic': False}
                         analysis['confidence'] = 0.90
                     elif '**' in trimmed or '__' in trimmed:
                         analysis['formatting'] = {'bold': True, 'italic': False, 'bold_italic': False}
@@ -6561,18 +6598,18 @@ class PatternEngine:
                     analysis['subtype'] = 'statistical_notation'
                 return analysis
         
-        # Priority 23: Check for text emphasis patterns
+        # Priority 23: Check for text emphasis patterns (no italics)
         for pattern in self.patterns['text_emphasis']:
             if pattern.search(trimmed):
                 analysis['type'] = 'text_emphasis'
                 if '`' in trimmed:
                     analysis['subtype'] = 'monospace'
                 elif '***' in trimmed:
-                    analysis['subtype'] = 'bold_italic'
+                    analysis['subtype'] = 'bold'
                 elif '**' in trimmed:
                     analysis['subtype'] = 'bold'
                 else:
-                    analysis['subtype'] = 'italic'
+                    analysis['subtype'] = 'bold'
                 analysis['confidence'] = 0.80
                 # Don't return - inline emphasis, continue processing
                 break
@@ -8113,7 +8150,7 @@ def format_questionnaire_in_word(doc, questionnaire_data, font_size=11):
         for instruction in questionnaire_data['instructions']:
             p = doc.add_paragraph(instruction)
             p.paragraph_format.space_after = Pt(12)
-            p.italic = True
+            p.italic = False
             
     # Process Sections
     for section in questionnaire_data.get('sections', []):
@@ -9196,6 +9233,9 @@ class DocumentProcessor:
         # Reset heading numberer for new document
         self.heading_numberer.reset()
         self.heading_numberer.configure_for_lines(lines)
+        last_heading_number = None
+        stray_parent_prefix = None
+        stray_child_counter = 0
         
         # Analyze each line
         for i, line_data in enumerate(lines):
@@ -9292,9 +9332,30 @@ class DocumentProcessor:
                     else:
                         analysis['needs_page_break'] = False  # Level 2+ don't get page breaks
                         analysis['should_center'] = False
+
+            stray_heading_match = re.match(r'^\s*(\d+)\s+([A-Za-z].+)$', text)
+            if (analysis['type'] == 'paragraph'
+                    and last_heading_number
+                    and '.' in last_heading_number
+                    and stray_heading_match):
+                parent_prefix = last_heading_number
+                if parent_prefix != stray_parent_prefix:
+                    stray_parent_prefix = parent_prefix
+                    stray_child_counter = 0
+                stray_child_counter += 1
+                child_number = f"{parent_prefix}.{stray_child_counter}"
+                child_title = stray_heading_match.group(2).strip()
+                analysis['type'] = 'heading'
+                analysis['level'] = 3
+                analysis['content'] = f"{child_number} {child_title}"
+                analysis['text'] = analysis['content']
+                analysis['heading_number'] = child_number
+                analysis['original_text'] = text
+                analysis['skip_heading_numbering'] = True
+                self.heading_numberer._sync_counters_from_existing(child_number)
             
             # Apply automatic heading numbering for chapter-based content
-            if analysis['type'] in ['heading', 'heading_hierarchy', 'chapter_heading', 'chapter_title']:
+            if analysis['type'] in ['heading', 'heading_hierarchy', 'chapter_heading', 'chapter_title'] and not analysis.get('skip_heading_numbering'):
                 # Use the heading numberer to apply hierarchical numbering
                 heading_level = analysis.get('level', 2)
                 number_result = self.heading_numberer.number_heading(text, target_level=heading_level)
@@ -9308,6 +9369,8 @@ class DocumentProcessor:
                     clean_numbered = re.sub(r'^#+\s*', '', number_result['numbered']).strip()
                     analysis['content'] = clean_numbered
                     logger.debug(f"Auto-numbered heading: '{text}' -> '{number_result['numbered']}'")
+                elif number_result.get('number'):
+                    analysis['heading_number'] = number_result['number']
                 
                 # Store chapter context info
                 analysis['chapter'] = number_result['chapter']
@@ -9315,6 +9378,8 @@ class DocumentProcessor:
             elif analysis['type'] == 'chapter_heading':
                 # Detect chapter and update numberer state (even if not renumbered)
                 self.heading_numberer.number_heading(text)
+            if analysis.get('heading_number'):
+                last_heading_number = analysis['heading_number']
             
             analyzed.append(analysis)
             
@@ -10474,6 +10539,71 @@ class WordGenerator:
         self.line_spacing = 1.5
         self.margin_cm = 3.0
         self.include_toc = False
+
+    def _iter_paragraphs_in_doc(self, doc):
+        """Yield all paragraphs across the document, including tables and headers/footers."""
+        for para in doc.paragraphs:
+            yield para
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for para in cell.paragraphs:
+                        yield para
+        for section in doc.sections:
+            for header in [section.header, section.first_page_header, section.even_page_header]:
+                if header:
+                    for para in header.paragraphs:
+                        yield para
+                    for table in header.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                for para in cell.paragraphs:
+                                    yield para
+            for footer in [section.footer, section.first_page_footer, section.even_page_footer]:
+                if footer:
+                    for para in footer.paragraphs:
+                        yield para
+                    for table in footer.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                for para in cell.paragraphs:
+                                    yield para
+
+    def _iter_runs_in_doc(self, doc):
+        """Yield all runs across the document, including tables and headers/footers."""
+        for para in self._iter_paragraphs_in_doc(doc):
+            for run in para.runs:
+                yield run
+
+    def _enforce_no_italics(self, doc):
+        """Force italics off for all styles and runs."""
+        for style in doc.styles:
+            if hasattr(style, 'font') and style.font is not None:
+                style.font.italic = False
+        for run in self._iter_runs_in_doc(doc):
+            run.italic = False
+            if run.font is not None:
+                run.font.italic = False
+
+    def _run_acceptance_checks(self, doc):
+        """Run acceptance checks for italics, asterisks, and list numbering leakage."""
+        italic_runs = [
+            run for run in self._iter_runs_in_doc(doc)
+            if run.italic or (run.font is not None and run.font.italic)
+        ]
+        assert not italic_runs, "Italics detected in document runs."
+        for para in self._iter_paragraphs_in_doc(doc):
+            text = para.text or ''
+            if '*' in text:
+                raise AssertionError(f"Asterisk detected in paragraph text: '{text}'")
+            if re.search(r'\\s\\*\\s', text) or re.match(r'^\\s*\\d+\\s*\\*', text):
+                raise AssertionError(f"Numeric asterisk marker detected: '{text}'")
+            if re.match(r'^\\s*\\d+(?:\\.\\d+)?\\s*\\*', text):
+                raise AssertionError(f"Numeric star bullet detected: '{text}'")
+            if 'private ip ranges' in text.lower() and re.match(r'^\\s*\\d+(?:\\.\\d+)?', text):
+                raise AssertionError(f"Private IP ranges should be bullet-only: '{text}'")
+            if para.style is not None and para.style.name == 'List Number':
+                raise AssertionError("List Number style detected; list numbering must reset per list group.")
         
     def _set_page_numbering(self, section, fmt='decimal', start=None):
         """Set page numbering format and start value for a section."""
@@ -10581,6 +10711,8 @@ class WordGenerator:
         if questionnaire_data and questionnaire_data.get('is_questionnaire'):
             logger.info("Generating questionnaire document...")
             self.doc = format_questionnaire_in_word(self.doc, questionnaire_data, self.font_size)
+            self._enforce_no_italics(self.doc)
+            self._run_acceptance_checks(self.doc)
             self.doc.save(output_path)
             return output_path
             
@@ -10604,6 +10736,7 @@ class WordGenerator:
             normal_font = normal_style.font
             normal_font.name = 'Times New Roman'
             normal_font.size = Pt(font_size)
+            normal_font.italic = False
             logger.info(f"DEBUG: Setting Normal style font size")
             logger.info(f"  Input font_size={font_size}")
             logger.info(f"  After setting: normal_font.size={normal_font.size}")
@@ -10621,6 +10754,7 @@ class WordGenerator:
                 font = style.font
                 font.name = 'Times New Roman'
                 font.size = Pt(font_size)
+                font.italic = False
                 pf = style.paragraph_format
                 pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 pf.line_spacing = line_spacing
@@ -10825,7 +10959,9 @@ class WordGenerator:
             logger.info(f"DEBUG BEFORE SAVE: Normal style line_spacing = {normal_before_save.paragraph_format.line_spacing}")
         except Exception as e:
             logger.error(f"DEBUG: Error checking Normal style: {e}")
-            
+        
+        self._enforce_no_italics(self.doc)
+        self._run_acceptance_checks(self.doc)
         self.doc.save(output_path)
         logger.info(f"Document saved to {output_path}")
         
@@ -10971,7 +11107,7 @@ class WordGenerator:
             run.font.name = 'Times New Roman'
             run.font.size = Pt(font_size)
             run.bold = bold
-            run.italic = italic
+            run.italic = False
             return para
         
         def create_textbox_table(doc, text, has_border=True, font_size=14, bold=True, 
@@ -11249,7 +11385,7 @@ class WordGenerator:
             title_run = title_para.add_run(f'({title})')
             title_run.font.name = 'Times New Roman'
             title_run.font.size = Pt(11)
-            title_run.italic = True
+            title_run.italic = False
             
             return table
         
@@ -11477,6 +11613,7 @@ class WordGenerator:
         normal = styles['Normal']
         normal.font.name = 'Times New Roman'
         normal.font.size = Pt(self.font_size)
+        normal.font.italic = False
         normal.paragraph_format.line_spacing = self.line_spacing
         normal.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         normal.paragraph_format.space_after = Pt(6)
@@ -11489,6 +11626,7 @@ class WordGenerator:
             title.font.name = 'Times New Roman'
             title.font.size = Pt(max(self.font_size + 4, 16))
             title.font.bold = True
+            title.font.italic = False
             title.paragraph_format.line_spacing = self.line_spacing
             title.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
         except KeyError:
@@ -11508,6 +11646,7 @@ class WordGenerator:
                 heading.font.name = 'Times New Roman'
                 heading.font.bold = config['bold']
                 heading.font.size = Pt(int(config['size']))
+                heading.font.italic = False
                 heading.font.color.rgb = RGBColor(0, 0, 0)  # Black
                 heading.paragraph_format.line_spacing = self.line_spacing
                 heading.paragraph_format.space_before = Pt(config['space_before'])
@@ -11516,6 +11655,13 @@ class WordGenerator:
                 heading.paragraph_format.first_line_indent = Pt(0)  # No first line indent
             except KeyError:
                 pass  # Style doesn't exist, skip
+
+        # Ensure list/caption styles are not italicized
+        for style_name in ['List Bullet', 'List Number', 'List Bullet 2', 'List Number 2', 'Caption']:
+            if style_name in styles:
+                style = styles[style_name]
+                if style.font is not None:
+                    style.font.italic = False
     
     def _add_title(self, title_text):
         """Add document title"""
@@ -11835,7 +11981,7 @@ class WordGenerator:
         run1 = para.add_run('Figure ')
         run1.font.name = 'Times New Roman'
         run1.font.size = Pt(self.font_size)
-        run1.font.italic = True
+        run1.font.italic = False
         run1.font.color.rgb = RGBColor(0, 0, 0)
         
         # Add SEQ field for automatic numbering and LOF tracking
@@ -11869,21 +12015,21 @@ class WordGenerator:
         # Style the SEQ field run (same approach as table captions)
         run_seq.font.name = 'Times New Roman'
         run_seq.font.size = Pt(self.font_size)
-        run_seq.font.italic = True
+        run_seq.font.italic = False
         run_seq.font.color.rgb = RGBColor(0, 0, 0)
         
         # Add ": " separator
         run2 = para.add_run(': ')
         run2.font.name = 'Times New Roman'
         run2.font.size = Pt(self.font_size)
-        run2.font.italic = True
+        run2.font.italic = False
         run2.font.color.rgb = RGBColor(0, 0, 0)
         
         # Add the caption title
         run3 = para.add_run(title)
         run3.font.name = 'Times New Roman'
         run3.font.size = Pt(self.font_size)
-        run3.font.italic = True
+        run3.font.italic = False
         run3.font.color.rgb = RGBColor(0, 0, 0)
         
         # Track figure for validation
@@ -11929,7 +12075,7 @@ class WordGenerator:
         run1 = para.add_run('Figure ')
         run1.font.name = 'Times New Roman'
         run1.font.size = Pt(self.font_size)
-        run1.font.italic = True
+        run1.font.italic = False
         run1.font.color.rgb = RGBColor(0, 0, 0)
         
         # Add SEQ field for automatic numbering
@@ -11961,7 +12107,7 @@ class WordGenerator:
         run2 = para.add_run(': ' + title)
         run2.font.name = 'Times New Roman'
         run2.font.size = Pt(self.font_size)
-        run2.font.italic = True
+        run2.font.italic = False
         run2.font.color.rgb = RGBColor(0, 0, 0)
         
         # Track figure
@@ -12171,7 +12317,7 @@ class WordGenerator:
             if img_data.get('caption'):
                 caption_para = self.doc.add_paragraph()
                 caption_run = caption_para.add_run(img_data['caption'])
-                caption_run.italic = True
+                caption_run.italic = False
                 caption_run.font.name = 'Times New Roman'
                 caption_run.font.size = Pt(max(8, self.font_size - 2))
                 caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -12266,7 +12412,7 @@ class WordGenerator:
                     run.font.size = Pt(self.font_size)
             elif formatting == 'star_surrounded':
                 for run in heading.runs:
-                    run.italic = True
+                    run.italic = False
                     run.bold = True
                     run.font.size = Pt(self.font_size)
             elif formatting == 'numbered_bold':
@@ -12313,7 +12459,7 @@ class WordGenerator:
                     elif format_type == 'parenthesized':
                         run = p_title.add_run(f"{numbering}")
                         run.bold = True  # Bold for emphasis when separate
-                        run.italic = True
+                        run.italic = False
                     elif format_type == 'double_parentheses':
                         run = p_title.add_run(f"{numbering}")
                         run.bold = True
@@ -12328,7 +12474,7 @@ class WordGenerator:
                     elif format_type == 'roman_dots':
                         run = p_title.add_run(f"{numbering}")
                         run.bold = True
-                        run.italic = True
+                        run.italic = False
                     
                     p_title.paragraph_format.space_after = Pt(3)
                     
@@ -12359,7 +12505,7 @@ class WordGenerator:
                         run.bold = True
                     elif format_type == 'parenthesized':
                         run = p.add_run(f"{numbering} ")
-                        run.italic = True
+                        run.italic = False
                     elif format_type == 'double_parentheses':
                         run = p.add_run(f"{numbering} ")
                         run.bold = True
@@ -12371,7 +12517,7 @@ class WordGenerator:
                         run = p.add_run(f"{numbering} ")
                     elif format_type == 'roman_dots':
                         run = p.add_run(f"{numbering} ")
-                        run.italic = True
+                        run.italic = False
 
                     p.add_run(content)
                     p.paragraph_format.space_after = Pt(3)
@@ -12609,7 +12755,7 @@ class WordGenerator:
             prefix = f"Step {numbering}: "
             run = p.add_run(prefix)
             run.bold = True
-            run.italic = True
+            run.italic = False
         else:
             prefix = f"{numbering}. "
             run = p.add_run(prefix)
@@ -12875,9 +13021,9 @@ class WordGenerator:
         # Fix double periods
         text = re.sub(r'\.\.$', '.', text)
         
-        # Fix journal formatting (italicize common journal patterns)
+        # Fix journal formatting (plain text only; italics are forbidden)
         # Matches "Journal of X Y", "International Journal of X", etc.
-        text = re.sub(r'(\b(?:International\s+)?Journal\s+of\s+[A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+)*)', r'*\1*', text)
+        text = re.sub(r'(\b(?:International\s+)?Journal\s+of\s+[A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+)*)', r'\1', text)
         
         # Fix "Available at:" formatting (optional, but good for consistency)
         text = re.sub(r'Available\s+at\s*:', 'Available at:', text, flags=re.IGNORECASE)
@@ -13090,7 +13236,7 @@ class WordGenerator:
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                    run.italic = True
+                    run.italic = False
                     run.bold = True
             
             elif item.get('type') == 'question':
@@ -13167,11 +13313,11 @@ class WordGenerator:
                         title = re.sub(r'^(?:Figure|Fig\.?)\s*\d+(?:\.\d+)?[\.:]\s*', '', text, flags=re.IGNORECASE)
                         self._add_figure_caption(num, title)
                     else:
-                        # Last resort - just add as italic centered
+                        # Last resort - just add as centered plain text
                         para = self.doc.add_paragraph(text)
                         para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         for run in para.runs:
-                            run.italic = True
+                            run.italic = False
                             run.font.name = 'Times New Roman'
                             run.font.size = Pt(self.font_size)
                 self.has_figures = True
@@ -13212,6 +13358,7 @@ class WordGenerator:
                     
                     # Remove any remaining asterisks from content
                     content = self._clean_asterisks(content)
+                    content = re.sub(r'^\s*\d+(?:\.\d+)*\s+', '', content)
                     
                     # Skip empty content
                     if not content:
@@ -13325,6 +13472,7 @@ class WordGenerator:
                                 run.font.size = Pt(self.font_size)
             
             elif item.get('type') == 'numbered_list':
+                list_counter = 0
                 for list_item in item.get('items', []):
                     # Extract content from list_item (could be string or dict)
                     if isinstance(list_item, str):
@@ -13337,34 +13485,28 @@ class WordGenerator:
                     
                     # Use comprehensive numbering extraction
                     numbering, clean_item = self._extract_numbering(item_content)
-                    paragraphs = clean_item.split('\n') if '\n' in clean_item else [clean_item]
-                    if numbering:
-                        for idx, para_text in enumerate(paragraphs):
-                            if not para_text.strip():
-                                continue
-                            prefix = f"{numbering} " if idx == 0 else ''
-                            label_split = self._split_label_for_bold(para_text)
-                            if label_split and not original_bold:
-                                para = self.doc.add_paragraph()
-                                self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
-                            else:
-                                para = self.doc.add_paragraph(prefix + para_text)
-                            para.paragraph_format.left_indent = Pt(0)
-                            para.paragraph_format.first_line_indent = Pt(0)
-                            para.paragraph_format.space_after = Pt(3)
-                            for run in para.runs:
-                                run.font.name = 'Times New Roman'
-                                run.font.size = Pt(self.font_size)
+                    if not numbering:
+                        list_counter += 1
+                        numbering = f"{list_counter}."
                     else:
-                        # No existing numbering - use 'List Number' style to enable auto-numbering
-                        para = self.doc.add_paragraph(style='List Number')
-                        label_split = self._split_label_for_bold(clean_item)
+                        list_counter = 0
+                    paragraphs = clean_item.split('\n') if '\n' in clean_item else [clean_item]
+                    for idx, para_text in enumerate(paragraphs):
+                        if not para_text.strip():
+                            continue
+                        prefix = f"{numbering} " if idx == 0 else ''
+                        label_split = self._split_label_for_bold(para_text)
                         if label_split and not original_bold:
-                            self._add_label_bold_runs(para, label_split[0], label_split[1])
+                            para = self.doc.add_paragraph()
+                            self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
                         else:
-                            run_content = para.add_run(clean_item)
-                            run_content.font.name = 'Times New Roman'
-                            run_content.font.size = Pt(self.font_size)
+                            para = self.doc.add_paragraph(prefix + para_text)
+                        para.paragraph_format.left_indent = Pt(0)
+                        para.paragraph_format.first_line_indent = Pt(0)
+                        para.paragraph_format.space_after = Pt(3)
+                        for run in para.runs:
+                            run.font.name = 'Times New Roman'
+                            run.font.size = Pt(self.font_size)
             
             elif item.get('type') == 'table':
                 self._add_table(item)
@@ -13387,11 +13529,11 @@ class WordGenerator:
                             title = re.sub(r'^(?:Figure|Fig\.?)\s*\d+(?:\.\d+)?[\.:]\s*', '', caption, flags=re.IGNORECASE)
                             self._add_figure_caption(num, title.strip() if title.strip() else caption)
                         else:
-                            # Fallback to simple italic centered
+                            # Fallback to simple centered text
                             para = self.doc.add_paragraph(caption)
                             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                             for run in para.runs:
-                                run.italic = True
+                                run.italic = False
                                 run.font.name = 'Times New Roman'
                                 run.font.size = Pt(self.font_size)
                 self.has_figures = True
@@ -13404,7 +13546,7 @@ class WordGenerator:
                 para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 para.paragraph_format.line_spacing = self.line_spacing
                 for run in para.runs:
-                    run.italic = True
+                    run.italic = False
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
             
@@ -13415,18 +13557,11 @@ class WordGenerator:
                 para.paragraph_format.first_line_indent = Pt(0)
             
             elif item.get('type') == 'reference':
-                text = item.get('text', '')
-                para = self.doc.add_paragraph()
-                
-                # Handle italics markers (*)
-                parts = text.split('*')
-                for i, part in enumerate(parts):
-                    if not part: continue
-                    run = para.add_run(part)
+                text = self._clean_asterisks(item.get('text', ''))
+                para = self.doc.add_paragraph(text)
+                for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                    if i % 2 == 1:  # Odd parts are between * markers -> italic
-                        run.italic = True
                 
                 # Remove hanging indent - use justified alignment only
                 if is_references_section:
@@ -13442,7 +13577,7 @@ class WordGenerator:
             # NEW PATTERN RENDERING (December 30, 2025)
             
             elif item.get('type') == 'page_metadata':
-                # Page metadata - centered, italic
+                # Page metadata - centered, plain text
                 para = self.doc.add_paragraph(item.get('text', ''))
                 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 para.paragraph_format.left_indent = Pt(0)
@@ -13451,7 +13586,7 @@ class WordGenerator:
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                    run.font.italic = True
+                    run.font.italic = False
             
             elif item.get('type') == 'academic_metadata':
                 subtype = item.get('subtype', 'metadata')
@@ -13555,14 +13690,13 @@ class WordGenerator:
                 para.paragraph_format.first_line_indent = Pt(0)
                 
                 if formatting.get('bold_italic'):
-                    # Remove *** or ___ markers and apply both bold and italic
+                    # Remove *** or ___ markers and apply bold only
                     clean_text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)
                     clean_text = re.sub(r'___(.+?)___', r'\1', clean_text)
                     run = para.add_run(clean_text)
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
                     run.bold = True
-                    run.italic = True
                 elif formatting.get('bold'):
                     # Remove **, __, *, or _ markers and apply bold
                     clean_text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # Remove **text**
@@ -13574,13 +13708,12 @@ class WordGenerator:
                     run.font.size = Pt(self.font_size)
                     run.bold = True
                 elif formatting.get('italic'):
-                    # Remove * or _ markers and apply italic
+                    # Remove * or _ markers (italics disabled)
                     clean_text = re.sub(r'\*(.+?)\*', r'\1', text)
                     clean_text = re.sub(r'_(.+?)_', r'\1', clean_text)
                     run = para.add_run(clean_text)
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                    run.italic = True
                 else:
                     # Remove all formatting markers as fallback
                     clean_text = re.sub(r'[\*_]{1,3}(.+?)[\*_]{1,3}', r'\1', text)
@@ -13628,7 +13761,7 @@ class WordGenerator:
                     run.font.color.rgb = RGBColor(0, 0, 0)  # Black
             
             elif item.get('type') == 'block_quote':
-                # Block quote - indented, italic
+                # Block quote - indented, plain text
                 text = item.get('text', '')
                 # Remove leading > markers
                 clean_text = re.sub(r'^[>\s]+', '', text)
@@ -13641,7 +13774,6 @@ class WordGenerator:
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                    run.italic = True
             
             elif item.get('type') == 'math_model':
                 # Math model / statistical notation
@@ -13658,7 +13790,7 @@ class WordGenerator:
                     run.font.size = Pt(self.font_size)
             
             elif item.get('type') == 'text_emphasis':
-                # Text emphasis - bold/italic/underline
+                # Text emphasis - bold/underline only
                 text = item.get('text', '')
                 subtype = item.get('subtype', 'bold')
                 para = self.doc.add_paragraph()
@@ -13671,8 +13803,6 @@ class WordGenerator:
                 run.font.size = Pt(self.font_size)
                 if 'bold' in subtype:
                     run.bold = True
-                if 'italic' in subtype:
-                    run.italic = True
                 if 'strike' in subtype:
                     run.font.strike = True
             
@@ -13848,13 +13978,13 @@ class WordGenerator:
             # ================================================================
             
             elif item.get('type') == 'copyright_content':
-                # Copyright content - centered, italic
+                # Copyright content - centered, plain text
                 text = item.get('text', '')
                 para = self.doc.add_paragraph()
                 run = para.add_run(text)
                 run.font.name = 'Times New Roman'
                 run.font.size = Pt(self.font_size)
-                run.italic = True
+                run.italic = False
                 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 para.paragraph_format.line_spacing = self.line_spacing
             
@@ -13906,7 +14036,7 @@ class WordGenerator:
                 if emoji:
                     para.add_run(emoji)
                 
-                # Parse and apply formatting (handle markdown-style bold/italic)
+                # Parse and apply formatting (handle markdown-style bold only)
                 clean_text = text.strip()
                 
                 # Apply formatting based on key point type
@@ -13917,9 +14047,9 @@ class WordGenerator:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
                 elif key_point_type == 'example':
-                    # Italic for examples
+                    # Plain text for examples (italics disabled)
                     run = para.add_run(clean_text)
-                    run.italic = True
+                    run.italic = False
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
                 elif key_point_type == 'definition':
@@ -15004,7 +15134,7 @@ def generate_preview_markdown(structured):
                 markdown += f"{item.get('text', '')}\n\n"
             
             elif item.get('type') == 'figure':
-                markdown += f"*{item.get('caption', '')}*\n\n"
+                markdown += f"{item.get('caption', '')}\n\n"
             
             elif item.get('type') == 'quote':
                 markdown += f"> {item.get('text', '')}\n\n"
@@ -15102,6 +15232,7 @@ def api_generate_coverpage():
                     font = academic_style.font
                     font.name = 'Times New Roman'
                     font.size = Pt(self.font_size)
+                    font.italic = False
                     pf = academic_style.paragraph_format
                     pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                     pf.line_spacing = 1.5
@@ -15122,6 +15253,7 @@ def api_generate_coverpage():
                     font = academic_list_number.font
                     font.name = 'Times New Roman'
                     font.size = Pt(self.font_size)
+                    font.italic = False
                     pf = academic_list_number.paragraph_format
                     pf.line_spacing = 1.5
                     
@@ -15138,6 +15270,7 @@ def api_generate_coverpage():
                     font = academic_list_bullet.font
                     font.name = 'Times New Roman'
                     font.size = Pt(self.font_size)
+                    font.italic = False
                     pf = academic_list_bullet.paragraph_format
                     pf.line_spacing = 1.5
 
