@@ -5567,7 +5567,7 @@ class PatternEngine:
         is_chapter, chapter_num, chapter_title = self.is_chapter_heading(trimmed)
         if is_chapter:
             # Treat chapter headings as level-1 headings for consistency with tests
-            analysis['type'] = 'heading'
+            analysis['type'] = 'chapter_heading'
             analysis['level'] = 1
             analysis['chapter_num'] = chapter_num
             analysis['chapter_title'] = chapter_title  # May be None if title is on separate line
@@ -10321,7 +10321,11 @@ class WordGenerator:
         self.line_spacing = line_spacing
         # Handle margins - support both dict (individual sides) and scalar (uniform)
         if margins is None:
+#<<<<<<< codex/examine-codebase-84o2ei
+            self.margins = {'left': 3.0, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
+#=======
             self.margins = {'left': 3.0, 'top': 3.0, 'bottom': 3.0, 'right': 3.0}
+#>>>>>>> main
         elif isinstance(margins, dict):
             self.margins = margins
         else:
@@ -12236,7 +12240,14 @@ class WordGenerator:
         heading = self.doc.add_heading(clean_heading, level=1)
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         heading.paragraph_format.page_break_before = False
+#<<<<<<< codex/fix-title-issues-idq1wd
         heading.paragraph_format.keep_with_next = True
+#=======
+#<<<<<<< codex/fix-title-issues-ymuujf
+        heading.paragraph_format.keep_with_next = True
+#=======
+#>>>>>>> main
+#>>>>>>> main
         
         # Ensure consistent chapter heading formatting
         heading.paragraph_format.space_after = Pt(0)
@@ -12257,7 +12268,14 @@ class WordGenerator:
             title_para = self.doc.add_heading(chapter_title.upper(), level=1)
             title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             title_para.paragraph_format.page_break_before = False
+#<<<<<<< codex/fix-title-issues-idq1wd
             title_para.paragraph_format.keep_with_next = True
+#=======
+#<<<<<<< codex/fix-title-issues-ymuujf
+            title_para.paragraph_format.keep_with_next = True
+#=======
+#>>>>>>> main
+#>>>>>>> main
             
             # Ensure consistent title formatting
             title_para.paragraph_format.space_before = Pt(0)
@@ -14145,7 +14163,13 @@ def upload_document():
     margin_top = request.form.get('margin_top')
     margin_bottom = request.form.get('margin_bottom')
     margin_right = request.form.get('margin_right')
+#<<<<<<< codex/examine-codebase-84o2ei
+    uniform_margin = request.form.get('margin_cm', '2.5')
+    uniform_margin_provided = 'margin_cm' in request.form
+    margin_left_provided = margin_left is not None and margin_left.strip()
+#=======
     uniform_margin = request.form.get('margin_cm', '3.0')
+#>>>>>>> main
     
     # Validate formatting parameters
     try:
@@ -14170,6 +14194,9 @@ def upload_document():
                     margins[side] = uniform_margin
             else:
                 margins[side] = uniform_margin
+
+        if not uniform_margin_provided and not margin_left_provided:
+            margins['left'] = 3.0
         
         # Ensure reasonable values
         font_size = max(8, min(28, font_size))  # 8pt to 28pt
@@ -14179,7 +14206,11 @@ def upload_document():
     except (ValueError, TypeError):
         font_size = 12
         line_spacing = 1.5
+#<<<<<<< codex/examine-codebase-84o2ei
+        margins = {'left': 3.0, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
+#=======
         margins = {'left': 3.0, 'top': 3.0, 'bottom': 3.0, 'right': 3.0}
+#>>>>>>> main
     
     # Log formatting options for debugging
     logger.info(f"Formatting options: TOC={include_toc}, FontSize={font_size}pt, LineSpacing={line_spacing}, Margins=[L:{margins['left']}cm T:{margins['top']}cm B:{margins['bottom']}cm R:{margins['right']}cm]")
