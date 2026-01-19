@@ -1559,7 +1559,7 @@ class HeadingNumberer:
         """
         clean = re.sub(r'^#+\s*', '', text).strip()
         # Match: "1.2 Title" or "1.2.3 Title" or "A.1 Title"
-        return bool(re.match(r'^(\d+\.)+\d+\s+', clean) or re.match(r'^[A-Z]\.(\d+\.)*\d+\s+', clean))
+        return bool(re.match(r'^(\d+\.)+\d+[\.)]?\s+', clean) or re.match(r'^[A-Z]\.(\d+\.)*\d+[\.)]?\s+', clean))
     
     def extract_existing_number(self, text):
         """
@@ -1571,12 +1571,12 @@ class HeadingNumberer:
         clean = re.sub(r'^#+\s*', '', text).strip()
         
         # Match hierarchical number
-        match = re.match(r'^((?:\d+\.)+\d+)\s+(.+)$', clean)
+        match = re.match(r'^((?:\d+\.)+\d+)[\.)]?\s+(.+)$', clean)
         if match:
             return match.group(1), match.group(2)
         
         # Match appendix number
-        match = re.match(r'^([A-Z]\.(?:\d+\.)*\d+)\s+(.+)$', clean)
+        match = re.match(r'^([A-Z]\.(?:\d+\.)*\d+)[\.)]?\s+(.+)$', clean)
         if match:
             return match.group(1), match.group(2)
         
@@ -5065,6 +5065,12 @@ class PatternEngine:
             'APPENDICES', 'APPENDIX',
             'REFERENCES', 'REFERENCE',
             'BIBLIOGRAPHY',
+            'INTRODUCTION',
+            'LITERATURE REVIEW',
+            'METHODOLOGY', 'RESEARCH METHODOLOGY',
+            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
+            'DISCUSSION', 'FINDINGS AND DISCUSSION',
+            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS',
         ]
         
         # Check for exact front matter match
@@ -5103,12 +5109,19 @@ class PatternEngine:
             'DEDICATION',
             'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT',
             'ABSTRACT',
+            'RESUME', 'RÉSUMÉ',
             'TABLE OF CONTENTS', 'CONTENTS',
             'LIST OF TABLES',
             'LIST OF FIGURES',
             'LIST OF ABBREVIATIONS', 'ABBREVIATIONS',
             'GLOSSARY',
             'APPENDICES', 'APPENDIX',
+            'INTRODUCTION',
+            'LITERATURE REVIEW',
+            'METHODOLOGY', 'RESEARCH METHODOLOGY',
+            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
+            'DISCUSSION', 'FINDINGS AND DISCUSSION',
+            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS',
         ]
         
         # Back matter sections to center
@@ -10227,7 +10240,7 @@ class WordGenerator:
         # Formatting options
         self.font_size = 12
         self.line_spacing = 1.5
-        self.margin_cm = 2.5
+        self.margin_cm = 3.0
         self.include_toc = False
         
     def _set_page_numbering(self, section, fmt='decimal', start=None):
@@ -10297,7 +10310,7 @@ class WordGenerator:
         self.line_spacing = line_spacing
         # Handle margins - support both dict (individual sides) and scalar (uniform)
         if margins is None:
-            self.margins = {'left': 2.5, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
+            self.margins = {'left': 3.0, 'top': 3.0, 'bottom': 3.0, 'right': 3.0}
         elif isinstance(margins, dict):
             self.margins = margins
         else:
@@ -11946,7 +11959,13 @@ class WordGenerator:
         # Force page break for specific sections (Resume, Acknowledgements) - BUT NOT FOR SHORT DOCUMENTS
         force_break_headings = [
             'RESUME', 'RÉSUMÉ', 'RÉSUME', 'RESUMÉ', 
-            'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT', 'ACKNOWLEDGMENT'
+            'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT', 'ACKNOWLEDGMENT',
+            'INTRODUCTION',
+            'LITERATURE REVIEW',
+            'METHODOLOGY', 'RESEARCH METHODOLOGY',
+            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
+            'DISCUSSION', 'FINDINGS AND DISCUSSION',
+            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS'
         ]
         # Check if heading matches any of these words - skip for short documents
         if not self.is_short_document and any(h in heading_text for h in force_break_headings):
@@ -14114,7 +14133,7 @@ def upload_document():
     margin_top = request.form.get('margin_top')
     margin_bottom = request.form.get('margin_bottom')
     margin_right = request.form.get('margin_right')
-    uniform_margin = request.form.get('margin_cm', '2.5')
+    uniform_margin = request.form.get('margin_cm', '3.0')
     
     # Validate formatting parameters
     try:
@@ -14148,7 +14167,7 @@ def upload_document():
     except (ValueError, TypeError):
         font_size = 12
         line_spacing = 1.5
-        margins = {'left': 2.5, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
+        margins = {'left': 3.0, 'top': 3.0, 'bottom': 3.0, 'right': 3.0}
     
     # Log formatting options for debugging
     logger.info(f"Formatting options: TOC={include_toc}, FontSize={font_size}pt, LineSpacing={line_spacing}, Margins=[L:{margins['left']}cm T:{margins['top']}cm B:{margins['bottom']}cm R:{margins['right']}cm]")
