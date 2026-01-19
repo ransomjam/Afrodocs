@@ -2163,7 +2163,7 @@
             // Formatting options states
             const [showFormattingModal, setShowFormattingModal] = useState(false);
             const [pendingFile, setPendingFile] = useState(null);
-            const [formattingOptions, setFormattingOptions] = useState({
+            const defaultFormattingOptions = {
                 includeTOC: false,
                 fontSize: '12',
                 lineSpacing: '1.5',#
@@ -2181,8 +2181,13 @@
                 marginTop: '3.0',
                 marginBottom: '3.0',
                 marginRight: '3.0'
+//<<<<<<< codex/fix-title-issues-idq1wd
+            };
+            const [formattingOptions, setFormattingOptions] = useState(defaultFormattingOptions);
+=======
 // >>>>>>> main
             });
+//>>>>>>> main
 
             const handleUpgrade = async (pages, amount) => {
                 setShowPricingModal(false);

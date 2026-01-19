@@ -12240,9 +12240,13 @@ class WordGenerator:
         heading = self.doc.add_heading(clean_heading, level=1)
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         heading.paragraph_format.page_break_before = False
+#<<<<<<< codex/fix-title-issues-idq1wd
+        heading.paragraph_format.keep_with_next = True
+#=======
 #<<<<<<< codex/fix-title-issues-ymuujf
         heading.paragraph_format.keep_with_next = True
 #=======
+#>>>>>>> main
 #>>>>>>> main
         
         # Ensure consistent chapter heading formatting
@@ -12264,9 +12268,13 @@ class WordGenerator:
             title_para = self.doc.add_heading(chapter_title.upper(), level=1)
             title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             title_para.paragraph_format.page_break_before = False
+#<<<<<<< codex/fix-title-issues-idq1wd
+            title_para.paragraph_format.keep_with_next = True
+#=======
 #<<<<<<< codex/fix-title-issues-ymuujf
             title_para.paragraph_format.keep_with_next = True
 #=======
+#>>>>>>> main
 #>>>>>>> main
             
             # Ensure consistent title formatting
