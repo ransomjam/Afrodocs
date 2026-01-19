@@ -12235,6 +12235,7 @@ class WordGenerator:
         
         heading = self.doc.add_heading(clean_heading, level=1)
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        heading.paragraph_format.page_break_before = False
         
         # Ensure consistent chapter heading formatting
         heading.paragraph_format.space_after = Pt(0)
@@ -12254,6 +12255,7 @@ class WordGenerator:
         if chapter_title:
             title_para = self.doc.add_heading(chapter_title.upper(), level=1)
             title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            title_para.paragraph_format.page_break_before = False
             
             # Ensure consistent title formatting
             title_para.paragraph_format.space_before = Pt(0)
