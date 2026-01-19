@@ -16,6 +16,7 @@ from docx.enum.section import WD_SECTION
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docxcompose.composer import Composer
+from dataclasses import dataclass
 import re
 import os
 import json
@@ -30,6 +31,24 @@ import fapshi_integration as fapshi
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class FormatPolicy:
+    """Single source of truth for formatting behavior."""
+    enable_heading_auto_numbering: bool = True
+    enable_regex_auto_bold: bool = False
+    preserve_existing_numbering: bool = True
+    preserve_existing_bold: bool = True
+    list_numbering_mode: str = "strict"  # "strict" or "assistive"
+    document_mode: str = "generic"  # "academic", "notes", or "generic"
+
+    def allow_auto_numbering(self, has_consistent_scheme: bool) -> bool:
+        if self.document_mode == "academic":
+            return True
+        if not self.enable_heading_auto_numbering:
+            return False
+        return has_consistent_scheme
 
 # Serve frontend files directly from the backend for simple deployment
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
@@ -1353,9 +1372,12 @@ class HeadingNumberer:
         'community funding', 'private funding', 'government funding',
     ]
     
-    def __init__(self):
+    def __init__(self, policy=None):
+        self.policy = policy or FormatPolicy()
         self.reset()
         self.hierarchy_corrector = HierarchyCorrector()
+        self.allow_auto_numbering = False
+        self.has_consistent_numbering = False
         
     def reset(self):
         """Reset all counters for a new document."""
@@ -1371,6 +1393,68 @@ class HeadingNumberer:
         self.in_parent_section = None  # Current parent section (e.g., 'research objectives')
         self.parent_section_number = ''  # Number of current parent section (e.g., '1.4')
         self.use_continuous_section_numbering = False  # For documents without chapters
+        self.last_numbers_by_level = {}
+
+    def configure_for_lines(self, lines):
+        """Configure numbering behavior based on document content and policy."""
+        self.has_consistent_numbering = self._detect_consistent_numbering_scheme(lines)
+        self.allow_auto_numbering = self.policy.allow_auto_numbering(self.has_consistent_numbering)
+        logger.info(
+            "Heading numbering policy: allow_auto_numbering=%s consistent_scheme=%s document_mode=%s",
+            self.allow_auto_numbering,
+            self.has_consistent_numbering,
+            self.policy.document_mode,
+        )
+
+    def _detect_consistent_numbering_scheme(self, lines):
+        """Detect whether headings already follow a consistent numbering scheme."""
+        chapter_hits = 0
+        numbered_hits = 0
+        for line in lines:
+            text = line.get('text') if isinstance(line, dict) else str(line)
+            if not text:
+                continue
+            if self.parse_chapter_number(text) > 0:
+                chapter_hits += 1
+                continue
+            if re.match(r'^\s*(\d+(?:\.\d+)+)\s+\S+', text) or re.match(r'^\s*\d+\.\s+[A-Z]', text):
+                numbered_hits += 1
+        return chapter_hits > 0 or numbered_hits >= 2
+
+    def _sync_counters_from_existing(self, existing_num):
+        """Align internal counters with existing numbering to avoid drift."""
+        if not existing_num:
+            return
+        normalized = existing_num.rstrip('.)')
+        if re.match(r'^[A-Z]\.', normalized):
+            parts = normalized.split('.')
+            self.in_appendix = True
+            self.appendix_letter = parts[0]
+            parts = parts[1:]
+        else:
+            parts = normalized.split('.')
+
+        numeric_parts = [p for p in parts if p.isdigit()]
+        if not numeric_parts:
+            return
+
+        if self.use_continuous_section_numbering or self.current_chapter == 0:
+            self.current_section = int(numeric_parts[0])
+            self.current_subsection = int(numeric_parts[1]) if len(numeric_parts) > 1 else 0
+        else:
+            self.current_chapter = int(numeric_parts[0])
+            self.current_section = int(numeric_parts[1]) if len(numeric_parts) > 1 else 0
+            self.current_subsection = int(numeric_parts[2]) if len(numeric_parts) > 2 else 0
+
+    def _should_correct_existing_number(self, existing_num, new_number, level):
+        """Allow controlled correction for clear numbering conflicts."""
+        if not self.allow_auto_numbering or self.policy.document_mode != "academic":
+            return False
+        if not existing_num or not new_number or existing_num == new_number:
+            return False
+        if self.last_numbers_by_level.get(level) == existing_num:
+            return True
+        return False
         
     def _normalize_text(self, text):
         """Normalize text for comparison (lowercase, remove punctuation, extra spaces)."""
@@ -1701,6 +1785,15 @@ class HeadingNumberer:
             result['level'] = 1
             result['chapter'] = chapter_num
             return result  # Don't number the chapter heading itself
+
+        if not self.allow_auto_numbering:
+            existing_num, _ = self.extract_existing_number(text)
+            if existing_num:
+                result['number'] = existing_num
+                result['level'] = self.determine_heading_level(text)
+                self._sync_counters_from_existing(existing_num)
+                self.last_numbers_by_level[result['level']] = existing_num
+            return result
         
         # Check for appendix
         if self.is_appendix_heading(text):
@@ -1807,12 +1900,28 @@ class HeadingNumberer:
         self.last_heading_text = clean_text
         self.last_heading_normalized = self._normalize_text(clean_text)
         
-        # Apply new number if different from existing
+        # Numbering decision: preserve existing numbering unless a controlled correction is allowed.
+        if existing_num:
+            if self.policy.preserve_existing_numbering and not self._should_correct_existing_number(existing_num, new_number, target_level):
+                result['number'] = existing_num
+                result['numbered'] = f"{'#' * md_level + ' ' if md_level > 0 else ''}{existing_num} {title}"
+                self._sync_counters_from_existing(existing_num)
+                self.last_numbers_by_level[target_level] = existing_num
+                return result
+            if existing_num != new_number:
+                logger.info(
+                    "Heading renumbered (correction): '%s' -> '%s'",
+                    text,
+                    f"{new_number} {title}",
+                )
         if existing_num != new_number:
             # Reconstruct with markdown markers
             prefix = '#' * md_level + ' ' if md_level > 0 else ''
             result['numbered'] = f"{prefix}{new_number} {title}"
             result['was_renumbered'] = True
+            logger.info("Heading renumbered: '%s' -> '%s'", text, result['numbered'])
+
+        self.last_numbers_by_level[target_level] = result['number'] or new_number
         
         return result
     
@@ -3200,7 +3309,8 @@ class ImpliedBulletDetector:
 class PatternEngine:
     """Ultra-fast pattern matching engine for document analysis"""
     
-    def __init__(self):
+    def __init__(self, policy=None):
+        self.policy = policy or FormatPolicy()
         self.patterns = self._initialize_patterns()
         self.implied_detector = ImpliedBulletDetector()
         
@@ -4763,6 +4873,8 @@ class PatternEngine:
         """
         if not text:
             return text
+        if self.policy.list_numbering_mode != "assistive":
+            return text
         
         lines = text.split('\n')
         
@@ -4810,10 +4922,10 @@ class PatternEngine:
             if heading_type:
                 # Add heading with bold formatting
                 heading_clean = line_text.rstrip(':')
-                if not heading_clean.startswith('**'):
+                if self.policy.enable_regex_auto_bold and not heading_clean.startswith('**'):
                     processed_lines.append(f"**{heading_clean}:**")
                 else:
-                    processed_lines.append(line)
+                    processed_lines.append(line_text)
                 i += 1
                 
                 # Process following lines as point-form content
@@ -4854,7 +4966,10 @@ class PatternEngine:
             heading, items = self.extract_serial_comma_items(line_text)
             if heading and items:
                 # Convert to list format
-                processed_lines.append(f"**{heading}:**")
+                if self.policy.enable_regex_auto_bold:
+                    processed_lines.append(f"**{heading}:**")
+                else:
+                    processed_lines.append(f"{heading}:")
                 formatted_items = self.format_as_bulleted_list(items)
                 processed_lines.extend(formatted_items)
                 i += 1
@@ -4867,7 +4982,10 @@ class PatternEngine:
                 first_match = re.search(r'^(.+?)(?:First(?:ly)?)', line_text, re.IGNORECASE)
                 if first_match and len(first_match.group(1).strip()) > 3:
                     heading = first_match.group(1).strip().rstrip(':,.')
-                    processed_lines.append(f"**{heading}:**")
+                    if self.policy.enable_regex_auto_bold:
+                        processed_lines.append(f"**{heading}:**")
+                    else:
+                        processed_lines.append(f"{heading}:")
                 formatted_steps = self.format_as_numbered_list(steps)
                 processed_lines.extend(formatted_steps)
                 i += 1
@@ -4895,10 +5013,10 @@ class PatternEngine:
                     if is_next_point or could_be_item:
                         # Format heading
                         heading = line_text.rstrip(':')
-                        if not heading.startswith('**'):
+                        if self.policy.enable_regex_auto_bold and not heading.startswith('**'):
                             processed_lines.append(f"**{heading}:**")
                         else:
-                            processed_lines.append(line)
+                            processed_lines.append(line_text)
                         i += 1
                         
                         # Collect and format following points
@@ -5007,9 +5125,12 @@ class PatternEngine:
         text = '\n'.join([line if isinstance(line, str) else line.get('text', '') for line in lines])
         
         # Step 2: Process point-form content (convert serial lists to bullet points, standardize lists)
-        text = self.process_point_form_content(text)
+        if self.policy.list_numbering_mode == "assistive":
+            text = self.process_point_form_content(text)
         
         # Step 3: Process each line for key point emphasis
+        if not self.policy.enable_regex_auto_bold:
+            return text
         lines = text.split('\n')
         processed_lines = []
         for line in lines:
@@ -5455,6 +5576,31 @@ class PatternEngine:
         
         return None
 
+    def _has_adjacent_list_context(self, prev_line, next_line):
+        """Check for neighboring list items to reduce ambiguity."""
+        candidates = [prev_line.strip(), next_line.strip()] if prev_line or next_line else []
+        for line in candidates:
+            if not line:
+                continue
+            if detect_bullet_type(line):
+                return True
+            if any(p.match(line) for p in self.patterns.get('numbered_list', [])):
+                return True
+        return False
+
+    def _is_heading_like_numbered_line(self, text):
+        """Detect numbered lines that look like headings rather than list items."""
+        match = re.match(r'^\s*(\d+[\.)])\s+(.+)$', text)
+        if not match:
+            return False
+        title = match.group(2).strip()
+        if not title or title.endswith('.'):
+            return False
+        word_count = len(title.split())
+        if word_count > 8:
+            return False
+        return title[0].isupper()
+
     def analyze_line(self, line, line_num, prev_line='', next_line='', context=None):
         """Analyze a single line with multiple pattern checks"""
         # FIRST: Clean heading spaces before analysis
@@ -5699,12 +5845,13 @@ class PatternEngine:
              return analysis
 
         # Check for Implicit List Items
-        if context and context.get('prev_analysis'):
+        if self.policy.list_numbering_mode == "assistive" and context and context.get('prev_analysis'):
             prev_type = context['prev_analysis'].get('type')
             if prev_type in ['instruction', 'question', 'list_item_implicit'] and is_short and not has_period:
-                 analysis['type'] = 'list_item_implicit'
-                 analysis['confidence'] = 0.80
-                 return analysis
+                analysis['type'] = 'list_item_implicit'
+                analysis['confidence'] = 0.80
+                logger.info("List item inferred from context: '%s'", trimmed)
+                return analysis
 
         # Priority 2: Check for heading patterns
         if is_short and not has_period:
@@ -5910,6 +6057,7 @@ class PatternEngine:
             analysis['content'] = bullet_info['content']
             analysis['bullet_info'] = bullet_info  # Store full info for WordGenerator
             analysis['confidence'] = 0.98
+            logger.info("List item detected (bullet): '%s' -> '%s'", trimmed, bullet_info['content'])
             return analysis
 
         for pattern in self.patterns['bullet_list']:
@@ -5918,13 +6066,21 @@ class PatternEngine:
                 analysis['type'] = 'bullet_list'
                 analysis['content'] = match.group(2) if match.lastindex and match.lastindex >= 2 else match.group(1).strip() if match.lastindex else trimmed.lstrip('•●○▪▫■□◆◇-–—* →➤➢').strip()
                 analysis['confidence'] = 0.98
+                logger.info("List item detected (bullet): '%s' -> '%s'", trimmed, analysis['content'])
                 return analysis
         
         for pattern in self.patterns['numbered_list']:
             if pattern.match(trimmed):
+                if self._is_heading_like_numbered_line(trimmed) and not self._has_adjacent_list_context(prev_line, next_line):
+                    analysis['type'] = 'heading'
+                    analysis['level'] = 2
+                    analysis['confidence'] = 0.90
+                    logger.info("Numbered line treated as heading: '%s'", trimmed)
+                    return analysis
                 # Apply the classification - don't reject here, handle rendering properly
                 analysis['type'] = 'numbered_list'
                 analysis['confidence'] = 0.95
+                logger.info("List item detected (numbered): '%s'", trimmed)
                 return analysis
 
         # ============================================================
@@ -8676,7 +8832,8 @@ class TextFormatterWithRegex:
     IMPROVED: Patterns match actual document structure
     """
     
-    def __init__(self):
+    def __init__(self, policy=None):
+        self.policy = policy or FormatPolicy()
         # Define patterns in application order - IMPROVED FOR REAL DOCUMENTS
         self.patterns = [
             # Pattern 1: Numbered sections at start of line (1.1, 2.1, 1.2, etc.)
@@ -8724,6 +8881,8 @@ class TextFormatterWithRegex:
         """Apply all regex patterns to text in sequence"""
         if not text:
             return text
+        if not self.policy.enable_regex_auto_bold:
+            return text
         
         for pattern_config in self.patterns:
             try:
@@ -8732,7 +8891,15 @@ class TextFormatterWithRegex:
                 flags = pattern_config['flags']
                 
                 # Apply the pattern
-                text = re.sub(regex, replacement, text, flags=flags)
+                updated = re.sub(regex, replacement, text, flags=flags)
+                if updated != text:
+                    logger.info(
+                        "Regex auto-bold applied (%s): '%s' -> '%s'",
+                        pattern_config['name'],
+                        text,
+                        updated,
+                    )
+                text = updated
                 
             except Exception as e:
                 logger.warning(f"Error applying pattern '{pattern_config['name']}': {e}")
@@ -8765,11 +8932,13 @@ class TextFormatterWithRegex:
 class DocumentProcessor:
     """Process documents using pattern engine"""
     
-    def __init__(self):
-        self.engine = PatternEngine()
+    def __init__(self, policy=None):
+        # Toggle academic mode via FormatPolicy(document_mode="academic").
+        self.policy = policy or FormatPolicy()
+        self.engine = PatternEngine(policy=self.policy)
         self.image_extractor = ImageExtractor()
         self.extracted_images = []  # Store extracted images
-        self.text_formatter = TextFormatterWithRegex()  # Add regex formatter
+        self.text_formatter = TextFormatterWithRegex(policy=self.policy)  # Add regex formatter
         self.cover_page_handler = CoverPageHandler()  # Cover page detection
         self.cover_page_data = None  # Extracted cover page data
         self.cover_page_end_index = 0  # Where cover page ends
@@ -8779,7 +8948,7 @@ class DocumentProcessor:
         self.certification_end_index = 0  # Where certification page ends
         self.questionnaire_processor = QuestionnaireProcessor() # Questionnaire detection
         self.questionnaire_data = None # Extracted questionnaire data
-        self.heading_numberer = HeadingNumberer()  # Auto-number headings based on chapter context
+        self.heading_numberer = HeadingNumberer(policy=self.policy)  # Auto-number headings based on chapter context
         
     def process_docx(self, file_path):
         """Process Word document line by line, preserving table and image positions"""
@@ -8847,9 +9016,11 @@ class DocumentProcessor:
                         text = para.text.strip()
                         
                         # Check for automatic numbering/bullets (Word automatic lists)
-                        # If present, prepend a bullet so PatternEngine detects it as a list
+                        # Only convert to explicit list markers in assistive mode.
                         try:
-                            if para._element.pPr is not None and para._element.pPr.numPr is not None:
+                            if (self.policy.list_numbering_mode == "assistive"
+                                    and para._element.pPr is not None
+                                    and para._element.pPr.numPr is not None):
                                 # Check if text already has a bullet-like start (manual numbering)
                                 if text and not re.match(r'^[\s•○●▪■□◆◇→➔➜➤➢–—*⁎⁑※✱✲✳✴☐☑✓✔✗✘⓿①②③④⑤⑥⑦⑧⑨❶❷❸❹❺❻❼❽❾❿➀-➉✦✧★☆♥♡◉◎▸▹►◂◃◄⦿⁍-]', text):
                                     text = f"• {text}"
@@ -8881,8 +9052,11 @@ class DocumentProcessor:
 
                             font_size = 12  # Default
                             is_bold = False
+                            is_bold_all = False
                             if para.runs:
-                                is_bold = any(run.bold for run in para.runs if run.bold)
+                                bold_flags = [run.bold for run in para.runs if run.text]
+                                is_bold = any(flag is True for flag in bold_flags)
+                                is_bold_all = bool(bold_flags) and all(flag is True for flag in bold_flags)
                                 if para.runs[0].font.size:
                                     font_size = para.runs[0].font.size.pt
                             
@@ -8898,6 +9072,7 @@ class DocumentProcessor:
                                 'text': text,
                                 'style': style,
                                 'bold': is_bold,
+                                'bold_all': is_bold_all,
                                 'font_size': font_size,
                             })
                         
@@ -8947,7 +9122,7 @@ class DocumentProcessor:
         text = text.replace('\r\n', '\n').replace('\r', '\n')
         
         # PREPROCESSING: Apply regex-based text formatting for consistent numbering/bulleting
-        # This fixes common formatting inconsistencies across documents
+        # This fixes common formatting inconsistencies across documents (opt-in via policy).
         text = self.text_formatter.format_text(text)
 
         # FIRST: Remove horizontal rules and excess whitespace
@@ -8984,6 +9159,7 @@ class DocumentProcessor:
                 'text': cleaned_line,
                 'style': style,
                 'bold': metadata.get('bold', False),
+                'bold_all': metadata.get('bold', False),
                 'font_size': 12,
                 'markdown_heading_level': heading_level,  # Preserve heading level from markdown
             })
@@ -9019,6 +9195,7 @@ class DocumentProcessor:
         
         # Reset heading numberer for new document
         self.heading_numberer.reset()
+        self.heading_numberer.configure_for_lines(lines)
         
         # Analyze each line
         for i, line_data in enumerate(lines):
@@ -9097,6 +9274,7 @@ class DocumentProcessor:
             if isinstance(line_data, dict):
                 analysis['original_style'] = line_data.get('style', 'Normal')
                 analysis['original_bold'] = line_data.get('bold', False)
+                analysis['original_bold_all'] = line_data.get('bold_all', False)
                 analysis['original_font_size'] = line_data.get('font_size', 12)
                 
                 # If line came from a markdown heading (## text), override the type if it was misdetected
@@ -9248,6 +9426,9 @@ class DocumentProcessor:
                 continue
 
             if line['type'] == 'empty':
+                if current_list and current_section:
+                    current_section['content'].append(current_list)
+                    current_list = None
                 continue
             
             # Detect reference section
@@ -9332,6 +9513,8 @@ class DocumentProcessor:
                     'content': line.get('content', ''),
                     'bullet_info': line.get('bullet_info'),  # Store full bullet info for formatting
                     'original': line.get('original'),
+                    'original_bold': line.get('original_bold', False),
+                    'original_bold_all': line.get('original_bold_all', False),
                 }
                 current_list['items'].append(list_item)
                 continue
@@ -10046,6 +10229,8 @@ class DocumentProcessor:
                 current_section['content'].append({
                     'type': 'paragraph',
                     'text': line['content'],
+                    'original_bold': line.get('original_bold', False),
+                    'original_bold_all': line.get('original_bold_all', False),
                 })
                 continue
             
@@ -10267,14 +10452,15 @@ class WordGenerator:
     # Path to cover page logo
     COVER_LOGO_PATH = os.path.join(os.path.dirname(__file__), 'coverpage_template', 'cover_logo.png')
     
-    def __init__(self):
+    def __init__(self, policy=None):
+        self.policy = policy or FormatPolicy()
         self.doc = None
         self.images = []  # Extracted images
         self.image_lookup = {}  # image_id -> image_data
         self.image_inserter = None
         self.toc_entries = []  # Track headings for TOC generation
         self.toc_placeholder_index = None  # Index where TOC should be inserted
-        self.heading_numberer = HeadingNumberer()  # For numbering headings
+        self.heading_numberer = HeadingNumberer(policy=self.policy)  # For numbering headings
         self.figure_formatter = FigureFormatter()  # For figure detection and formatting
         self.table_formatter = TableFormatter()  # For table detection and formatting
         self.figure_entries = []  # Track figures for List of Figures
@@ -10533,7 +10719,7 @@ class WordGenerator:
         
         # Initialize TOC entries and heading numberer BEFORE processing any sections
         self.toc_entries = []
-        self.heading_numberer = HeadingNumberer()
+        self.heading_numberer = HeadingNumberer(policy=self.policy)
         self.figure_formatter = FigureFormatter()  # Reset figure formatter
         self.table_formatter = TableFormatter()  # Reset table formatter
         self.figure_entries = []  # Reset figure entries
@@ -12712,6 +12898,37 @@ class WordGenerator:
             return text
         return re.sub(r'[\*\u204e\u2051\u203b]', '', text).strip()
 
+    def _split_label_for_bold(self, text, max_words=5):
+        """Detect short label prefixes like 'Definition:' for minimal bolding."""
+        if not text or ':' not in text:
+            return None
+        match = re.match(r'^\s*([^:]+):\s*(.+)$', text, re.DOTALL)
+        if not match:
+            return None
+        label = match.group(1).strip()
+        remainder = match.group(2).strip()
+        if not remainder:
+            return None
+        if 1 <= len(label.split()) <= max_words:
+            return label, remainder
+        return None
+
+    def _add_label_bold_runs(self, para, label, remainder, prefix=''):
+        """Add runs where only the label is bold."""
+        if prefix:
+            run_prefix = para.add_run(prefix)
+            run_prefix.font.name = 'Times New Roman'
+            run_prefix.font.size = Pt(self.font_size)
+        run_label = para.add_run(f"{label}:")
+        run_label.bold = True
+        run_label.font.name = 'Times New Roman'
+        run_label.font.size = Pt(self.font_size)
+        if remainder:
+            run_value = para.add_run(f" {remainder}")
+            run_value.font.name = 'Times New Roman'
+            run_value.font.size = Pt(self.font_size)
+        logger.info("Applied label bolding: '%s' -> '%s: %s'", label, label, remainder)
+
     def _extract_numbering(self, text):
         """
         Comprehensively extract numbering from text.
@@ -12836,7 +13053,15 @@ class WordGenerator:
                         self.has_tables = True
                         continue
                 
-                para = self.doc.add_paragraph(text, style='AcademicBody')
+                # Bold decision: only bold short labels like "Definition:" when present.
+                label_split = self._split_label_for_bold(text)
+                if item.get('original_bold_all') and self.policy.preserve_existing_bold:
+                    para = self.doc.add_paragraph(text, style='AcademicBody')
+                elif label_split and not item.get('original_bold', False):
+                    para = self.doc.add_paragraph(style='AcademicBody')
+                    self._add_label_bold_runs(para, label_split[0], label_split[1])
+                else:
+                    para = self.doc.add_paragraph(text, style='AcademicBody')
                 # Explicitly set properties again to be absolutely sure
                 para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                 para.paragraph_format.line_spacing = self.line_spacing
@@ -12847,6 +13072,8 @@ class WordGenerator:
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
+                    if item.get('original_bold_all') and self.policy.preserve_existing_bold:
+                        run.bold = True
             
             elif item.get('type') == 'instruction':
                 text = item.get('text', '')
@@ -12886,19 +13113,10 @@ class WordGenerator:
             elif item.get('type') == 'academic_metadata':
                  text = item.get('text', '')
                  # Format like "Label: Value" where Label is bold
-                 if ':' in text and len(text.split(':', 1)[0]) < 30:
-                     parts = text.split(':', 1)
-                     label = parts[0]
-                     value = parts[1]
+                 label_split = self._split_label_for_bold(text)
+                 if label_split:
                      para = self.doc.add_paragraph()
-                     run_label = para.add_run(label + ':')
-                     run_label.bold = True
-                     run_label.font.name = 'Times New Roman'
-                     run_label.font.size = Pt(self.font_size)
-                     
-                     run_val = para.add_run(value)
-                     run_val.font.name = 'Times New Roman'
-                     run_val.font.size = Pt(self.font_size)
+                     self._add_label_bold_runs(para, label_split[0], label_split[1])
                  else:
                      try:
                         para = self.doc.add_paragraph(text, style='AcademicBodyTitle') # Try specialized style if exists, else Normal
@@ -12908,7 +13126,7 @@ class WordGenerator:
                          run.font.name = 'Times New Roman'
                          run.font.size = Pt(self.font_size)
                          # Maybe bold if short?
-                         if len(text) < 50:
+                         if len(text) < 50 and self.policy.enable_regex_auto_bold:
                              run.bold = True
 
             elif item.get('type') == 'table_caption':
@@ -13087,57 +13305,26 @@ class WordGenerator:
                         para.paragraph_format.line_spacing = self.line_spacing
                         para.paragraph_format.space_after = Pt(0)
                     else:
-                        # SUBSTANTIVE ITEM: Use bold format instead of bullet
-                        
-                        # Add bolded title/numbering
-                        para_title = self.doc.add_paragraph()
-                        
-                        if numbering:
-                            # Add numbering if exists
-                            num_run = para_title.add_run(numbering + ' ')
-                            num_run.bold = True
-                            num_run.font.name = 'Times New Roman'
-                            num_run.font.size = Pt(self.font_size)
-                        
-                        if title:
-                            # Add bolded title
-                            title_run = para_title.add_run(title + (':' if ':' not in title else ''))
-                            title_run.bold = True
-                            title_run.font.name = 'Times New Roman'
-                            title_run.font.size = Pt(self.font_size)
-                        
-                        para_title.paragraph_format.left_indent = Pt(0)
-                        para_title.paragraph_format.first_line_indent = Pt(0)
-                        para_title.paragraph_format.space_after = Pt(3)
-                        
-                        # Add body content as separate paragraph(s) - no indent
-                        if body:
-                            if '\n' in body:
-                                # Multiple paragraphs
-                                for para_text in body.split('\n'):
-                                    if para_text.strip():
-                                        body_para = self.doc.add_paragraph(para_text)
-                                        body_para.paragraph_format.left_indent = Pt(0)
-                                        body_para.paragraph_format.first_line_indent = Pt(0)
-                                        body_para.paragraph_format.space_after = Pt(3)
-                                        for run in body_para.runs:
-                                            run.font.name = 'Times New Roman'
-                                            run.font.size = Pt(self.font_size)
+                        # SUBSTANTIVE ITEM: Render as plain paragraph(s) with minimal label bolding.
+                        paragraphs = content_after_num.split('\n') if '\n' in content_after_num else [content_after_num]
+                        for idx, para_text in enumerate(paragraphs):
+                            if not para_text.strip():
+                                continue
+                            prefix = f"{numbering} " if numbering and idx == 0 else ''
+                            label_split = self._split_label_for_bold(para_text)
+                            if label_split and not list_item.get('original_bold', False):
+                                para = self.doc.add_paragraph()
+                                self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
                             else:
-                                # Single paragraph
-                                body_para = self.doc.add_paragraph(body)
-                                body_para.paragraph_format.left_indent = Pt(0)
-                                body_para.paragraph_format.first_line_indent = Pt(0)
-                                body_para.paragraph_format.space_after = Pt(3)
-                                for run in body_para.runs:
-                                    run.font.name = 'Times New Roman'
-                                    run.font.size = Pt(self.font_size)
+                                para = self.doc.add_paragraph(prefix + para_text)
+                            para.paragraph_format.left_indent = Pt(0)
+                            para.paragraph_format.first_line_indent = Pt(0)
+                            para.paragraph_format.space_after = Pt(3)
+                            for run in para.runs:
+                                run.font.name = 'Times New Roman'
+                                run.font.size = Pt(self.font_size)
             
             elif item.get('type') == 'numbered_list':
-                # Track last number to detect and fix inconsistent numbering
-                last_number = None
-                number_counter = 0
-                
                 for list_item in item.get('items', []):
                     # Extract content from list_item (could be string or dict)
                     if isinstance(list_item, str):
@@ -13146,97 +13333,35 @@ class WordGenerator:
                         item_content = list_item.get('content', '')
                     else:
                         item_content = str(list_item)
+                    original_bold = list_item.get('original_bold', False) if isinstance(list_item, dict) else False
                     
                     # Use comprehensive numbering extraction
                     numbering, clean_item = self._extract_numbering(item_content)
-                    
-                    # FIX: Auto-increment if we see repeated numbers (e.g., "1." followed by another "1.")
+                    paragraphs = clean_item.split('\n') if '\n' in clean_item else [clean_item]
                     if numbering:
-                        # Extract the number part (e.g., "1" from "1.")
-                        num_match = re.match(r'^(\d+)', numbering)
-                        if num_match:
-                            current_num = int(num_match.group(1))
-                            if last_number is not None and current_num == last_number:
-                                # Inconsistent numbering - auto-increment
-                                number_counter += 1
-                                numbering = f"{current_num + number_counter}."
+                        for idx, para_text in enumerate(paragraphs):
+                            if not para_text.strip():
+                                continue
+                            prefix = f"{numbering} " if idx == 0 else ''
+                            label_split = self._split_label_for_bold(para_text)
+                            if label_split and not original_bold:
+                                para = self.doc.add_paragraph()
+                                self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
                             else:
-                                # Reset counter on new number
-                                last_number = current_num
-                                number_counter = 0
-                    
-                    # IMPROVED BOLDING: Detect if this item looks like a section header
-                    # Check for trailing colon, reasonable length, and title-case start
-                    stripped_content = clean_item.strip()
-                    is_header_like = (
-                        stripped_content.endswith(':') and 
-                        len(stripped_content.split()) <= 10 and
-                        stripped_content and
-                        stripped_content[0].isupper()
-                    )
-                    
-                    # Determine if content is substantial (multiline or long)
-                    content_is_multiline = '\n' in clean_item
-                    content_is_long = len(clean_item.split()) > 15
-                    should_separate_numbering = content_is_multiline or content_is_long
-                    
-                    if should_separate_numbering and numbering:
-                        # Create separate bold title for numbering
-                        para_title = self.doc.add_paragraph()
-                        run_num = para_title.add_run(numbering)
-                        run_num.bold = True
-                        run_num.font.name = 'Times New Roman'
-                        run_num.font.size = Pt(self.font_size)
-                        para_title.paragraph_format.left_indent = Pt(0)
-                        para_title.paragraph_format.first_line_indent = Pt(0)
-                        para_title.paragraph_format.space_after = Pt(3)
-                        
-                        # Add content as separate paragraph(s) - no indent
-                        if clean_item:
-                            if '\n' in clean_item:
-                                # Multiple paragraphs
-                                for para_text in clean_item.split('\n'):
-                                    if para_text.strip():
-                                        para = self.doc.add_paragraph(para_text)
-                                        para.paragraph_format.left_indent = Pt(0)
-                                        para.paragraph_format.first_line_indent = Pt(0)
-                                        para.paragraph_format.space_after = Pt(3)
-                                        for run in para.runs:
-                                            run.font.name = 'Times New Roman'
-                                            run.font.size = Pt(self.font_size)
-                            else:
-                                # Single paragraph
-                                para = self.doc.add_paragraph(clean_item)
-                                para.paragraph_format.left_indent = Pt(0)
-                                para.paragraph_format.first_line_indent = Pt(0)
-                                para.paragraph_format.space_after = Pt(3)
-                                for run in para.runs:
-                                    run.font.name = 'Times New Roman'
-                                    run.font.size = Pt(self.font_size)
-                    else:
-                        # FIX: Check if item already has numbering - if so, don't apply 'List Number' style
-                        # This prevents double-numbering (e.g., "1. I. Something" becomes "1. 1. I. Something")
-                        if numbering:
-                            # Item already has numbering - render as plain format with bold numbering
-                            para = self.doc.add_paragraph()
-                            run_num = para.add_run(numbering + ' ')
-                            run_num.bold = True
-                            run_num.font.name = 'Times New Roman'
-                            run_num.font.size = Pt(self.font_size)
-                            
-                            run_content = para.add_run(clean_item)
-                            # IMPROVED BOLDING: Bold the content if it looks like a header
-                            # This catches items like "1. Implications for Students:"
-                            run_content.bold = is_header_like
-                            run_content.font.name = 'Times New Roman'
-                            run_content.font.size = Pt(self.font_size)
-                            
+                                para = self.doc.add_paragraph(prefix + para_text)
                             para.paragraph_format.left_indent = Pt(0)
                             para.paragraph_format.first_line_indent = Pt(0)
                             para.paragraph_format.space_after = Pt(3)
+                            for run in para.runs:
+                                run.font.name = 'Times New Roman'
+                                run.font.size = Pt(self.font_size)
+                    else:
+                        # No existing numbering - use 'List Number' style to enable auto-numbering
+                        para = self.doc.add_paragraph(style='List Number')
+                        label_split = self._split_label_for_bold(clean_item)
+                        if label_split and not original_bold:
+                            self._add_label_bold_runs(para, label_split[0], label_split[1])
                         else:
-                            # No existing numbering - use 'List Number' style to enable auto-numbering
-                            para = self.doc.add_paragraph(style='List Number')
                             run_content = para.add_run(clean_item)
                             run_content.font.name = 'Times New Roman'
                             run_content.font.size = Pt(self.font_size)
@@ -14396,7 +14521,8 @@ def upload_document():
     
     try:
         # Process document
-        processor = DocumentProcessor()
+        policy = FormatPolicy()
+        processor = DocumentProcessor(policy=policy)
         images = []  # Extracted images
         
         if file_ext == '.docx':
@@ -14452,7 +14578,7 @@ def upload_document():
 
         # Generate formatted Word document with images
         output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_formatted.docx")
-        generator = WordGenerator()
+        generator = WordGenerator(policy=policy)
         
         # Pass cover page data and certification data if detected
         cover_page_data = getattr(processor, 'cover_page_data', None)
