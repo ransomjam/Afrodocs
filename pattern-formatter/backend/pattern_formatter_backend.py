@@ -1564,23 +1564,36 @@ class HeadingNumberer:
     
     def extract_existing_number(self, text):
         """
-        Extract existing hierarchical number from heading.
+        Extract existing numbering from heading.
         
         Returns:
             tuple: (number_string, title) or (None, text) if no number
         """
         clean = re.sub(r'^#+\s*', '', text).strip()
-        
-        # Match hierarchical number
-        match = re.match(r'^((?:\d+\.)+\d+)[\.)]?\s+(.+)$', clean)
-        if match:
-            return match.group(1), match.group(2)
-        
-        # Match appendix number
-        match = re.match(r'^([A-Z]\.(?:\d+\.)*\d+)[\.)]?\s+(.+)$', clean)
-        if match:
-            return match.group(1), match.group(2)
-        
+
+        numbering_patterns = [
+            # Hierarchical numeric (1.2, 1.2.3)
+            (r'^((?:\d+\.)+\d+)[\.)]?\s+(.+)$', None),
+            # Appendix style (A.1, A.1.2)
+            (r'^([A-Z]\.(?:\d+\.)*\d+)[\.)]?\s+(.+)$', None),
+            # Single-level numeric/alpha/roman (1., A., I.)
+            (r'^(\d+)[\.)]\s+(.+)$', None),
+            (r'^([A-Z])[\.)]\s+(.+)$', None),
+            (r'^([IVXLCDM]+)[\.)]\s+(.+)$', re.IGNORECASE),
+            # Parenthesized numbering ((1), (a), (i))
+            (r'^\((\d+|[A-Z]|[IVXLCDM]+)\)\s+(.+)$', re.IGNORECASE),
+            # Bracketed numbering ([1], [A], [i])
+            (r'^\[(\d+|[A-Z]|[IVXLCDM]+)\]\s+(.+)$', re.IGNORECASE),
+        ]
+
+        for pattern, flags in numbering_patterns:
+            if flags:
+                match = re.match(pattern, clean, flags)
+            else:
+                match = re.match(pattern, clean)
+            if match:
+                return match.group(1), match.group(2)
+
         return None, clean
     
     def get_heading_level_from_markdown(self, text):
