@@ -1370,6 +1370,7 @@ class HeadingNumberer:
         self.last_heading_normalized = ''  # Normalized version for matching
         self.in_parent_section = None  # Current parent section (e.g., 'research objectives')
         self.parent_section_number = ''  # Number of current parent section (e.g., '1.4')
+        self.use_continuous_section_numbering = False  # For documents without chapters
         
     def _normalize_text(self, text):
         """Normalize text for comparison (lowercase, remove punctuation, extra spaces)."""
@@ -1560,7 +1561,11 @@ class HeadingNumberer:
         """
         clean = re.sub(r'^#+\s*', '', text).strip()
         # Match: "1.2 Title" or "1.2.3 Title" or "A.1 Title"
-        return bool(re.match(r'^(\d+\.)+\d+[\.)]?\s+', clean) or re.match(r'^[A-Z]\.(\d+\.)*\d+[\.)]?\s+', clean))
+        return bool(
+            re.match(r'^(\d+\.)+\d+[\.)]?\s+', clean)
+            or re.match(r'^[A-Z]\.(\d+\.)*\d+[\.)]?\s+', clean)
+            or re.match(r'^\d+\.[A-Za-z][\.)]?\s+', clean)
+        )
     
     def extract_existing_number(self, text):
         """
@@ -1576,6 +1581,8 @@ class HeadingNumberer:
             (r'^((?:\d+\.)+\d+)[\.)]?\s+(.+)$', None),
             # Appendix style (A.1, A.1.2)
             (r'^([A-Z]\.(?:\d+\.)*\d+)[\.)]?\s+(.+)$', None),
+            # Mixed numeric + letter (5.f, 2.A)
+            (r'^(\d+\.[A-Za-z])[\.)]?\s+(.+)$', re.IGNORECASE),
             # Single-level numeric/alpha/roman (1., A., I.)
             (r'^(\d+)[\.)]\s+(.+)$', None),
             (r'^([A-Z])[\.)]\s+(.+)$', None),
@@ -1629,6 +1636,10 @@ class HeadingNumberer:
         # Already numbered - determine level from number
         existing_num, _ = self.extract_existing_number(text)
         if existing_num:
+            if re.match(r'^\d+\.[A-Za-z]', existing_num):
+                return 3  # Mixed numbering (5.f) -> treat as subsection
+            if re.match(r'^[A-Za-z]$', existing_num) or re.match(r'^[IVXLCDM]+$', existing_num, re.IGNORECASE):
+                return 3  # Lettered/roman-only numbering -> treat as subsection
             dots = existing_num.count('.')
             if dots == 1:
                 return 2  # X.Y
@@ -1710,12 +1721,15 @@ class HeadingNumberer:
             result['level'] = 1
             return result  # Keep as is without numbering
         
-        # If no chapter context yet, don't number
-        if self.current_chapter == 0 and not self.in_appendix:
-            return result
-        
         # Check if already has proper numbering - extract existing number and title
         existing_num, title = self.extract_existing_number(text)
+
+        # If no chapter context yet, decide whether to use continuous section numbering
+        if self.current_chapter == 0 and not self.in_appendix:
+            if existing_num or self.use_continuous_section_numbering:
+                self.use_continuous_section_numbering = True
+            else:
+                return result
         
         # Semantic hierarchy detection - check if this should be a subsection
         should_be_child = self._should_be_subsection(text)
@@ -1739,6 +1753,8 @@ class HeadingNumberer:
         # Override level if semantic analysis says this should be a child
         if should_be_child and target_level < 3:
             target_level = 3
+        if self.use_continuous_section_numbering and existing_num and '.' in existing_num and target_level < 3:
+            target_level = 3
         
         result['level'] = target_level
         
@@ -1759,6 +1775,8 @@ class HeadingNumberer:
             
             if self.in_appendix:
                 new_number = f"{self.appendix_letter}.{self.current_section}"
+            elif self.use_continuous_section_numbering and self.current_chapter == 0:
+                new_number = f"{self.current_section}"
             else:
                 new_number = f"{self.current_chapter}.{self.current_section}"
             
@@ -1777,6 +1795,8 @@ class HeadingNumberer:
             
             if self.in_appendix:
                 new_number = f"{self.appendix_letter}.{self.current_section}.{self.current_subsection}"
+            elif self.use_continuous_section_numbering and self.current_chapter == 0:
+                new_number = f"{self.current_section}.{self.current_subsection}"
             else:
                 new_number = f"{self.current_chapter}.{self.current_section}.{self.current_subsection}"
         
