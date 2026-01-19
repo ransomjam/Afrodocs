@@ -1510,21 +1510,21 @@ class HeadingNumberer:
         text_upper = re.sub(r'^#+\s*', '', text_upper).strip()
         
         # Pattern: CHAPTER + word (ONE, TWO, etc.)
-        match = re.match(r'^CHAPTER\s+([A-Z]+)\b', text_upper)
+        match = re.match(r'^CHAP?TER\s+([A-Z]+)\b', text_upper)
         if match:
             word = match.group(1)
             if word in self.WORD_TO_INT:
                 return self.WORD_TO_INT[word]
         
         # Pattern: CHAPTER + Roman numeral
-        match = re.match(r'^CHAPTER\s+([IVXLCDM]+)\b', text_upper)
+        match = re.match(r'^CHAP?TER\s+([IVXLCDM]+)\b', text_upper)
         if match:
             roman = match.group(1)
             if roman in self.ROMAN_TO_INT:
                 return self.ROMAN_TO_INT[roman]
         
         # Pattern: CHAPTER + digit
-        match = re.match(r'^CHAPTER\s+(\d+)', text_upper)
+        match = re.match(r'^CHAP?TER\s+(\d+)', text_upper)
         if match:
             return int(match.group(1))
         
@@ -1545,6 +1545,7 @@ class HeadingNumberer:
     def is_unnumbered_section(self, text):
         """Check if text is a front matter or special section that shouldn't be numbered."""
         clean = re.sub(r'^#+\s*', '', text).strip().upper()
+        clean = re.sub(r'[:.\s]+$', '', clean)
         return clean in self.UNNUMBERED_SECTIONS
     
     def is_appendix_heading(self, text):
@@ -3176,7 +3177,7 @@ class PatternEngine:
             # Heading Level 1 Patterns (ALL CAPS, Major Sections)
             'heading_1': [
                 re.compile(r'^([A-Z][A-Z\s]{2,49})$'),  # ALL CAPS (3-50 chars)
-                re.compile(r'^(CHAPTER\s+\d+.*)$', re.IGNORECASE),  # CHAPTER 1: Title
+                re.compile(r'^(CHAP?TER\s+\d+.*)$', re.IGNORECASE),  # CHAPTER 1: Title
                 re.compile(r'^(PART\s+[IVX]+.*)$', re.IGNORECASE),  # PART I, PART II
                 re.compile(r'^(PART\s+\d+.*)$', re.IGNORECASE),  # PART 1, PART 2
                 re.compile(r'^(\d+\.\s+[A-Z][A-Z\s]+)$'),  # "1. INTRODUCTION"
@@ -3481,7 +3482,7 @@ class PatternEngine:
             
             # 1. HEADING_HIERARCHY - Markdown-style hierarchical headings
             'heading_hierarchy': [
-                re.compile(r'^#\s+CHAPTER\s+\w+[:\s]', re.IGNORECASE),  # # CHAPTER X: Title
+                re.compile(r'^#\s+CHAP?TER\s+\w+[:\s]', re.IGNORECASE),  # # CHAPTER X: Title
                 re.compile(r'^##\s+\d+\.\d+\s+'),  # ## 1.1 Section
                 re.compile(r'^###\s+\d+\.\d+\.\d+\s+'),  # ### 1.1.1 Subsection
                 re.compile(r'^####\s+\d+\.\d+\.\d+\.\d+\s+'),  # #### 1.1.1.1 Sub-subsection
@@ -3689,24 +3690,24 @@ class PatternEngine:
                 re.compile(r'^BIBLIOGRAPHY\s*$', re.IGNORECASE),
                 
                 # Chapter headings (various formats)
-                re.compile(r'^#+\s*CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*[:\.]?\s*.*$', re.IGNORECASE),
-                re.compile(r'^CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*[:\.]?\s*.*$', re.IGNORECASE),
-                re.compile(r'^#+\s*CHAPTER\s+[1-9][0-9]?\s*[:\.]?\s*.*$', re.IGNORECASE),
-                re.compile(r'^CHAPTER\s+[1-9][0-9]?\s*[:\.]?\s*.*$', re.IGNORECASE),
-                re.compile(r'^#+\s*CHAPTER\s+[IVXLC]+\s*[:\.]?\s*.*$', re.IGNORECASE),
-                re.compile(r'^CHAPTER\s+[IVXLC]+\s*[:\.]?\s*.*$', re.IGNORECASE),
+                re.compile(r'^#+\s*CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*[:\.]?\s*.*$', re.IGNORECASE),
+                re.compile(r'^CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*[:\.]?\s*.*$', re.IGNORECASE),
+                re.compile(r'^#+\s*CHAP?TER\s+[1-9][0-9]?\s*[:\.]?\s*.*$', re.IGNORECASE),
+                re.compile(r'^CHAP?TER\s+[1-9][0-9]?\s*[:\.]?\s*.*$', re.IGNORECASE),
+                re.compile(r'^#+\s*CHAP?TER\s+[IVXLC]+\s*[:\.]?\s*.*$', re.IGNORECASE),
+                re.compile(r'^CHAP?TER\s+[IVXLC]+\s*[:\.]?\s*.*$', re.IGNORECASE),
             ],
             
             # 23. DISSERTATION_CHAPTER_TITLES - Chapter heading + title patterns
             'dissertation_chapter': [
                 # Chapter heading only (CHAPTER ONE, CHAPTER 1, CHAPTER I)
-                re.compile(r'^#+?\s*CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*$', re.IGNORECASE),
-                re.compile(r'^#+?\s*CHAPTER\s+[1-9][0-9]?\s*$', re.IGNORECASE),
-                re.compile(r'^#+?\s*CHAPTER\s+[IVXLC]+\s*$', re.IGNORECASE),
+                re.compile(r'^#+?\s*CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*$', re.IGNORECASE),
+                re.compile(r'^#+?\s*CHAP?TER\s+[1-9][0-9]?\s*$', re.IGNORECASE),
+                re.compile(r'^#+?\s*CHAP?TER\s+[IVXLC]+\s*$', re.IGNORECASE),
                 # Chapter heading with title on same line
-                re.compile(r'^#+?\s*CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*[:\-\.]\s*.+$', re.IGNORECASE),
-                re.compile(r'^#+?\s*CHAPTER\s+[1-9][0-9]?\s*[:\-\.]\s*.+$', re.IGNORECASE),
-                re.compile(r'^#+?\s*CHAPTER\s+[IVXLC]+\s*[:\-\.]\s*.+$', re.IGNORECASE),
+                re.compile(r'^#+?\s*CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s*[:\-\.]\s*.+$', re.IGNORECASE),
+                re.compile(r'^#+?\s*CHAP?TER\s+[1-9][0-9]?\s*[:\-\.]\s*.+$', re.IGNORECASE),
+                re.compile(r'^#+?\s*CHAP?TER\s+[IVXLC]+\s*[:\-\.]\s*.+$', re.IGNORECASE),
             ],
             
             # 24. COPYRIGHT_PAGE - Copyright notice patterns
@@ -5036,7 +5037,7 @@ class PatternEngine:
                 return True
         
         # Check for chapter headings
-        if re.match(r'^CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)', clean_text, re.IGNORECASE):
+        if re.match(r'^CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)', clean_text, re.IGNORECASE):
             return True
         
         return False
@@ -5090,7 +5091,7 @@ class PatternEngine:
                 return True
         
         # Check for chapter headings (CHAPTER ONE, CHAPTER 1, CHAPTER I, etc.)
-        chapter_pattern = r'^CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)'
+        chapter_pattern = r'^CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)'
         if re.match(chapter_pattern, clean_text, re.IGNORECASE):
             return True
         
@@ -5149,8 +5150,8 @@ class PatternEngine:
         
         # Check for chapter headings (CHAPTER ONE, CHAPTER 1, CHAPTER I, etc.)
         # These should be centered regardless of having a subtitle
-        if clean_text.startswith('CHAPTER'):
-            chapter_pattern = r'^CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)'
+        if re.match(r'^CHAP?TER\b', clean_text, re.IGNORECASE):
+            chapter_pattern = r'^CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)'
             if re.match(chapter_pattern, clean_text, re.IGNORECASE):
                 return True
         
@@ -5168,13 +5169,13 @@ class PatternEngine:
         clean_text = re.sub(r'^#+\s*', '', text).strip()
         
         # Chapter with title on same line: CHAPTER ONE: INTRODUCTION
-        pattern_with_title = r'^CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)\s*[:\-\.]\s*(.+)$'
+        pattern_with_title = r'^CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)\s*[:\-\.]\s*(.+)$'
         match = re.match(pattern_with_title, clean_text, re.IGNORECASE)
         if match:
             return True, match.group(1), match.group(2).strip()
         
         # Chapter heading only: CHAPTER ONE
-        pattern_only = r'^CHAPTER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)\s*$'
+        pattern_only = r'^CHAP?TER\s+(ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|\d+|[IVXLC]+)\s*$'
         match = re.match(pattern_only, clean_text, re.IGNORECASE)
         if match:
             return True, match.group(1), None
@@ -5307,6 +5308,7 @@ class PatternEngine:
         
         # Strip markdown heading markers
         clean_text = re.sub(r'^#+\s*', '', text).strip().upper()
+        clean_text = re.sub(r'[:.\s]+$', '', clean_text)
         
         front_matter_sections = {
             'DECLARATION': 'declaration',
@@ -11989,7 +11991,7 @@ class WordGenerator:
              section['needs_page_break'] = False # Disable manual break
         
         # Regex for "CHAPTER 1" or "CHAPTER ONE"
-        is_chapter_one = bool(re.search(r'^CHAPTER\s+(1|ONE)\b', heading_text))
+        is_chapter_one = bool(re.search(r'^CHAP?TER\s+(1|ONE)\b', heading_text))
         
         # Allow CHAPTER 1 page break even in short documents (for Roman->Arabic numeral transition)
         if is_chapter_one and not self.use_continuous_arabic:
