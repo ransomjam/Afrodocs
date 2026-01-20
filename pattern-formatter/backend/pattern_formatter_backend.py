@@ -13479,9 +13479,9 @@ class WordGenerator:
                         para = self.doc.add_paragraph(style='Normal')
                         
                         # Add bullet character
-                        bullet_run = para.add_run('■ ')
+                        bullet_run = para.add_run('■\t')
                         bullet_run.font.name = 'Arial'
-                        bullet_run.font.size = Pt(6)
+                        bullet_run.font.size = Pt(self.font_size)
                         
                         # Add content
                         content_run = para.add_run(content_after_num)
@@ -13489,10 +13489,11 @@ class WordGenerator:
                         content_run.font.size = Pt(self.font_size)
                         
                         # Set paragraph formatting
-                        para.paragraph_format.left_indent = Pt(0)
+                        para.paragraph_format.left_indent = Inches(0.5)
                         para.paragraph_format.first_line_indent = Pt(0)
                         para.paragraph_format.line_spacing = self.line_spacing
                         para.paragraph_format.space_after = Pt(0)
+                        para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0))
                     else:
                         # SUBSTANTIVE ITEM: Render as plain paragraph(s) with minimal label bolding.
                         paragraphs = content_after_num.split('\n') if '\n' in content_after_num else [content_after_num]
@@ -14002,18 +14003,19 @@ class WordGenerator:
                     indent = list_item.get('indent_level', 0)
                     para = self.doc.add_paragraph(style='Normal')
                     
-                    # Add bullet character with reduced size (6pt = half of 12pt)
-                    bullet_run = para.add_run('■ ')
+                    # Add bullet character with matching size
+                    bullet_run = para.add_run('■\t')
                     bullet_run.font.name = 'Arial'
-                    bullet_run.font.size = Pt(6)
+                    bullet_run.font.size = Pt(self.font_size)
                     
                     # Add content text with normal size
                     content_run = para.add_run(list_item.get('text', ''))
                     content_run.font.name = 'Times New Roman'
                     content_run.font.size = Pt(self.font_size)
                     
-                    para.paragraph_format.left_indent = Pt(0)
+                    para.paragraph_format.left_indent = Inches(0.5 + (0.25 * indent))
                     para.paragraph_format.first_line_indent = Pt(0)
+                    para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0 + (0.25 * indent)))
             
             # ================================================================
             # DISSERTATION-SPECIFIC CONTENT RENDERING (December 30, 2025)
