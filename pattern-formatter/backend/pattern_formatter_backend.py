@@ -13482,9 +13482,13 @@ class WordGenerator:
                         bullet_run = para.add_run('■\t')
                         bullet_run.font.name = 'Arial'
                         bullet_run.font.size = Pt(self.font_size)
+#<<<<<<< codex/increase-bullet-size-and-spacing-4q2fxu
+                        bullet_run.font.color.rgb = RGBColor(71, 71, 71)
+=======
 #<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
                         bullet_run.font.color.rgb = RGBColor(102, 102, 102)
 #=======
+#>>>>>>> main
 #>>>>>>> main
                         
                         # Add content
@@ -13497,10 +13501,14 @@ class WordGenerator:
                         para.paragraph_format.first_line_indent = Pt(0)
                         para.paragraph_format.line_spacing = self.line_spacing
                         para.paragraph_format.space_after = Pt(0)
+#<<<<<<< codex/increase-bullet-size-and-spacing-4q2fxu
+                        para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75))
+#=======
 #<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
                         para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75))
 #=======
                         para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0))
+#>>>>>>> main
 #>>>>>>> main
                     else:
                         # SUBSTANTIVE ITEM: Render as plain paragraph(s) with minimal label bolding.
@@ -14015,9 +14023,13 @@ class WordGenerator:
                     bullet_run = para.add_run('■\t')
                     bullet_run.font.name = 'Arial'
                     bullet_run.font.size = Pt(self.font_size)
+#<<<<<<< codex/increase-bullet-size-and-spacing-4q2fxu
+                    bullet_run.font.color.rgb = RGBColor(71, 71, 71)
+#=======
 #<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
                     bullet_run.font.color.rgb = RGBColor(102, 102, 102)
 #=======
+#>>>>>>> main
 #>>>>>>> main
                     
                     # Add content text with normal size
@@ -14027,10 +14039,14 @@ class WordGenerator:
                     
                     para.paragraph_format.left_indent = Inches(0.5 + (0.25 * indent))
                     para.paragraph_format.first_line_indent = Pt(0)
+#<<<<<<< codex/increase-bullet-size-and-spacing-4q2fxu
+                    para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75 + (0.25 * indent)))
+#=======
 #<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
                     para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75 + (0.25 * indent)))
 #=======
                     para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0 + (0.25 * indent)))
+#>>>>>>> main
 #>>>>>>> main
             
             # ================================================================
