@@ -15269,63 +15269,83 @@ def api_generate_coverpage():
                 # instead of 'Normal'. This prevents the content from inheriting the Cover Page's
                 # 'Normal' style (which might be Calibri/different spacing) during the merge.
                 
-                # 1. Ensure AcademicBody exists and has CORRECT properties
+                # 1. Ensure AcademicBody exists and mirrors the processed document styles
                 academic_style = None
                 academic_list_number = None
                 academic_list_bullet = None
-                
+
+                def copy_font(source_font, target_font):
+                    if source_font.name:
+                        target_font.name = source_font.name
+                    if source_font.size:
+                        target_font.size = source_font.size
+                    if source_font.bold is not None:
+                        target_font.bold = source_font.bold
+                    if source_font.italic is not None:
+                        target_font.italic = source_font.italic
+                    if source_font.underline is not None:
+                        target_font.underline = source_font.underline
+                    if source_font.color and source_font.color.rgb:
+                        target_font.color.rgb = source_font.color.rgb
+
+                def copy_paragraph_format(source_pf, target_pf):
+                    if source_pf.alignment is not None:
+                        target_pf.alignment = source_pf.alignment
+                    if source_pf.line_spacing is not None:
+                        target_pf.line_spacing = source_pf.line_spacing
+                    if source_pf.space_after is not None:
+                        target_pf.space_after = source_pf.space_after
+                    if source_pf.space_before is not None:
+                        target_pf.space_before = source_pf.space_before
+                    if source_pf.left_indent is not None:
+                        target_pf.left_indent = source_pf.left_indent
+                    if source_pf.right_indent is not None:
+                        target_pf.right_indent = source_pf.right_indent
+                    if source_pf.first_line_indent is not None:
+                        target_pf.first_line_indent = source_pf.first_line_indent
+                    if source_pf.keep_together is not None:
+                        target_pf.keep_together = source_pf.keep_together
+                    if source_pf.keep_with_next is not None:
+                        target_pf.keep_with_next = source_pf.keep_with_next
+                    if source_pf.page_break_before is not None:
+                        target_pf.page_break_before = source_pf.page_break_before
+                    if source_pf.widow_control is not None:
+                        target_pf.widow_control = source_pf.widow_control
+
                 try:
+                    base_body_style = processed_doc.styles['Normal']
+
                     # --- AcademicBody ---
                     if 'AcademicBody' not in processed_doc.styles:
                         academic_style = processed_doc.styles.add_style('AcademicBody', WD_STYLE_TYPE.PARAGRAPH)
-                        academic_style.base_style = processed_doc.styles['Normal']
+                        academic_style.base_style = base_body_style
                     else:
                         academic_style = processed_doc.styles['AcademicBody']
-                    
-                    font = academic_style.font
-                    font.name = 'Times New Roman'
-                    font.size = Pt(self.font_size)
-                    font.italic = False
-                    pf = academic_style.paragraph_format
-                    pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                    pf.line_spacing = 1.5
-                    pf.space_after = Pt(0)
+
+                    copy_font(base_body_style.font, academic_style.font)
+                    copy_paragraph_format(base_body_style.paragraph_format, academic_style.paragraph_format)
 
                     # --- AcademicListNumber ---
-                    # We create a custom list style to prevent merging with Cover Page's list styles
+                    list_number_style = processed_doc.styles['List Number'] if 'List Number' in processed_doc.styles else base_body_style
                     if 'AcademicListNumber' not in processed_doc.styles:
                         academic_list_number = processed_doc.styles.add_style('AcademicListNumber', WD_STYLE_TYPE.PARAGRAPH)
-                        # Try to inherit from List Number if it exists to keep numbering definition
-                        if 'List Number' in processed_doc.styles:
-                            academic_list_number.base_style = processed_doc.styles['List Number']
-                        else:
-                            academic_list_number.base_style = processed_doc.styles['Normal']
+                        academic_list_number.base_style = list_number_style
                     else:
                         academic_list_number = processed_doc.styles['AcademicListNumber']
-                    
-                    font = academic_list_number.font
-                    font.name = 'Times New Roman'
-                    font.size = Pt(self.font_size)
-                    font.italic = False
-                    pf = academic_list_number.paragraph_format
-                    pf.line_spacing = 1.5
-                    
+
+                    copy_font(list_number_style.font, academic_list_number.font)
+                    copy_paragraph_format(list_number_style.paragraph_format, academic_list_number.paragraph_format)
+
                     # --- AcademicListBullet ---
+                    list_bullet_style = processed_doc.styles['List Bullet'] if 'List Bullet' in processed_doc.styles else base_body_style
                     if 'AcademicListBullet' not in processed_doc.styles:
                         academic_list_bullet = processed_doc.styles.add_style('AcademicListBullet', WD_STYLE_TYPE.PARAGRAPH)
-                        if 'List Bullet' in processed_doc.styles:
-                            academic_list_bullet.base_style = processed_doc.styles['List Bullet']
-                        else:
-                            academic_list_bullet.base_style = processed_doc.styles['Normal']
+                        academic_list_bullet.base_style = list_bullet_style
                     else:
                         academic_list_bullet = processed_doc.styles['AcademicListBullet']
-                        
-                    font = academic_list_bullet.font
-                    font.name = 'Times New Roman'
-                    font.size = Pt(self.font_size)
-                    font.italic = False
-                    pf = academic_list_bullet.paragraph_format
-                    pf.line_spacing = 1.5
+
+                    copy_font(list_bullet_style.font, academic_list_bullet.font)
+                    copy_paragraph_format(list_bullet_style.paragraph_format, academic_list_bullet.paragraph_format)
 
                 except Exception as e:
                     logger.warning(f"Error setting up Academic styles: {e}")
