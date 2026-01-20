@@ -8571,6 +8571,8 @@ class QuestionnaireProcessor:
             if current_question:
                 option_match = self.detect_option(line)
                 if option_match:
+                    if option_match['type'] in ['checkbox', 'checked'] and current_question['type'] in ['multiple_choice', 'single_select', 'radio']:
+                        current_question['type'] = 'checkbox'
                     current_question['options'].append({
                         'label': option_match['label'],
                         'text': option_match['text'],
