@@ -305,6 +305,18 @@
             margin-bottom: 12pt;
         }
 
+        .document-page .document-list {
+            padding-left: 1.5rem;
+        }
+
+        .document-page .document-list-item {
+            padding-left: 0.125rem;
+        }
+
+        .document-page ul.document-list li::marker {
+            color: rgba(0, 0, 0, 0.8);
+        }
+
         /* Scanner Animation */
         @keyframes scan {
             0% { top: 0%; opacity: 0; }
@@ -1831,26 +1843,26 @@
                                     // Lists
                                     if (item.type === 'bullet_list') {
                                         return (
-                                            <ul key={i} className="list-disc pl-12 mb-4">
+                                            <ul key={i} className="document-list list-disc mb-4">
                                                 {item.items.map((li, l) => {
                                                     // Handle both string items and object items (enhanced bullets)
                                                     const content = typeof li === 'object' && li !== null 
                                                         ? (li.content || li.text || JSON.stringify(li)) 
                                                         : li;
-                                                    return <li key={l} className="pl-2">{content}</li>;
+                                                    return <li key={l} className="document-list-item">{content}</li>;
                                                 })}
                                             </ul>
                                         );
                                     }
                                     if (item.type === 'numbered_list') {
                                         return (
-                                            <ol key={i} className="list-decimal pl-12 mb-4">
+                                            <ol key={i} className="document-list list-decimal mb-4">
                                                 {item.items.map((li, l) => {
                                                     // Handle both string items and object items
                                                     const content = typeof li === 'object' && li !== null 
                                                         ? (li.content || li.text || JSON.stringify(li)) 
                                                         : li;
-                                                    return <li key={l} className="pl-2">{content}</li>;
+                                                    return <li key={l} className="document-list-item">{content}</li>;
                                                 })}
                                             </ol>
                                         );
