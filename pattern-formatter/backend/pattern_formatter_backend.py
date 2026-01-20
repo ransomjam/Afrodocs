@@ -9656,12 +9656,17 @@ class DocumentProcessor:
                         self._current_table['content'].append({
                             'type': 'separator'
                         })
-                elif line.get('subtype') in ['tab', 'aligned']:
+                elif line.get('subtype') in ['tab', 'aligned', 'spaced']:
                     if line.get('metadata') and 'cells' in line['metadata']:
                         self._current_table['content'].append({
                             'type': 'row',
                             'cells': line['metadata']['cells']
                         })
+                elif line.get('metadata') and 'cells' in line['metadata']:
+                    self._current_table['content'].append({
+                        'type': 'row',
+                        'cells': line['metadata']['cells']
+                    })
 
                 # Check if we should finalize the table (minimum 2 rows)
                 if len(self._current_table['content']) >= 2:
