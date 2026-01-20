@@ -13482,6 +13482,10 @@ class WordGenerator:
                         bullet_run = para.add_run('■\t')
                         bullet_run.font.name = 'Arial'
                         bullet_run.font.size = Pt(self.font_size)
+#<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
+                        bullet_run.font.color.rgb = RGBColor(102, 102, 102)
+#=======
+#>>>>>>> main
                         
                         # Add content
                         content_run = para.add_run(content_after_num)
@@ -13493,7 +13497,11 @@ class WordGenerator:
                         para.paragraph_format.first_line_indent = Pt(0)
                         para.paragraph_format.line_spacing = self.line_spacing
                         para.paragraph_format.space_after = Pt(0)
+#<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
+                        para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75))
+#=======
                         para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0))
+#>>>>>>> main
                     else:
                         # SUBSTANTIVE ITEM: Render as plain paragraph(s) with minimal label bolding.
                         paragraphs = content_after_num.split('\n') if '\n' in content_after_num else [content_after_num]
@@ -14007,6 +14015,10 @@ class WordGenerator:
                     bullet_run = para.add_run('■\t')
                     bullet_run.font.name = 'Arial'
                     bullet_run.font.size = Pt(self.font_size)
+#<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
+                    bullet_run.font.color.rgb = RGBColor(102, 102, 102)
+#=======
+#>>>>>>> main
                     
                     # Add content text with normal size
                     content_run = para.add_run(list_item.get('text', ''))
@@ -14015,7 +14027,11 @@ class WordGenerator:
                     
                     para.paragraph_format.left_indent = Inches(0.5 + (0.25 * indent))
                     para.paragraph_format.first_line_indent = Pt(0)
+#<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
+                    para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75 + (0.25 * indent)))
+#=======
                     para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0 + (0.25 * indent)))
+#>>>>>>> main
             
             # ================================================================
             # DISSERTATION-SPECIFIC CONTENT RENDERING (December 30, 2025)
