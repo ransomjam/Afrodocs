@@ -5755,6 +5755,20 @@ class PatternEngine:
                     }
                     return analysis
 
+        # Additional tab-separated detection for 2-column pasted tables
+        if '\t' in trimmed:
+            cells = [cell.strip() for cell in trimmed.split('\t') if cell.strip()]
+            neighbor_has_tab = ('\t' in prev_line) or ('\t' in next_line)
+            if len(cells) >= 2 and (len(cells) >= 3 or neighbor_has_tab):
+                analysis['type'] = 'table'
+                analysis['confidence'] = 0.80
+                analysis['subtype'] = 'tab'
+                analysis['metadata'] = {
+                    'cells': cells,
+                    'cell_count': len(cells)
+                }
+                return analysis
+
         # 3. Check for aligned columns (very conservative - requires 4+ columns)
         for pattern in self.patterns.get('table_aligned_columns', []):
             if pattern.match(trimmed):
@@ -5768,6 +5782,23 @@ class PatternEngine:
                         'cell_count': len(cells)
                     }
                     return analysis
+
+        # 3.5 Check for spaced tables with multiple columns (pasted text fallback)
+        is_spaced_table, spaced_cells, spaced_confidence = self._detect_spaced_table_row(
+            trimmed,
+            prev_line=prev_line,
+            next_line=next_line,
+            context=context,
+        )
+        if is_spaced_table:
+            analysis['type'] = 'table'
+            analysis['confidence'] = spaced_confidence
+            analysis['subtype'] = 'spaced'
+            analysis['metadata'] = {
+                'cells': spaced_cells,
+                'cell_count': len(spaced_cells)
+            }
+            return analysis
 
         # Legacy table detection (lower priority, more conservative)
         for pattern in self.patterns.get('plain_table_separator', []):
@@ -6879,7 +6910,7 @@ class PatternEngine:
         
         return True
 
-    def _detect_spaced_table_row(self, text, prev_line=None):
+    def _detect_spaced_table_row(self, text, prev_line=None, next_line=None, context=None):
         """
         Detect if text is a spaced table row with HIGH ACCURACY.
         
@@ -6887,18 +6918,29 @@ class PatternEngine:
         Returns: (is_table, cells, confidence) or (False, None, 0)
         """
         
-        # LAYER 1: Initial pattern check - must have 5+ spaces between items
-        if not re.search(r'\S+\s{5,}\S+', text):
+        # LAYER 1: Initial pattern check - must have 2+ spaces between items
+        if not re.search(r'\S+\s{2,}\S+', text):
             return (False, None, 0)
         
-        # Extract potential cells (split on 3+ consecutive spaces)
-        potential_cells = [cell.strip() for cell in re.split(r'\s{3,}', text.strip()) if cell.strip()]
+        # Extract potential cells (split on 2+ consecutive spaces)
+        potential_cells = [cell.strip() for cell in re.split(r'\s{2,}', text.strip()) if cell.strip()]
         
         # LAYER 2: Must have at least 2 columns
         if len(potential_cells) < 2:
             return (False, None, 0)
         
-        # LAYER 3: Prose detection - check for narrative indicators
+        # LAYER 3: Neighbor line validation to avoid false positives
+        neighbor_has_spacing = False
+        if prev_line and re.search(r'\S+\s{2,}\S+', prev_line):
+            neighbor_has_spacing = True
+        if next_line and re.search(r'\S+\s{2,}\S+', next_line):
+            neighbor_has_spacing = True
+
+        # Require neighbor spacing unless we have 3+ columns
+        if not neighbor_has_spacing and len(potential_cells) < 3:
+            return (False, None, 0)
+
+        # LAYER 4: Prose detection - check for narrative indicators
         combined_lower = ' '.join(potential_cells).lower()
         
         # High-confidence prose indicators (these phrases NEVER appear in tables)
@@ -6923,7 +6965,7 @@ class PatternEngine:
             if phrase in combined_lower:
                 return (False, None, 0)
         
-        # LAYER 4: Check for sentence-like structure
+        # LAYER 5: Check for sentence-like structure
         # Articles + verbs = prose
         has_article = bool(re.search(r'\b(the|a|an|this|that|these|those)\b', combined_lower))
         has_verb = bool(re.search(r'\b(is|are|was|were|has|have|had|will|would|should|could|can|may|must|do|does|did)\b', combined_lower))
@@ -6934,7 +6976,7 @@ class PatternEngine:
             if word_count > 8:  # Sentences have many words
                 return (False, None, 0)
         
-        # LAYER 5: Cell length validation
+        # LAYER 6: Cell length validation
         # Real table cells are typically short
         max_cell_length = max(len(cell) for cell in potential_cells)
         avg_cell_length = sum(len(cell) for cell in potential_cells) / len(potential_cells)
@@ -6947,20 +6989,20 @@ class PatternEngine:
         if avg_cell_length > 35:
             return (False, None, 0)
         
-        # LAYER 6: Check for multi-word cells (prose indicator)
+        # LAYER 7: Check for multi-word cells (prose indicator)
         multi_word_cells = sum(1 for cell in potential_cells if len(cell.split()) > 4)
         
         # If more than 30% of cells have 4+ words, likely prose
         if len(potential_cells) > 0 and (multi_word_cells / len(potential_cells)) > 0.3:
             return (False, None, 0)
         
-        # LAYER 7: Punctuation check
+        # LAYER 8: Punctuation check
         # Tables rarely have mid-sentence punctuation
         for cell in potential_cells:
             if ', ' in cell or '; ' in cell:  # Commas/semicolons mid-text = prose
                 return (False, None, 0)
         
-        # LAYER 8: Context validation (if previous line available)
+        # LAYER 9: Context validation (if previous line available)
         confidence = 0.7  # Base confidence
         
         if context and context.get('prev_analysis'):
@@ -6979,7 +7021,7 @@ class PatternEngine:
                     # Column count mismatch - probably not a table
                     return (False, None, 0)
         
-        # LAYER 9: Table-like content boost
+        # LAYER 10: Table-like content boost
         # Check if cells contain table-typical content
         table_like_patterns = [
             r'^\d+$',  # Pure numbers
@@ -7001,7 +7043,7 @@ class PatternEngine:
         if len(potential_cells) > 0 and (table_like_count / len(potential_cells)) >= 0.4:
             confidence = min(0.95, confidence + 0.15)
         
-        # LAYER 10: Final validation - must have minimum confidence
+        # LAYER 11: Final validation - must have minimum confidence
         if confidence < 0.70:
             return (False, None, 0)
         
