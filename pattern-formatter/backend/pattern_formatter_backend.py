@@ -13484,7 +13484,7 @@ class WordGenerator:
                         bullet_run.font.size = Pt(self.font_size)
 #<<<<<<< codex/increase-bullet-size-and-spacing-4q2fxu
                         bullet_run.font.color.rgb = RGBColor(71, 71, 71)
-=======
+#=======
 #<<<<<<< codex/increase-bullet-size-and-spacing-424gf9
                         bullet_run.font.color.rgb = RGBColor(102, 102, 102)
 #=======
