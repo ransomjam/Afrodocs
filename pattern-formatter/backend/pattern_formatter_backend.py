@@ -1414,6 +1414,7 @@ class HeadingNumberer:
             text = line.get('text') if isinstance(line, dict) else str(line)
             if not text:
                 continue
+            text = pre_normalize_numbering(text)
             if self.parse_chapter_number(text) > 0:
                 chapter_hits += 1
                 continue
@@ -1658,7 +1659,7 @@ class HeadingNumberer:
         Returns:
             tuple: (number_string, title) or (None, text) if no number
         """
-        clean = re.sub(r'^#+\s*', '', text).strip()
+        clean = pre_normalize_numbering(re.sub(r'^#+\s*', '', text).strip())
 
         numbering_patterns = [
             # Hierarchical numeric (1.2, 1.2.3)
@@ -8904,6 +8905,36 @@ class QuestionnaireProcessor:
             return 'dash'
 
 
+INVISIBLE = re.compile(
+    r'[\u0000-\u001F\u007F\u00AD\u200B-\u200F\u202A-\u202E\u2060\uFEFF\uFFFD]'
+)
+SPECIALS = re.compile(r'[\uFFF0-\uFFFF]')
+
+
+def strip_invisible_chars(text):
+    if not text:
+        return text
+    text = INVISIBLE.sub('', text)
+    return SPECIALS.sub('', text)
+
+
+def normalize_bullets(text):
+    if not text:
+        return text
+    text = re.sub(r'^\s*■\s*', '• ', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*-\s*(\S)', r'- \1', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*–\s*', '- ', text, flags=re.MULTILINE)
+    return text
+
+
+def pre_normalize_numbering(text):
+    if not text:
+        return text
+    text = re.sub(r'^(\d+(?:\.\d+)+)([A-Za-z])', r'\1 \2', text, flags=re.MULTILINE)
+    text = re.sub(r'^(\d+)\.(\S)', r'\1. \2', text, flags=re.MULTILINE)
+    return text
+
+
 class TextFormatterWithRegex:
     """
     Applies powerful regex patterns to automatically bold numbered/bulleted topics
@@ -8911,81 +8942,76 @@ class TextFormatterWithRegex:
     IMPROVED: Patterns match actual document structure
     """
     
+    RE_ALREADY_BOLDED = re.compile(r'^\s*\*\*.+\*\*\s*$')
+    RE_TABLE_LINE = re.compile(r'^\s*\|.*\|\s*$')
+    RE_HAS_LETTER = re.compile(r'[A-Za-z]')
+
+    RE_NUM_SECTION = re.compile(r'^(?P<num>\d+(?:\.\d+)+)\s+(?P<title>.+?)\s*$', re.MULTILINE)
+    RE_NUM_LIST = re.compile(r'^(?P<num>\d+)[\.\)]\s+(?P<title>.+?)\s*$', re.MULTILINE)
+    RE_ROMAN_LIST = re.compile(
+        r'^(?P<num>[IVXLCDM]{1,10})[\.\)]\s+(?P<title>.+?)\s*$',
+        re.I | re.MULTILINE,
+    )
+    RE_BULLET = re.compile(r'^\s*(?P<bullet>[-•–*■])\s+(?P<title>.+?)\s*$', re.MULTILINE)
+    RE_CAPS_COLON = re.compile(
+        r'^(?P<label>[A-Z][A-Z0-9\s/&,\-]{2,50}):\s*(?P<rest>.*)\s*$',
+        re.MULTILINE,
+    )
+
     def __init__(self, policy=None):
         self.policy = policy or FormatPolicy()
-        # Define patterns in application order - IMPROVED FOR REAL DOCUMENTS
-        self.patterns = [
-            # Pattern 1: Numbered sections at start of line (1.1, 2.1, 1.2, etc.)
-            {
-                'regex': r'^(\d+\.\d+)(\s+)([A-Z][A-Za-z\s\-:]*?)(?=\n|$)',
-                'replacement': r'**\1\2\3**',
-                'name': 'Numbered sections (1.1, 2.2, etc)',
-                'flags': re.MULTILINE
-            },
-            
-            # Pattern 2: Simple numbered items (1., 2., 3.) at line start with title
-            {
-                'regex': r'^(\d+\.\s+)([A-Z][A-Za-z\s\-:]*?)(?=\n|$)',
-                'replacement': r'**\1\2**',
-                'name': 'Simple numbered items (1., 2., 3.)',
-                'flags': re.MULTILINE
-            },
-            
-            # Pattern 3: Roman numerals with title (I., II., III.)
-            {
-                'regex': r'^([IVX]+\.\s+)([A-Z][A-Za-z\s\-:]*?)(?=\n|$)',
-                'replacement': r'**\1\2**',
-                'name': 'Roman numerals (I., II., III.)',
-                'flags': re.MULTILINE
-            },
-            
-            # Pattern 4: Bulleted items with text
-            {
-                'regex': r'^(\s*[-•]\s+)([A-Z][A-Za-z\s\-:]*?)(?=\n|$)',
-                'replacement': r'\1**\2**',
-                'name': 'Bulleted items',
-                'flags': re.MULTILINE
-            },
-            
-            # Pattern 5: Section headers in capitals followed by colon (METHODOLOGY:, RESULTS:)
-            {
-                'regex': r'^([A-Z][A-Z\s]+):(?=\s|$)',
-                'replacement': r'**\1:**',
-                'name': 'Section headers (CAPITALS with colon)',
-                'flags': re.MULTILINE
-            },
-        ]
     
     def format_text(self, text):
-        """Apply all regex patterns to text in sequence"""
+        """Apply deterministic auto-bold formatting line by line."""
         if not text:
             return text
         if not self.policy.enable_regex_auto_bold:
             return text
-        
-        for pattern_config in self.patterns:
-            try:
-                regex = pattern_config['regex']
-                replacement = pattern_config['replacement']
-                flags = pattern_config['flags']
-                
-                # Apply the pattern
-                updated = re.sub(regex, replacement, text, flags=flags)
-                if updated != text:
-                    logger.info(
-                        "Regex auto-bold applied (%s): '%s' -> '%s'",
-                        pattern_config['name'],
-                        text,
-                        updated,
-                    )
-                text = updated
-                
-            except Exception as e:
-                logger.warning(f"Error applying pattern '{pattern_config['name']}': {e}")
-                # Continue with next pattern if one fails
+
+        updated_lines = []
+        for line in text.split('\n'):
+            if (self.RE_ALREADY_BOLDED.match(line)
+                    or self.RE_TABLE_LINE.match(line)
+                    or not line.strip()):
+                updated_lines.append(line)
                 continue
-        
-        return text
+
+            match = self.RE_NUM_SECTION.match(line)
+            if match and self.RE_HAS_LETTER.search(match.group('title')):
+                updated_lines.append(f"**{match.group('num')} {match.group('title').strip()}**")
+                continue
+
+            match = self.RE_NUM_LIST.match(line)
+            if match and self.RE_HAS_LETTER.search(match.group('title')):
+                updated_lines.append(f"**{match.group('num')}. {match.group('title').strip()}**")
+                continue
+
+            match = self.RE_ROMAN_LIST.match(line)
+            if match and self.RE_HAS_LETTER.search(match.group('title')):
+                updated_lines.append(f"**{match.group('num')}. {match.group('title').strip()}**")
+                continue
+
+            match = self.RE_BULLET.match(line)
+            if match and self.RE_HAS_LETTER.search(match.group('title')):
+                prefix = line[:match.start('bullet')]
+                updated_lines.append(f"{prefix}{match.group('bullet')} **{match.group('title').strip()}**")
+                continue
+
+            match = self.RE_CAPS_COLON.match(line)
+            if match:
+                label = match.group('label').strip()
+                rest = match.group('rest').strip()
+                if rest and len(rest) > 40:
+                    updated_lines.append(line)
+                elif rest:
+                    updated_lines.append(f"**{label}:** {rest}")
+                else:
+                    updated_lines.append(f"**{label}:**")
+                continue
+
+            updated_lines.append(line)
+
+        return '\n'.join(updated_lines)
     
     def should_apply_formatting(self, text):
         """
@@ -8995,15 +9021,29 @@ class TextFormatterWithRegex:
         if not text:
             return False
         
-        # Check for numbered items without bold
-        if re.search(r'^\d+\.\d+\s+[A-Z]', text, re.MULTILINE):
-            return True
-        if re.search(r'^\d+\.\s+[A-Z]', text, re.MULTILINE):
-            return True
-        
-        # Check for bulleted items without bold
-        if re.search(r'^[-•]\s+[A-Z]', text, re.MULTILINE):
-            return True
+        for line in text.split('\n'):
+            if self.RE_ALREADY_BOLDED.match(line) or self.RE_TABLE_LINE.match(line):
+                continue
+            if self.RE_NUM_SECTION.match(line):
+                title = self.RE_NUM_SECTION.match(line).group('title')
+                if self.RE_HAS_LETTER.search(title):
+                    return True
+            if self.RE_NUM_LIST.match(line):
+                title = self.RE_NUM_LIST.match(line).group('title')
+                if self.RE_HAS_LETTER.search(title):
+                    return True
+            if self.RE_ROMAN_LIST.match(line):
+                title = self.RE_ROMAN_LIST.match(line).group('title')
+                if self.RE_HAS_LETTER.search(title):
+                    return True
+            if self.RE_BULLET.match(line):
+                title = self.RE_BULLET.match(line).group('title')
+                if self.RE_HAS_LETTER.search(title):
+                    return True
+            if self.RE_CAPS_COLON.match(line):
+                rest = self.RE_CAPS_COLON.match(line).group('rest').strip()
+                if not rest or len(rest) <= 40:
+                    return True
         
         return False
 
@@ -9092,7 +9132,7 @@ class DocumentProcessor:
                             paragraph_index += 1
                             break
                         
-                        text = para.text.strip()
+                        text = pre_normalize_numbering(normalize_bullets(strip_invisible_chars(para.text.strip())))
                         
                         # Check for automatic numbering/bullets (Word automatic lists)
                         # Only convert to explicit list markers in assistive mode.
@@ -9170,7 +9210,7 @@ class DocumentProcessor:
                         for row_idx, row in enumerate(table.rows):
                             row_cells = []
                             for cell_idx, cell in enumerate(row.cells):
-                                cell_text = cell.text.strip()
+                                cell_text = pre_normalize_numbering(normalize_bullets(strip_invisible_chars(cell.text.strip())))
                                 
                                 # Check for images in this cell
                                 for img in self.extracted_images:
@@ -9199,6 +9239,11 @@ class DocumentProcessor:
 
         # Normalize line endings to ensure consistent splitting
         text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+        # Remove invisible characters and normalize bullet/numbering markers before formatting
+        text = strip_invisible_chars(text)
+        text = normalize_bullets(text)
+        text = pre_normalize_numbering(text)
         
         # PREPROCESSING: Apply regex-based text formatting for consistent numbering/bulleting
         # This fixes common formatting inconsistencies across documents (opt-in via policy).
