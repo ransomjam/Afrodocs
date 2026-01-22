@@ -1,0 +1,122 @@
+## Networking Notes
+
+### 1) What networking is
+
+Networking is the practice of connecting computers, phones, servers, and devices so they can share data and resources (files, printers, internet access, applications). It involves hardware, software, rules (protocols), and processes that keep communication reliable and secure.
+
+**Key outcomes of networking**
+
+* Communication: messaging, voice, video calls
+* Resource sharing: printers, storage, internet
+* Centralised services: authentication, databases, applications
+* Scalability: add users/devices without redesigning everything
+* Security and control: access rules, monitoring, auditing
+
+---
+
+## 2) Core network components
+
+### 2.1 End devices (Hosts)
+
+* PCs, laptops, phones, tablets
+* Servers (web, database, file, mail)
+* Printers, IP cameras, smart TVs, IoT sensors
+* POS machines, ATMs, industrial controllers (PLC/SCADA)
+
+**Host identifiers**
+
+* MAC address (hardware identity on the local network)
+* IP address (logical identity for routing)
+* Hostname (human-friendly name, often stored in DNS)
+
+### 2.2 Network devices
+
+* **Switch**: connects devices in a LAN, forwards frames based on MAC addresses
+* **Router**: connects different networks, forwards packets based on IP addresses
+* **Access Point (AP)**: provides Wi-Fi connectivity to wireless devices
+* **Firewall**: enforces security rules, filters traffic
+* **Modem/ONT**: converts ISP signal to usable network connectivity
+* **Hub (legacy)**: broadcasts to all ports (rare today)
+* **Bridge (legacy concept)**: connects segments at Layer 2
+
+---
+
+## 3) Network types and scope
+
+### 3.1 By coverage area
+
+1. **PAN (Personal Area Network)**
+
+   * Very short range (Bluetooth, tethering)
+2. **LAN (Local Area Network)**
+
+   * Building/classroom/campus block
+3. **MAN (Metropolitan Area Network)**
+
+   * City-wide
+4. **WAN (Wide Area Network)**
+
+   * Country/continent; the Internet is the biggest WAN
+
+### 3.2 By design
+
+* **Client–Server**
+
+  * Central servers provide services (authentication, storage, apps)
+  * Easier management and security control
+* **Peer-to-Peer (P2P)**
+
+  * Devices share directly without central control
+  * Simple, but harder to manage at scale
+
+---
+
+## 6) Protocols and ports (quick reference)
+
+| Protocol | Purpose                 | Transport | Common Port(s) |
+| -------- | ----------------------- | --------: | -------------: |
+| HTTP     | Web browsing            |       TCP |             80 |
+| HTTPS    | Secure web              |       TCP |            443 |
+| DNS      | Name resolution         |   UDP/TCP |             53 |
+| DHCP     | Automatic IP assignment |       UDP |          67/68 |
+| SSH      | Secure remote login     |       TCP |             22 |
+| FTP      | File transfer           |       TCP |             21 |
+| SMTP     | Send email              |       TCP |  25 (also 587) |
+| IMAP     | Receive email           |       TCP | 143 (also 993) |
+| POP3     | Receive email           |       TCP | 110 (also 995) |
+| RDP      | Remote desktop          |       TCP |           3389 |
+
+**Notes**
+
+* TCP is connection-oriented (reliable, ordered delivery).
+* UDP is connectionless (faster, less overhead, used for streaming/DNS).
+
+---
+
+## 14) Quick comparison tables
+
+### 14.1 Switch vs Router vs Access Point
+
+| Device       | Main Job                  | Works Mostly At | Typical Use                        |
+| ------------ | ------------------------- | --------------- | ---------------------------------- |
+| Switch       | Connects devices in a LAN | Layer 2         | Office/classroom wiring            |
+| Router       | Connects networks         | Layer 3         | LAN to Internet, LAN to LAN        |
+| Access Point | Provides Wi-Fi            | Layer 2         | Wireless access for phones/laptops |
+
+### 14.2 TCP vs UDP
+
+| Feature     | TCP                                 | UDP                              |
+| ----------- | ----------------------------------- | -------------------------------- |
+| Reliability | High (acknowledgements, retransmit) | Lower (no retransmit by default) |
+| Speed       | Slower than UDP (overhead)          | Faster                           |
+| Best for    | Web, email, file transfer           | Streaming, voice, DNS            |
+
+---
+
+## 15) Short summary (for revision)
+
+* Networking connects devices to share data/resources using standards (protocols).
+* Switches operate inside LANs (MAC-based forwarding); routers connect networks (IP-based routing).
+* IP addressing, subnetting, DNS, and DHCP are fundamental.
+* Security relies on good configuration, segmentation, authentication, and monitoring.
+* Troubleshooting is easiest when done step-by-step from physical layer upward.

@@ -441,29 +441,29 @@ def generate_cover_page(data):
 
         # Base values map - use exact case for placeholders
         values_map = {
-            'STUDENT_NAME': get_val('studentName'),  # Matches {{ STUDENT_NAME }}
+            'STUDENT_NAME': (get_val('studentName') or '').upper(),  # Matches {{ STUDENT_NAME }} - Always uppercase
             'Matricule Number': get_val('studentId'),  # Matches {{ Matricule Number }}
             'COURSE_CODE': get_val('courseCode'),
             'COURSE_TITLE': get_val('courseTitle'),
-            'DEPARTMENT': get_val('departmentCustom') or get_val('department'),  # Matches {{ DEPARTMENT }}
-            'Deparment': get_val('departmentCustom') or get_val('department'),  # Matches {{ Deparment }} (typo in template)
-            'SCHOO/FACULTY': get_val('facultyCustom') or get_val('faculty'),  # Matches {{ SCHOO/FACULTY }}
-            'School/Faculty': get_val('facultyCustom') or get_val('faculty'),  # Matches {{ School/Faculty }}
+            'DEPARTMENT': (get_val('departmentCustom') or get_val('department') or '').upper(),  # Matches {{ DEPARTMENT }} - Always uppercase
+            'Deparment': (get_val('departmentCustom') or get_val('department') or '').upper(),  # Matches {{ Deparment }} (typo in template) - Always uppercase
+            'SCHOO/FACULTY': (get_val('facultyCustom') or get_val('faculty') or '').upper(),  # Matches {{ SCHOO/FACULTY }} - Always uppercase
+            'School/Faculty': (get_val('facultyCustom') or get_val('faculty') or '').upper(),  # Matches {{ School/Faculty }} - Always uppercase
             'LECTURER\'S NAME': get_val('instructor'),  # Matches {{ LECTURER'S NAME }}
             'LEVEL': get_val('levelCustom') or get_val('level'),  # Matches {{ LEVEL }}
             'Month and Year': month_year,  # Matches {{ Month and Year }}
             'degree_selected': degree,  # Matches {{ degree_selected }}
             # Additional textbox fields
-            'PROJECT TOPIC': get_val('title'),  # Textbox field
-            'REPORT TITLE': get_val('title'),  # Textbox field
-            'ASSIGNMENT_TITLE': get_val('title'),  # Textbox field
+            'PROJECT TOPIC': (get_val('title') or '').upper(),  # Textbox field - Always uppercase
+            'REPORT TITLE': (get_val('title') or '').upper(),  # Textbox field - Always uppercase
+            'ASSIGNMENT_TITLE': (get_val('title') or '').upper(),  # Textbox field - Always uppercase
             'ACADEMIC YEAR': academic_year,  # Textbox field
             'Supervisor\'s Name': get_val('supervisor') or get_val('academicSupervisor'),
             'Supervisor': get_val('supervisor') or get_val('academicSupervisor'),
             'Field Supervisor\'s name': get_val('fieldSupervisor'),
             'Field Supervisor': get_val('fieldSupervisor'),
-            'institution': get_val('institutionCustom') or get_val('institution'),
-            'title': get_val('title'),
+            'institution': (get_val('institutionCustom') or get_val('institution') or '').upper(),  # Always uppercase
+            'title': (get_val('title') or '').upper(),  # Always uppercase
             'date': date_str,
             'assignmentNumber': get_val('assignmentNumber'),
         }

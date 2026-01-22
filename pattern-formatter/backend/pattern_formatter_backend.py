@@ -2,9 +2,10 @@
 # Ultra-Precise Pattern-Based Academic Document Formatter
 # NO AI - 100% Rule-Based - Lightning Fast
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from docx import Document
@@ -14,7 +15,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.section import WD_SECTION
 from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from docx.oxml.ns import qn, nsmap
 from docxcompose.composer import Composer
 from dataclasses import dataclass
 import re
@@ -32,6 +33,29 @@ import fapshi_integration as fapshi
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Register additional namespaces for shape/flowchart support
+# These namespaces are needed to properly extract and insert shapes, arrows, and drawing elements
+try:
+    from lxml import etree
+    # Add shape-related namespaces if not already present
+    SHAPE_NAMESPACES = {
+        'wps': 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
+        'wpg': 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup',
+        'wpc': 'http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas',
+        'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
+        'w14': 'http://schemas.microsoft.com/office/word/2010/wordml',
+        'w15': 'http://schemas.microsoft.com/office/word/2012/wordml',
+        'wne': 'http://schemas.microsoft.com/office/word/2006/wordml',
+        'dgm': 'http://schemas.openxmlformats.org/drawingml/2006/diagram',
+        'c': 'http://schemas.openxmlformats.org/drawingml/2006/chart',
+    }
+    # Update the global nsmap with shape namespaces
+    for prefix, uri in SHAPE_NAMESPACES.items():
+        if prefix not in nsmap:
+            nsmap[prefix] = uri
+    logger.info("Shape namespaces registered successfully")
+except Exception as e:
+    logger.warning(f"Could not register shape namespaces: {e}")
 
 @dataclass(frozen=True)
 class FormatPolicy:
@@ -52,18 +76,32 @@ class FormatPolicy:
 
 # Serve frontend files directly from the backend for simple deployment
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
-app.config['SECRET_KEY'] = 'your-secret-key-change-this-in-production'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+
+# Load configuration from environment variables
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Session cookie configuration for proper authentication
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
-app.config['REMEMBER_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+# Detect production environment
+IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('RENDER') == 'true'
 
-CORS(app, expose_headers=["Content-Disposition"], supports_credentials=True, origins=["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:3000", "http://127.0.0.1:5000"])
+# Session cookie configuration for proper authentication
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' if IS_PRODUCTION else 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = IS_PRODUCTION  # True in production with HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax' if IS_PRODUCTION else 'Lax'
+app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION  # True in production with HTTPS
+
+# CORS configuration - allow production domain
+ALLOWED_ORIGINS = [
+    "http://localhost:3000", 
+    "http://localhost:5000", 
+    "http://127.0.0.1:3000", 
+    "http://127.0.0.1:5000",
+    "https://afrodocs.app",
+    "https://www.afrodocs.app"
+]
+CORS(app, expose_headers=["Content-Disposition"], supports_credentials=True, origins=ALLOWED_ORIGINS)
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -123,6 +161,16 @@ class Transaction(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+# Custom decorator that allows both authenticated users and guests
+def allow_guest(f):
+    """Decorator that allows both logged-in users and guests to access an endpoint.
+    Unlike @login_required, this won't return 401 for unauthenticated users."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Simply proceed with the request - current_user will be anonymous if not logged in
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Create DB
 with app.app_context():
@@ -250,8 +298,8 @@ def initiate_payment():
     data = request.json
     amount = data.get('amount')
     
-    if not amount or amount < 100:
-        return jsonify({'error': 'Invalid amount. Minimum 100 XAF.'}), 400
+    if not amount or amount < 1000:
+        return jsonify({'error': 'Invalid amount. Minimum 1000 XAF.'}), 400
         
     external_id = str(uuid.uuid4())
     
@@ -305,23 +353,24 @@ def verify_pending_transactions():
                 transaction.status = status
                 
                 if status == 'SUCCESSFUL':
-                    # Simple logic: 100 FCFA = 500 pages (Student)
-                    # 250 FCFA = 1500 pages (Campus Pro)
-                    # 500 FCFA = 10000 pages (Enterprise)
+                    # Pricing tiers (January 2026):
+                    # 1000 FCFA = 500 pages (Student) - 2 months validity
+                    # 2500 FCFA = 1500 pages (Campus Pro) - 2 months validity
+                    # 5000 FCFA = 10000 pages (Enterprise) - 2 months validity
                     
                     pages_to_add = 0
-                    if transaction.amount == 100:
+                    if transaction.amount == 1000:
                         pages_to_add = 500
                         current_user.plan = 'student'
-                    elif transaction.amount == 250:
+                    elif transaction.amount == 2500:
                         pages_to_add = 1500
                         current_user.plan = 'campus'
-                    elif transaction.amount == 500:
+                    elif transaction.amount == 5000:
                         pages_to_add = 10000
                         current_user.plan = 'enterprise'
                     else:
                         # Fallback logic
-                        pages_to_add = (transaction.amount // 100) * 500
+                        pages_to_add = (transaction.amount // 1000) * 500
                         
                     if pages_to_add > 0:
                         current_user.pages_balance += pages_to_add
@@ -367,14 +416,26 @@ def payment_webhook():
         if status == 'SUCCESSFUL':
             user = User.query.get(transaction.user_id)
             if user:
-                # Simple logic: 1000 XAF = 100 pages
-                pages_to_add = (transaction.amount // 1000) * 100
+                # Pricing tiers (January 2026):
+                # 1000 FCFA = 500 pages (Student) - 2 months validity
+                # 2500 FCFA = 1500 pages (Campus Pro) - 2 months validity
+                # 5000 FCFA = 10000 pages (Enterprise) - 2 months validity
+                pages_to_add = 0
+                if transaction.amount == 1000:
+                    pages_to_add = 500
+                    user.plan = 'student'
+                elif transaction.amount == 2500:
+                    pages_to_add = 1500
+                    user.plan = 'campus'
+                elif transaction.amount == 5000:
+                    pages_to_add = 10000
+                    user.plan = 'enterprise'
+                else:
+                    # Fallback logic
+                    pages_to_add = (transaction.amount // 1000) * 500
+                    
                 if pages_to_add > 0:
                     user.pages_balance += pages_to_add
-                
-                # If amount > 5000, upgrade plan
-                if transaction.amount >= 5000:
-                    user.plan = 'pro'
                     
                 logger.info(f"User {user.username} upgraded via transaction {trans_id}")
                 
@@ -506,6 +567,34 @@ def check_admin():
     }), 200
 
 
+@app.route('/api/admin/institution-requests', methods=['GET'])
+@login_required
+def get_institution_requests():
+    """Get all institution requests (placeholder - no actual request model yet)"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized - Admin access required'}), 403
+    # Return empty list as placeholder - can be expanded with actual InstitutionRequest model
+    return jsonify([]), 200
+
+
+@app.route('/api/admin/documents', methods=['GET'])
+@login_required
+def get_all_documents():
+    """Get all documents for admin view"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized - Admin access required'}), 403
+    
+    docs = DocumentRecord.query.order_by(DocumentRecord.created_at.desc()).limit(100).all()
+    return jsonify([{
+        'id': d.id,
+        'filename': d.filename,
+        'original_filename': d.original_filename,
+        'created_at': d.created_at.isoformat() if d.created_at else None,
+        'job_id': d.job_id,
+        'user_id': d.user_id
+    } for d in docs]), 200
+
+
 @app.route('/api/auth/status', methods=['GET'])
 def auth_status():
     if current_user.is_authenticated:
@@ -521,6 +610,237 @@ def auth_status():
             'email': current_user.email
         }), 200
     return jsonify({'isAuthenticated': False}), 200
+
+
+# ============================================================
+# AI CHAT ENDPOINTS - DeepSeek Integration
+# ============================================================
+
+# DeepSeek API Configuration
+DEEPSEEK_API_KEY = "sk-4a857c0c76cf4db89fef65b871da982a"
+DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
+DEEPSEEK_MODEL = "deepseek-chat"
+
+# System prompt for the AI assistant
+AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing assistant. Follow these guidelines strictly:
+
+## FORMATTING RULES:
+1. Use HIERARCHICAL NUMBERING for all academic content:
+   - Main sections: 1.0, 2.0, 3.0, etc.
+   - Subsections: 1.1, 1.2, 1.3, etc.
+   - Sub-subsections: 1.1.1, 1.1.2, etc.
+2. Never use justified text alignment
+3. Use clear paragraph breaks between sections
+4. Bold section headings (e.g., **1.0 Introduction**)
+
+## DOCUMENT STRUCTURES:
+
+### DISSERTATION/THESIS (Max 5 Chapters):
+- **Chapter One: Introduction**
+  - 1.1 Background of the Study
+  - 1.2 Statement of the Problem
+  - 1.3 Research Questions/Objectives
+  - 1.4 Significance of the Study
+  - 1.5 Scope and Delimitation
+  - 1.6 Definition of Terms
+
+- **Chapter Two: Literature Review**
+  - 2.1 Theoretical Framework
+  - 2.2 Conceptual Framework
+  - 2.3 Review of Related Studies
+  - 2.4 Research Gap
+
+- **Chapter Three: Research Methodology**
+  - 3.1 Research Design
+  - 3.2 Area of Study
+  - 3.3 Population and Sampling
+  - 3.4 Data Collection Methods
+  - 3.5 Data Analysis Techniques
+  - 3.6 Ethical Considerations
+
+- **Chapter Four: Results and Discussion**
+  - 4.1 Data Presentation
+  - 4.2 Analysis of Findings
+  - 4.3 Discussion of Results
+
+- **Chapter Five: Summary, Conclusion and Recommendations**
+  - 5.1 Summary of Findings
+  - 5.2 Conclusion
+  - 5.3 Recommendations
+  - 5.4 Suggestions for Further Research
+
+### RESEARCH PROPOSAL (Chapters 1-3 + Extras):
+- **Chapter One: Introduction** (same as thesis)
+- **Chapter Two: Literature Review** (same as thesis)
+- **Chapter Three: Research Methodology** (same as thesis)
+- **Budget and Timeline**
+- **References**
+
+### ASSIGNMENT/ESSAY Structure:
+- **Introduction** (with thesis statement)
+- **Main Body** (numbered sections 1.0, 2.0, 3.0 with subsections)
+- **Conclusion**
+- **References**
+
+### PROJECT REPORT Structure:
+- Title Page
+- Abstract
+- Table of Contents
+- **1.0 Introduction**
+- **2.0 Literature Review**
+- **3.0 Methodology**
+- **4.0 Results/Findings**
+- **5.0 Discussion**
+- **6.0 Conclusion and Recommendations**
+- References
+- Appendices
+
+## WRITING STYLE:
+- Use formal academic language
+- Write in third person unless instructed otherwise
+- Be concise and precise
+- Support arguments with evidence
+- Use topic sentences for paragraphs
+- Maintain logical flow between sections
+
+## IMPORTANT NOTES:
+- Chapters should NOT exceed 5 for dissertations/theses
+- Always use hierarchical numbering (1.0, 1.1, 1.1.1)
+- Provide well-structured, smart, and coherent content
+- When asked to write, produce complete, ready-to-use content
+- Format headings with bold markers (**)
+
+Be professional, helpful, and produce high-quality academic content following these standards."""
+
+
+@app.route('/api/ai/chat', methods=['POST'])
+@allow_guest
+def ai_chat():
+    """AI chat endpoint with DeepSeek integration"""
+    import requests
+    
+    data = request.get_json()
+    message = data.get('message', '')
+    conversation = data.get('conversation', [])
+    
+    # Build messages array
+    messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
+    
+    # Add conversation history
+    for msg in conversation[-10:]:  # Keep last 10 messages for context
+        messages.append({
+            "role": msg.get('role', 'user'),
+            "content": msg.get('content', '')
+        })
+    
+    # Add current message
+    messages.append({"role": "user", "content": message})
+    
+    try:
+        response = requests.post(
+            DEEPSEEK_API_URL,
+            headers={
+                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": DEEPSEEK_MODEL,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 4096
+            },
+            timeout=60
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            ai_response = result['choices'][0]['message']['content']
+            return jsonify({'response': ai_response, 'success': True}), 200
+        else:
+            logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+            return jsonify({'error': f'AI service error: {response.status_code}', 'success': False}), 500
+            
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'AI service timeout. Please try again.', 'success': False}), 504
+    except Exception as e:
+        logger.error(f"AI chat error: {str(e)}")
+        return jsonify({'error': f'AI service error: {str(e)}', 'success': False}), 500
+
+
+@app.route('/api/ai/chat/stream', methods=['POST'])
+@allow_guest
+def ai_chat_stream():
+    """AI chat streaming endpoint with DeepSeek integration"""
+    import requests
+    
+    data = request.get_json()
+    message = data.get('message', '')
+    conversation = data.get('conversation', [])
+    
+    # Build messages array
+    messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
+    
+    # Add conversation history
+    for msg in conversation[-10:]:  # Keep last 10 messages for context
+        messages.append({
+            "role": msg.get('role', 'user'),
+            "content": msg.get('content', '')
+        })
+    
+    # Add current message
+    messages.append({"role": "user", "content": message})
+    
+    def generate():
+        try:
+            response = requests.post(
+                DEEPSEEK_API_URL,
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": DEEPSEEK_MODEL,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 4096,
+                    "stream": True
+                },
+                stream=True,
+                timeout=120
+            )
+            
+            if response.status_code != 200:
+                yield f"data: {json.dumps({'error': f'AI service error: {response.status_code}'})}\n\n"
+                return
+            
+            for line in response.iter_lines():
+                if line:
+                    line_text = line.decode('utf-8')
+                    if line_text.startswith('data: '):
+                        data_str = line_text[6:]
+                        if data_str == '[DONE]':
+                            yield f"data: {json.dumps({'done': True})}\n\n"
+                            break
+                        try:
+                            chunk = json.loads(data_str)
+                            if 'choices' in chunk and len(chunk['choices']) > 0:
+                                delta = chunk['choices'][0].get('delta', {})
+                                content = delta.get('content', '')
+                                if content:
+                                    yield f"data: {json.dumps({'content': content})}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+                            
+        except requests.exceptions.Timeout:
+            yield f"data: {json.dumps({'error': 'AI service timeout'})}\n\n"
+        except Exception as e:
+            logger.error(f"AI stream error: {str(e)}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        
+        yield f"data: {json.dumps({'done': True})}\n\n"
+    
+    return Response(generate(), mimetype='text/event-stream')
+
 
 # Configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1095,6 +1415,404 @@ class ImageInserter:
             para.add_run(f"[IMAGE: {image_id}]")
 
 
+# ============================================================
+# SHAPE/FLOWCHART EXTRACTION AND REINSERTION SYSTEM
+# ============================================================
+
+class ShapeExtractor:
+    """
+    Extract shapes, flowcharts, arrows, and drawing elements from Word documents.
+    Preserves position, dimensions, formatting, and groupings.
+    
+    Handles:
+    - WordprocessingML Shapes (wsp) - rectangles, ovals, arrows, etc.
+    - Connector Shapes (cxnSp) - lines connecting shapes
+    - Group Shapes (grpSp) - grouped shape elements
+    - Drawing Canvas (wpc) - drawing canvas containers
+    - VML Shapes (legacy) - older shape format
+    """
+    
+    def __init__(self):
+        self.shapes = []
+        self.shape_count = 0
+        self.extracted_shape_ids = set()  # Track extracted shapes to prevent duplicates
+        
+    def extract_all_shapes(self, doc_path):
+        """
+        Extract all shapes and drawing elements from a Word document.
+        
+        Args:
+            doc_path: Path to the .docx file
+            
+        Returns:
+            list: List of shape metadata dictionaries containing XML and position info
+        """
+        self.shapes = []
+        self.shape_count = 0
+        self.extracted_shape_ids = set()
+        
+        try:
+            doc = Document(doc_path)
+            paragraph_index = 0
+            
+            # Process document body elements in order
+            for element in doc.element.body:
+                if element.tag.endswith('p'):
+                    # This is a paragraph - check for shapes/drawings
+                    for para in doc.paragraphs:
+                        if para._element is element:
+                            shapes_in_para = self._extract_shapes_from_paragraph(
+                                para, paragraph_index
+                            )
+                            self.shapes.extend(shapes_in_para)
+                            paragraph_index += 1
+                            break
+                            
+                elif element.tag.endswith('tbl'):
+                    # Check tables for shapes
+                    table_index = 0
+                    for table in doc.tables:
+                        if table._element is element:
+                            shapes_in_table = self._extract_shapes_from_table(
+                                table, table_index
+                            )
+                            self.shapes.extend(shapes_in_table)
+                            break
+                        table_index += 1
+            
+            logger.info(f"Extracted {len(self.shapes)} shapes/drawings from document")
+            return self.shapes
+            
+        except Exception as e:
+            logger.error(f"Error extracting shapes: {str(e)}")
+            return []
+    
+    def _extract_shapes_from_paragraph(self, para, para_index):
+        """Extract shapes and drawing elements from a paragraph."""
+        shapes = []
+        
+        try:
+            for run in para.runs:
+                # Look for drawing elements containing shapes
+                drawings = run._element.findall('.//' + qn('w:drawing'))
+                
+                for drawing in drawings:
+                    # Check if this drawing contains shapes (not just images)
+                    # Look for wsp (WordprocessingML Shape)
+                    wsp_elements = drawing.findall('.//' + qn('wps:wsp'))
+                    grp_elements = drawing.findall('.//' + qn('wpg:grpSp'))
+                    cxn_elements = drawing.findall('.//' + qn('wps:cxnSp'))
+                    
+                    # Also check for shapes in mc:AlternateContent
+                    mc_alternate = drawing.findall('.//' + qn('mc:AlternateContent'))
+                    for mc in mc_alternate:
+                        wsp_elements.extend(mc.findall('.//' + qn('wps:wsp')))
+                        grp_elements.extend(mc.findall('.//' + qn('wpg:grpSp')))
+                        cxn_elements.extend(mc.findall('.//' + qn('wps:cxnSp')))
+                    
+                    has_shapes = wsp_elements or grp_elements or cxn_elements
+                    
+                    # Skip if this is just an image (has blip but no shapes)
+                    has_blip = drawing.findall('.//' + qn('a:blip'))
+                    if has_blip and not has_shapes:
+                        continue  # This is an image, handled by ImageExtractor
+                    
+                    if has_shapes:
+                        # Get the complete drawing XML to preserve all formatting
+                        from copy import deepcopy
+                        drawing_copy = deepcopy(drawing)
+                        
+                        # Get positioning info
+                        inline = drawing.find('.//' + qn('wp:inline'))
+                        anchor = drawing.find('.//' + qn('wp:anchor'))
+                        
+                        position_type = 'inline' if inline is not None else 'anchor'
+                        position_data = self._get_position_data(inline if inline is not None else anchor)
+                        
+                        shape_meta = {
+                            'shape_id': f'shape_{self.shape_count:04d}',
+                            'position_type': position_type,
+                            'paragraph_index': para_index,
+                            'table_location': None,
+                            'drawing_xml': drawing_copy,  # Store complete drawing element
+                            'run_xml': deepcopy(run._element),  # Store the run context
+                            'position_data': position_data,
+                            'shape_count': len(wsp_elements) + len(grp_elements) + len(cxn_elements),
+                            'has_group': len(grp_elements) > 0,
+                            'has_connectors': len(cxn_elements) > 0,
+                        }
+                        shapes.append(shape_meta)
+                        self.shape_count += 1
+                        logger.info(f"Extracted shape group {shape_meta['shape_id']} at paragraph {para_index} "
+                                  f"(shapes: {len(wsp_elements)}, groups: {len(grp_elements)}, connectors: {len(cxn_elements)})")
+                
+                # Also check for VML shapes (legacy format)
+                pict_elements = run._element.findall('.//' + qn('w:pict'))
+                for pict in pict_elements:
+                    from copy import deepcopy
+                    pict_copy = deepcopy(pict)
+                    
+                    shape_meta = {
+                        'shape_id': f'shape_{self.shape_count:04d}',
+                        'position_type': 'vml',
+                        'paragraph_index': para_index,
+                        'table_location': None,
+                        'pict_xml': pict_copy,
+                        'run_xml': deepcopy(run._element),
+                        'position_data': {},
+                        'shape_count': 1,
+                        'has_group': False,
+                        'has_connectors': False,
+                        'is_vml': True,
+                    }
+                    shapes.append(shape_meta)
+                    self.shape_count += 1
+                    logger.info(f"Extracted VML shape {shape_meta['shape_id']} at paragraph {para_index}")
+                    
+        except Exception as e:
+            logger.warning(f"Error extracting shapes from paragraph {para_index}: {str(e)}")
+        
+        return shapes
+    
+    def _extract_shapes_from_table(self, table, table_index):
+        """Extract shapes from table cells."""
+        shapes = []
+        
+        try:
+            for row_idx, row in enumerate(table.rows):
+                for cell_idx, cell in enumerate(row.cells):
+                    for para_idx, para in enumerate(cell.paragraphs):
+                        for run in para.runs:
+                            drawings = run._element.findall('.//' + qn('w:drawing'))
+                            
+                            for drawing in drawings:
+                                wsp_elements = drawing.findall('.//' + qn('wps:wsp'))
+                                grp_elements = drawing.findall('.//' + qn('wpg:grpSp'))
+                                cxn_elements = drawing.findall('.//' + qn('wps:cxnSp'))
+                                
+                                has_shapes = wsp_elements or grp_elements or cxn_elements
+                                has_blip = drawing.findall('.//' + qn('a:blip'))
+                                
+                                if has_blip and not has_shapes:
+                                    continue
+                                
+                                if has_shapes:
+                                    from copy import deepcopy
+                                    drawing_copy = deepcopy(drawing)
+                                    
+                                    shape_meta = {
+                                        'shape_id': f'shape_{self.shape_count:04d}',
+                                        'position_type': 'table',
+                                        'paragraph_index': None,
+                                        'table_location': {
+                                            'table_index': table_index,
+                                            'row_index': row_idx,
+                                            'cell_index': cell_idx,
+                                            'para_index': para_idx,
+                                        },
+                                        'drawing_xml': drawing_copy,
+                                        'run_xml': deepcopy(run._element),
+                                        'position_data': {},
+                                        'shape_count': len(wsp_elements) + len(grp_elements) + len(cxn_elements),
+                                        'has_group': len(grp_elements) > 0,
+                                        'has_connectors': len(cxn_elements) > 0,
+                                    }
+                                    shapes.append(shape_meta)
+                                    self.shape_count += 1
+                                    logger.info(f"Extracted table shape {shape_meta['shape_id']} at table {table_index}")
+                            
+                            # Check for VML shapes
+                            pict_elements = run._element.findall('.//' + qn('w:pict'))
+                            for pict in pict_elements:
+                                from copy import deepcopy
+                                shape_meta = {
+                                    'shape_id': f'shape_{self.shape_count:04d}',
+                                    'position_type': 'table_vml',
+                                    'paragraph_index': None,
+                                    'table_location': {
+                                        'table_index': table_index,
+                                        'row_index': row_idx,
+                                        'cell_index': cell_idx,
+                                        'para_index': para_idx,
+                                    },
+                                    'pict_xml': deepcopy(pict),
+                                    'run_xml': deepcopy(run._element),
+                                    'position_data': {},
+                                    'shape_count': 1,
+                                    'has_group': False,
+                                    'has_connectors': False,
+                                    'is_vml': True,
+                                }
+                                shapes.append(shape_meta)
+                                self.shape_count += 1
+                                
+        except Exception as e:
+            logger.warning(f"Error extracting shapes from table {table_index}: {str(e)}")
+        
+        return shapes
+    
+    def _get_position_data(self, pos_element):
+        """Extract positioning data from inline or anchor element."""
+        position_data = {}
+        
+        if pos_element is None:
+            return position_data
+            
+        try:
+            # Get extent (dimensions)
+            extent = pos_element.find(qn('wp:extent'))
+            if extent is not None:
+                position_data['width_emu'] = int(extent.get('cx', 0))
+                position_data['height_emu'] = int(extent.get('cy', 0))
+            
+            # For anchor elements, get position offsets
+            if pos_element.tag.endswith('anchor'):
+                # Horizontal position
+                pos_h = pos_element.find(qn('wp:positionH'))
+                if pos_h is not None:
+                    position_data['h_relative_from'] = pos_h.get('relativeFrom', 'column')
+                    pos_offset = pos_h.find(qn('wp:posOffset'))
+                    if pos_offset is not None and pos_offset.text:
+                        position_data['h_offset'] = int(pos_offset.text)
+                
+                # Vertical position
+                pos_v = pos_element.find(qn('wp:positionV'))
+                if pos_v is not None:
+                    position_data['v_relative_from'] = pos_v.get('relativeFrom', 'paragraph')
+                    pos_offset = pos_v.find(qn('wp:posOffset'))
+                    if pos_offset is not None and pos_offset.text:
+                        position_data['v_offset'] = int(pos_offset.text)
+                
+                # Wrap type
+                for wrap_type in ['wrapNone', 'wrapSquare', 'wrapTight', 'wrapThrough', 'wrapTopAndBottom']:
+                    wrap = pos_element.find(qn(f'wp:{wrap_type}'))
+                    if wrap is not None:
+                        position_data['wrap_type'] = wrap_type
+                        break
+                        
+        except Exception as e:
+            logger.warning(f"Error getting position data: {str(e)}")
+        
+        return position_data
+    
+    def get_shapes_by_position(self):
+        """Get shapes organized by their position in document."""
+        position_map = {}
+        
+        for shape in self.shapes:
+            if shape['position_type'] in ['inline', 'anchor', 'vml']:
+                key = ('paragraph', shape['paragraph_index'])
+            elif shape['position_type'] in ['table', 'table_vml']:
+                loc = shape['table_location']
+                key = ('table', loc['table_index'], loc['row_index'], loc['cell_index'])
+            else:
+                key = ('other', shape.get('paragraph_index', 0))
+            
+            if key not in position_map:
+                position_map[key] = []
+            position_map[key].append(shape)
+        
+        return position_map
+
+
+class ShapeInserter:
+    """
+    Insert shapes back into Word documents at their original positions.
+    Preserves all formatting, positioning, and groupings.
+    """
+    
+    def __init__(self, doc, shapes):
+        """
+        Initialize with document and extracted shapes.
+        
+        Args:
+            doc: python-docx Document object
+            shapes: List of shape metadata dicts from ShapeExtractor
+        """
+        self.doc = doc
+        self.shapes = shapes
+        self.shape_lookup = {shape['shape_id']: shape for shape in shapes}
+        
+    def insert_shape(self, shape_id, paragraph=None):
+        """
+        Insert a shape/drawing back into the document.
+        
+        Args:
+            shape_id: The ID of the shape to insert
+            paragraph: Paragraph object to insert into (optional, creates new if None)
+            
+        Returns:
+            The paragraph containing the shape
+        """
+        if shape_id not in self.shape_lookup:
+            logger.warning(f"Shape {shape_id} not found in lookup")
+            return None
+        
+        shape_data = self.shape_lookup[shape_id]
+        
+        try:
+            # Create or use existing paragraph
+            if paragraph is None:
+                para = self.doc.add_paragraph()
+            else:
+                para = paragraph
+            
+            # Create a new run to hold the shape
+            run = para.add_run()
+            
+            # Check if this is a VML shape or modern drawing
+            if shape_data.get('is_vml'):
+                # Insert VML pict element
+                pict_xml = shape_data['pict_xml']
+                run._element.append(pict_xml)
+                logger.info(f"Inserted VML shape {shape_id}")
+            else:
+                # Insert modern drawing element
+                drawing_xml = shape_data['drawing_xml']
+                run._element.append(drawing_xml)
+                logger.info(f"Inserted drawing shape {shape_id}")
+            
+            return para
+            
+        except Exception as e:
+            logger.error(f"Error inserting shape {shape_id}: {str(e)}")
+            # Add placeholder text
+            para = self.doc.add_paragraph() if paragraph is None else paragraph
+            para.add_run(f"[SHAPE: {shape_id} - Could not insert]")
+            return para
+    
+    def insert_shape_in_table_cell(self, shape_id, cell):
+        """
+        Insert a shape into a table cell.
+        
+        Args:
+            shape_id: The ID of the shape to insert
+            cell: The table cell to insert into
+        """
+        if shape_id not in self.shape_lookup:
+            logger.warning(f"Shape {shape_id} not found for table insertion")
+            return
+        
+        shape_data = self.shape_lookup[shape_id]
+        
+        try:
+            # Get or create paragraph in cell
+            para = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
+            run = para.add_run()
+            
+            if shape_data.get('is_vml'):
+                run._element.append(shape_data['pict_xml'])
+            else:
+                run._element.append(shape_data['drawing_xml'])
+            
+            logger.info(f"Inserted shape {shape_id} in table cell")
+            
+        except Exception as e:
+            logger.error(f"Error inserting table shape {shape_id}: {str(e)}")
+            para = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
+            para.add_run(f"[SHAPE: {shape_id}]")
+
+
 import re
 
 # --- Hierarchy Correction Utility ---
@@ -1531,13 +2249,25 @@ class HeadingNumberer:
         Determine if this heading should be a subsection of the previous heading.
         Uses semantic analysis to detect parent-child relationships.
         
+        IMPORTANT: If the text already has a numbered hierarchy, this function
+        returns False to preserve the original structure.
+        
         Returns:
             bool: True if this should be a subsection
         """
+        # CRITICAL FIX: If text already has numbering, NEVER treat it as subsection candidate
+        # This preserves the original document structure
+        existing_num, _ = self.extract_existing_number(text)
+        if existing_num:
+            # Sync counters to the existing number and return False
+            # This ensures the original hierarchy is preserved
+            return False
+        
         text_norm = self._normalize_text(text)
         
         # Check for keywords that indicate a NEW main section (should NOT be subsection)
         # These are full section titles, not partial matches
+        # EXPANDED LIST to include Chapter One typical sections that should remain independent
         main_section_keywords = [
             'chapter summary', 'summary of the chapter', 'conclusion of the chapter',
             'delimitation of the study', 'limitations of the study', 'delimitations',
@@ -1551,6 +2281,23 @@ class HeadingNumberer:
             'data presentation', 'data analysis and interpretation',
             'summary conclusion and recommendation', 'summary and conclusion',
             'recommendations for further', 'recommendations',
+            # CHAPTER ONE SECTIONS - these should remain as independent sections
+            'research questions', 'research question',
+            'research objectives', 'research objective', 'objectives of the study',
+            'research hypothesis', 'research hypotheses', 'hypothesis of the study',
+            'justification of the study', 'justification of study',
+            'significance of study',
+            'operational definition of terms', 'definition of terms', 'definition of key terms',
+            'background of the study', 'background to the study', 'background of study',
+            'purpose of the study', 'purpose of study',
+            'scope and delimitation', 'scope of study',
+            'limitation of the study', 'limitations of study',
+            'organization of the study', 'organization of study',
+            # Sub-categories that should NOT be merged into parents
+            'main research objective', 'specific research objective', 'specific objectives',
+            'main research question', 'specific research question', 'specific questions',
+            'main hypothesis', 'specific hypothesis', 'null hypothesis', 'alternative hypothesis',
+            'general objective', 'general objectives',
         ]
         for keyword in main_section_keywords:
             if keyword in text_norm:
@@ -1641,14 +2388,15 @@ class HeadingNumberer:
     def already_has_number(self, text):
         """
         Check if heading already has a hierarchical number.
-        Matches patterns like: 1.1, 2.1.1, A.1, etc.
+        Matches patterns like: 1.1, 2.1.1, 1.1.1.1.1, A.1, etc. up to 10+ levels.
         """
         clean = re.sub(r'^#+\s*', '', text).strip()
-        # Match: "1.2 Title" or "1.2.3 Title" or "A.1 Title"
+        # Match: "1.2 Title" or "1.2.3.4.5 Title" or "A.1 Title" - supports up to 10+ levels
         return bool(
-            re.match(r'^(\d+\.)+\d+[\.)]?\s+', clean)
-            or re.match(r'^[A-Z]\.(\d+\.)*\d+[\.)]?\s+', clean)
-            or re.match(r'^\d+\.[A-Za-z][\.)]?\s+', clean)
+            re.match(r'^\d+(?:\.\d+){1,10}[\.)]?\s+', clean)  # Deep hierarchy (1.1.1.1...)
+            or re.match(r'^[A-Z](?:\.\d+){1,10}[\.)]?\s+', clean)  # Appendix with deep hierarchy
+            or re.match(r'^\d+\.[A-Za-z][\.)]?\s+', clean)  # Mixed numeric + letter
+            or re.match(r'^\d+\.\s+', clean)  # Single level (1.)
         )
     
     def extract_existing_number(self, text):
@@ -1900,26 +2648,43 @@ class HeadingNumberer:
         self.last_heading_text = clean_text
         self.last_heading_normalized = self._normalize_text(clean_text)
         
-        # Numbering decision: preserve existing numbering unless a controlled correction is allowed.
+        # Numbering decision: ALWAYS preserve existing numbering when present
+        # This is critical for documents that already have proper hierarchies like 1.1, 1.1.1, 1.1.1.1, etc.
         if existing_num:
-            if self.policy.preserve_existing_numbering and not self._should_correct_existing_number(existing_num, new_number, target_level):
+            # Check if existing number has deep hierarchy (3+ levels like 1.1.1)
+            existing_depth = existing_num.count('.') + 1
+            
+            # ALWAYS preserve deep hierarchies (3+ levels) - never renumber them
+            if existing_depth >= 3 or self.policy.preserve_existing_numbering:
+                result['number'] = existing_num
+                result['numbered'] = f"{'#' * md_level + ' ' if md_level > 0 else ''}{existing_num} {title}"
+                self._sync_counters_from_existing(existing_num)
+                # Determine level from existing number depth
+                result['level'] = min(existing_depth, 10)
+                self.last_numbers_by_level[result['level']] = existing_num
+                return result
+            
+            # For shallow hierarchies, only correct if policy allows AND it's clearly wrong
+            if not self._should_correct_existing_number(existing_num, new_number, target_level):
                 result['number'] = existing_num
                 result['numbered'] = f"{'#' * md_level + ' ' if md_level > 0 else ''}{existing_num} {title}"
                 self._sync_counters_from_existing(existing_num)
                 self.last_numbers_by_level[target_level] = existing_num
                 return result
+            
             if existing_num != new_number:
                 logger.info(
                     "Heading renumbered (correction): '%s' -> '%s'",
                     text,
                     f"{new_number} {title}",
                 )
-        if existing_num != new_number:
-            # Reconstruct with markdown markers
+        
+        if not existing_num and new_number:
+            # Only add new numbering if there was no existing number
             prefix = '#' * md_level + ' ' if md_level > 0 else ''
             result['numbered'] = f"{prefix}{new_number} {title}"
             result['was_renumbered'] = True
-            logger.info("Heading renumbered: '%s' -> '%s'", text, result['numbered'])
+            logger.info("Heading numbered (new): '%s' -> '%s'", text, result['numbered'])
 
         self.last_numbers_by_level[target_level] = result['number'] or new_number
         
@@ -7286,642 +8051,8 @@ class PatternEngine:
         return results
 
 
-# ============================================================================
-# COVER PAGE HANDLER - December 30, 2025
-# Detects cover pages and extracts info from FIRST PAGE ONLY
-# Creates a standardized cover page using template layout
-# ============================================================================
 
-class CoverPageHandler:
-    """
-    Detect and extract cover page information from academic documents.
-    Only extracts from the first page (before DECLARATION/CERTIFICATION).
-    Extracts text from shapes/textboxes for topics.
-    """
-    
-    # Path to logo image
-    LOGO_PATH = os.path.join(os.path.dirname(__file__), 'coverpage_template', 'cover_logo.png')
-    
-    # Default academic year if date not found
-    DEFAULT_DATE = '2025/2026'
-    
-    def __init__(self):
-        self.extracted_data = {
-            'university': 'THE UNIVERSITY OF BAMENDA',
-            'faculty': None,
-            'department': None,
-            'topic': None,
-            'degree': None,
-            'name': None,
-            'registration_number': None,
-            'supervisor': None,
-            'co_supervisor': None,
-            'field_supervisor': None,
-            'month_year': None
-        }
-        self.has_cover_page = False
-        self.cover_page_end_index = 0
-        self.shape_texts = []  # Text extracted from shapes/textboxes
-    
-    def _extract_text_from_shapes(self, doc):
-        """
-        Extract text from shapes and textboxes in the document.
-        Topics are often placed inside shapes/textboxes on cover pages.
-        
-        Args:
-            doc: python-docx Document object
-            
-        Returns:
-            list: List of text strings found in shapes
-        """
-        shape_texts = []
-        
-        try:
-            # Define namespaces for parsing
-            namespaces = {
-                'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-                'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
-                'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
-                'wps': 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
-                'v': 'urn:schemas-microsoft-com:vml',
-                'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
-                'w14': 'http://schemas.microsoft.com/office/word/2010/wordml',
-            }
-            
-            # Search in document body for shapes
-            body = doc.element.body
-            
-            # Find all text in wps:txbx (textbox content in shapes)
-            for txbx in body.iter('{http://schemas.microsoft.com/office/word/2010/wordprocessingShape}txbx'):
-                for txbxContent in txbx.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent'):
-                    texts = []
-                    for t in txbxContent.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
-                        if t.text:
-                            texts.append(t.text)
-                    if texts:
-                        full_text = ''.join(texts).strip()
-                        if full_text and len(full_text) > 5:
-                            shape_texts.append(full_text)
-            
-            # Also check for VML textboxes (older format)
-            for textbox in body.iter('{urn:schemas-microsoft-com:vml}textbox'):
-                for txbxContent in textbox.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent'):
-                    texts = []
-                    for t in txbxContent.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
-                        if t.text:
-                            texts.append(t.text)
-                    if texts:
-                        full_text = ''.join(texts).strip()
-                        if full_text and len(full_text) > 5:
-                            shape_texts.append(full_text)
-            
-            # Also check for drawing textboxes
-            for drawing in body.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}drawing'):
-                for t in drawing.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}t'):
-                    if t.text:
-                        text = t.text.strip()
-                        if text and len(text) > 5:
-                            shape_texts.append(text)
-            
-            # Alternative: iterate through inline shapes
-            for p in body.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p'):
-                for pict in p.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pict'):
-                    for shape in pict.iter('{urn:schemas-microsoft-com:vml}shape'):
-                        for textbox in shape.iter('{urn:schemas-microsoft-com:vml}textbox'):
-                            texts = []
-                            for t in textbox.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
-                                if t.text:
-                                    texts.append(t.text)
-                            if texts:
-                                full_text = ''.join(texts).strip()
-                                if full_text and len(full_text) > 5:
-                                    shape_texts.append(full_text)
-            
-            logger.info(f"Extracted {len(shape_texts)} text items from shapes/textboxes")
-            
-        except Exception as e:
-            logger.warning(f"Error extracting text from shapes: {e}")
-        
-        return shape_texts
-    
-    def detect_and_extract(self, doc):
-        """
-        Detect cover page and extract info from FIRST PAGE ONLY.
-        Stops at DECLARATION, CERTIFICATION, or similar markers.
-        Also extracts text from shapes/textboxes for topics.
-        
-        Args:
-            doc: python-docx Document object
-            
-        Returns:
-            tuple: (has_cover_page, extracted_data, cover_page_end_index)
-        """
-        paragraphs = doc.paragraphs
-        cover_indicators = 0
-        
-        # First, extract text from shapes (topics are often in shapes)
-        self.shape_texts = self._extract_text_from_shapes(doc)
-        
-        # Stop markers - these indicate content AFTER cover page
-        stop_markers = ['DECLARATION', 'CERTIFICATION', 'DEDICATION', 'ACKNOWLEDGEMENT', 
-                        'ABSTRACT', 'TABLE OF CONTENTS', 'ALL RIGHTS RESERVED', 'RIGHTS RESERVED']
-        
-        # Find where cover page ends (before declaration/certification)
-        # Also stop at ©Copyright line which indicates end of cover page
-        cover_end = 0
-        for i, para in enumerate(paragraphs[:80]):
-            text = para.text.strip().upper()
-            
-            # Check for copyright symbol - indicates end of cover page
-            if '©' in para.text or 'COPYRIGHT' in text:
-                cover_end = i
-                break
-            
-            # Check for stop markers - these indicate end of cover page
-            for marker in stop_markers:
-                if text == marker or text.startswith(marker + ' '):
-                    cover_end = i
-                    break
-            if cover_end > 0:
-                break
-        
-        # If no stop marker found, assume first 45 paragraphs max
-        if cover_end == 0:
-            cover_end = 45
-        
-        # Collect all paragraph texts for better name detection
-        all_cover_texts = [para.text.strip() for para in paragraphs[:cover_end]]
-        
-        # Extract from first page paragraphs only
-        for i, para in enumerate(paragraphs[:cover_end]):
-            text = para.text.strip()
-            text_upper = text.upper()
-            is_bold = any(run.bold for run in para.runs if run.bold)
-            
-            # University name
-            if 'UNIVERSITY OF BAMENDA' in text_upper:
-                cover_indicators += 3
-                self.extracted_data['university'] = 'THE UNIVERSITY OF BAMENDA'
-            
-            # Faculty/Institute detection
-            if not self.extracted_data['faculty']:
-                if 'HIGHER INSTITUTE OF COMMERCE AND MANAGEMENT' in text_upper:
-                    self.extracted_data['faculty'] = 'HIGHER INSTITUTE OF COMMERCE AND MANAGEMENT'
-                    cover_indicators += 2
-                elif 'NATIONAL HIGHER POLYTECHNIC INSTITUTE' in text_upper:
-                    self.extracted_data['faculty'] = 'NATIONAL HIGHER POLYTECHNIC INSTITUTE'
-                    cover_indicators += 2
-                elif 'HIGHER TEACHERS TRAINING COLLEGE' in text_upper or 'HIGHER TEACHER TRAINING COLLEGE' in text_upper:
-                    self.extracted_data['faculty'] = 'HIGHER TEACHERS TRAINING COLLEGE'
-                    cover_indicators += 2
-                elif 'ECOLE NORMALE' in text_upper:
-                    self.extracted_data['faculty'] = text.upper()
-                    cover_indicators += 2
-            
-            # Department
-            dept_match = re.search(r'DEPARTMENT\s+OF\s+([A-Z][A-Z\s&]+)', text_upper)
-            if dept_match and not self.extracted_data['department']:
-                # Clean up - stop at common words
-                dept = dept_match.group(1).strip()
-                # Truncate at "IN THE" or similar
-                for stop_word in [' IN THE ', ' OF THE ', ' FOR THE ']:
-                    if stop_word in dept:
-                        dept = dept.split(stop_word)[0].strip()
-                self.extracted_data['department'] = dept
-                cover_indicators += 2
-            
-            # Submission statement - extract faculty and degree
-            if 'DISSERTATION SUBMITTED' in text_upper or 'THESIS SUBMITTED' in text_upper or 'PROJECT SUBMITTED' in text_upper:
-                cover_indicators += 3
-                self._extract_from_submission(text)
-            
-            # Name after BY
-            if text_upper == 'BY' or text_upper.startswith('PRESENTED BY'):
-                cover_indicators += 2
-                self._extract_name_after_by(paragraphs, i, cover_end)
-            
-            # Registration number
-            reg_match = re.search(r'REGISTRATION\s+NUMBER[:\s]+([A-Z0-9]+)', text_upper)
-            if reg_match and not self.extracted_data['registration_number']:
-                self.extracted_data['registration_number'] = reg_match.group(1).strip()
-                cover_indicators += 2
-            
-            # Supervisor
-            if 'SUPERVISOR' in text_upper and 'CO' not in text_upper:
-                cover_indicators += 1
-                self._extract_supervisor(paragraphs, i, cover_end, is_co=False)
-            
-            # Co-supervisor
-            if 'CO-SUPERVISOR' in text_upper or 'CO - SUPERVISOR' in text_upper or 'CO SUPERVISOR' in text_upper:
-                self._extract_supervisor(paragraphs, i, cover_end, is_co=True)
-            
-            # Field supervisor
-            if 'FIELD SUPERVISOR' in text_upper or 'FIELD-SUPERVISOR' in text_upper:
-                self._extract_field_supervisor(paragraphs, cover_end)
-            
-            # Date (month year) - also check for academic year format
-            date_match = re.search(
-                r'\b(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s*,?\s*(\d{4})\b',
-                text_upper
-            )
-            if date_match and len(text) < 30 and not self.extracted_data['month_year']:
-                self.extracted_data['month_year'] = f"{date_match.group(1).title()} {date_match.group(2)}"
-                cover_indicators += 1
-            
-            # Also check for year format like "2024/2025" or "2025"
-            if not self.extracted_data['month_year']:
-                year_match = re.search(r'\b(20\d{2})\s*/\s*(20\d{2})\b', text)
-                if year_match:
-                    self.extracted_data['month_year'] = f"{year_match.group(1)}/{year_match.group(2)}"
-                    cover_indicators += 1
-                elif re.match(r'^\s*20\d{2}\s*$', text):
-                    self.extracted_data['month_year'] = text.strip()
-                    cover_indicators += 1
-        
-        # Check if we have enough indicators for a cover page
-        if cover_indicators >= 5:
-            self.has_cover_page = True
-            self.cover_page_end_index = cover_end
-            
-            # Second pass: find topic (longest bold centered text or from shapes)
-            self._extract_topic(paragraphs[:cover_end])
-            
-            # Third pass: comprehensive name extraction if not found
-            if not self.extracted_data['name']:
-                self._extract_name_comprehensive(paragraphs, cover_end)
-                
-            # Fourth pass: check shapes for name if still not found
-            if not self.extracted_data['name']:
-                self._extract_name_from_shapes()
-            
-            # Fifth pass: field supervisor if not found
-            if not self.extracted_data['field_supervisor']:
-                self._extract_field_supervisor(paragraphs, cover_end)
-            
-            # Set default date if not found
-            if not self.extracted_data['month_year']:
-                self.extracted_data['month_year'] = self.DEFAULT_DATE
-            
-            logger.info(f"Cover page detected with {cover_indicators} indicators, ends at index {self.cover_page_end_index}")
-            logger.info(f"Extracted data: {self.extracted_data}")
-        
-        return self.has_cover_page, self.extracted_data, self.cover_page_end_index
-    
-    def _extract_from_submission(self, text):
-        """Extract faculty, department, degree from submission statement"""
-        text_upper = text.upper()
-        
-        # Extract faculty from submission
-        if not self.extracted_data['faculty']:
-            if 'HIGHER INSTITUTE OF COMMERCE AND MANAGEMENT' in text_upper:
-                self.extracted_data['faculty'] = 'HIGHER INSTITUTE OF COMMERCE AND MANAGEMENT'
-            elif 'NATIONAL HIGHER POLYTECHNIC INSTITUTE' in text_upper:
-                self.extracted_data['faculty'] = 'NATIONAL HIGHER POLYTECHNIC INSTITUTE'
-            else:
-                # Try generic pattern
-                match = re.search(r'(HIGHER\s+INSTITUTE\s+OF\s+[A-Z]+(?:\s+AND\s+[A-Z]+)?)', text_upper)
-                if match:
-                    self.extracted_data['faculty'] = match.group(1)
-        
-        # Extract department if not found
-        if not self.extracted_data['department']:
-            match = re.search(r'DEPARTMENT\s+OF\s+([^,]+),', text, re.IGNORECASE)
-            if match:
-                dept = match.group(1).strip().upper()
-                self.extracted_data['department'] = dept
-        
-        # Extract degree (MBA, M.Eng, M.Sc, etc.)
-        if not self.extracted_data['degree']:
-            # Look for degree in parentheses like (MBA) or (M.Eng)
-            match = re.search(r'\(([A-Z]\.?[A-Za-z\.]+)\)', text)
-            if match:
-                self.extracted_data['degree'] = match.group(1)
-            else:
-                # Look for Master's, Bachelor's, etc.
-                match = re.search(r"(MASTER'?S?|BACHELOR'?S?|DOCTORATE|PHD|PH\.D)", text_upper)
-                if match:
-                    self.extracted_data['degree'] = match.group(1).title()
-    
-    def _extract_name_after_by(self, paragraphs, by_index, max_index):
-        """Extract author name from paragraphs after BY - improved patterns"""
-        if self.extracted_data['name']:
-            return
-        
-        for j in range(1, 6):  # Check more paragraphs
-            if by_index + j < min(len(paragraphs), max_index):
-                para = paragraphs[by_index + j]
-                text = para.text.strip()
-                is_bold = any(run.bold for run in para.runs if run.bold)
-                
-                # Skip empty or short text
-                if not text or len(text) < 4:
-                    continue
-                
-                # Skip if it's registration number line
-                if 'REGISTRATION' in text.upper():
-                    continue
-                
-                # Skip if contains supervisor keywords
-                if 'SUPERVISOR' in text.upper():
-                    continue
-                
-                # Skip date patterns
-                if re.match(r'^(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)', text.upper()):
-                    continue
-                
-                # Name is usually in CAPS or bold
-                if text.isupper() or is_bold:
-                    # Clean up the name
-                    name = text.replace('**', '').strip()
-                    # Remove any trailing codes containing digits (like UBA23CP043)
-                    name = re.sub(r'\s+[A-Z]*\d+[A-Z0-9]*$', '', name)
-                    # Remove any matricule or ID patterns
-                    name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', name)
-                    
-                    # Validate: should have at least 2 words (first and last name)
-                    if len(name.split()) >= 2 and len(name) >= 5:
-                        self.extracted_data['name'] = name
-                        return
-    
-    def _extract_name_comprehensive(self, paragraphs, max_index):
-        """Comprehensive name extraction - looks for name patterns across cover page"""
-        if self.extracted_data['name']:
-            return
-        
-        # Name patterns to look for
-        name_indicators = []
-        
-        for i, para in enumerate(paragraphs[:max_index]):
-            text = para.text.strip()
-            text_upper = text.upper()
-            is_bold = any(run.bold for run in para.runs if run.bold)
-            
-            # Skip empty text
-            if not text or len(text) < 4:
-                continue
-            
-            # Look for "BY" followed by name
-            if text_upper == 'BY' or 'PRESENTED BY' in text_upper or 'SUBMITTED BY' in text_upper:
-                # Check next few paragraphs
-                for j in range(1, 5):
-                    if i + j < max_index:
-                        next_para = paragraphs[i + j]
-                        next_text = next_para.text.strip()
-                        next_upper = next_text.upper()
-                        
-                        if not next_text or len(next_text) < 5:
-                            continue
-                        
-                        # Skip non-name indicators
-                        if any(skip in next_upper for skip in ['REGISTRATION', 'SUPERVISOR', 'DEPARTMENT', 'FACULTY']):
-                            continue
-                        
-                        # Check if looks like a name (all caps, 2+ words)
-                        if next_text.isupper() and len(next_text.split()) >= 2:
-                            # Clean it
-                            name = re.sub(r'\s+[A-Z]*\d+[A-Z0-9]*$', '', next_text)
-                            name = re.sub(r'\s*\([A-Z0-9]+\)\s*$', '', name)
-                            if len(name.split()) >= 2:
-                                name_indicators.append((len(name), name))
-                                break
-            
-            # Look for name pattern: ALL CAPS text that's not a header
-            if text.isupper() and is_bold:
-                # Check it's not an institutional header
-                skip_patterns = ['UNIVERSITY', 'DEPARTMENT', 'INSTITUTE', 'FACULTY', 'SCHOOL',
-                               'SUPERVISOR', 'REGISTRATION', 'SUBMITTED', 'DISSERTATION', 
-                               'THESIS', 'PROJECT', 'BAMENDA', 'HIGHER', 'NATIONAL']
-                
-                if not any(p in text_upper for p in skip_patterns):
-                    # Check if looks like a name (2-4 words, no numbers)
-                    words = text.split()
-                    if 2 <= len(words) <= 5 and not re.search(r'\d', text):
-                        name = text.replace('**', '').strip()
-                        name_indicators.append((len(name), name))
-        
-        # Use the best candidate (longest reasonable name)
-        if name_indicators:
-            # Sort by length, pick the best
-            name_indicators.sort(reverse=True)
-            for length, name in name_indicators:
-                if 8 <= length <= 50:  # Reasonable name length
-                    self.extracted_data['name'] = name
-                    return
-    
-    def _extract_supervisor(self, paragraphs, sup_index, max_index, is_co=False):
-        """Extract supervisor name from paragraphs after SUPERVISOR header - improved"""
-        key = 'co_supervisor' if is_co else 'supervisor'
-        if self.extracted_data[key]:
-            return
-        
-        # Check the current paragraph for inline supervisor name
-        current_text = paragraphs[sup_index].text.strip()
-        
-        # Check for "SUPERVISOR: Dr. Name" format
-        sup_match = re.search(r'(?:CO-?)?SUPERVISOR[:\s]+(.+)', current_text, re.IGNORECASE)
-        if sup_match:
-            name = sup_match.group(1).strip()
-            if name and len(name) > 3:
-                self.extracted_data[key] = name.replace('**', '').strip()
-                return
-        
-        for j in range(1, 6):  # Check more paragraphs
-            if sup_index + j < min(len(paragraphs), max_index):
-                para = paragraphs[sup_index + j]
-                text = para.text.strip()
-                
-                if not text:
-                    continue
-                
-                # Stop if we hit another section header
-                if any(h in text.upper() for h in ['ACKNOWLEDGEMENT', 'DEDICATION', 'DECLARATION', 'ABSTRACT']):
-                    break
-                
-                # Skip header lines
-                if 'SUPERVISOR' in text.upper() and not re.search(r'(Dr\.|Prof\.|Engr\.|Mr\.|Mrs\.)', text, re.IGNORECASE):
-                    continue
-                
-                # Look for Dr., Prof., Engr., Mr., Mrs. patterns
-                if re.search(r'(Dr\.|Prof\.|Engr\.|Mr\.|Mrs\.|Ms\.)', text, re.IGNORECASE):
-                    self.extracted_data[key] = text.replace('**', '').strip()
-                    return
-                
-                # Also accept CAPS names after supervisor header
-                if text.isupper() and len(text.split()) >= 2:
-                    self.extracted_data[key] = text.replace('**', '').strip()
-                    return
-    
-    def _extract_field_supervisor(self, paragraphs, max_index):
-        """Extract field supervisor if present"""
-        for i, para in enumerate(paragraphs[:max_index]):
-            text = para.text.strip()
-            text_upper = text.upper()
-            
-            if 'FIELD SUPERVISOR' in text_upper or 'FIELD-SUPERVISOR' in text_upper:
-                # Check inline
-                match = re.search(r'FIELD[\s-]*SUPERVISOR[:\s]+(.+)', text, re.IGNORECASE)
-                if match:
-                    name = match.group(1).strip()
-                    if name and len(name) > 3:
-                        self.extracted_data['field_supervisor'] = name.replace('**', '').strip()
-                        return
-                
-                # Check next paragraphs
-                for j in range(1, 4):
-                    if i + j < max_index:
-                        next_para = paragraphs[i + j]
-                        next_text = next_para.text.strip()
-                        if next_text and re.search(r'(Dr\.|Prof\.|Engr\.|Mr\.|Mrs\.)', next_text, re.IGNORECASE):
-                            self.extracted_data['field_supervisor'] = next_text.replace('**', '').strip()
-                            return
-    
-    def _extract_topic(self, paragraphs):
-        """Extract topic - first try bold paragraphs, then check shapes for actual topic text"""
-        if self.extracted_data['topic']:
-            return
-        
-        # PRIORITY 1: Look for longest bold/centered text in paragraphs (most reliable)
-        best_topic = None
-        best_length = 0
-        
-        for para in paragraphs:
-            text = para.text.strip()
-            is_bold = any(run.bold for run in para.runs if run.bold)
-            
-            # Skip short text
-            if len(text) < 25:
-                continue
-            
-            # Skip institutional headers
-            skip_patterns = ['UNIVERSITY', 'DEPARTMENT OF', 'INSTITUTE', 'FACULTY', 
-                           'SUPERVISOR', 'REGISTRATION', 'SUBMITTED', 'BY', 'BAMENDA',
-                           'HIGHER INSTITUTE', 'NATIONAL', 'PRESENTED', 'PARTIAL FULFILLMENT',
-                           'REQUIREMENTS', 'AWARD OF', 'DEGREE']
-            if any(p in text.upper() for p in skip_patterns):
-                continue
-            
-            # Topic is usually bold and longer than 25 chars
-            if is_bold and len(text) > best_length:
-                best_topic = text.replace('**', '').strip()
-                best_length = len(text)
-        
-        if best_topic:
-            self.extracted_data['topic'] = best_topic
-            logger.info(f"Topic extracted from paragraph: {best_topic[:50]}...")
-            return
-        
-        # PRIORITY 2: Check shape texts for topic (only if no paragraph topic found)
-        # Note: Shape extraction may get text from throughout the document, so filter carefully
-        best_shape_topic = None
-        best_shape_length = 0
-        
-        for shape_text in self.shape_texts:
-            text = shape_text.strip()
-            text_upper = text.upper()
-            
-            # Skip short texts (topics are usually substantial)
-            if len(text) < 15:
-                continue
-            
-            # Skip texts that are mostly underscores or dashes (signature lines)
-            underscore_ratio = (text.count('_') + text.count('-')) / len(text)
-            if underscore_ratio > 0.15:
-                continue
-            
-            # Skip if it has many underscores (signature/form fields)
-            if text.count('_') > 2:
-                continue
-            
-            # Skip diagram/figure labels (short labels with specific keywords at START)
-            diagram_labels = ['INDEPENDENT', 'DEPENDENT', 'CONTROL', 'VARIABLE', 'FIGURE', 
-                             'TABLE', 'SOURCE', 'CHART', 'HYPOTHESIS', 'FORMAL', 'INFORMAL']
-            if any(text_upper.startswith(lbl) for lbl in diagram_labels):
-                continue
-            
-            # Skip exact institutional headers (but allow longer text containing these words)
-            exact_skip = ['HIGHER INSTITUTE OF COMMERCE AND MANAGEMENT',
-                         'DEPARTMENT OF MANAGEMENT AND ENTREPRENEURSHIP',
-                         'NATIONAL HIGHER POLYTECHNIC INSTITUTE',
-                         'THE UNIVERSITY OF BAMENDA']
-            if text_upper in exact_skip or any(text_upper == s for s in exact_skip):
-                continue
-            
-            # Skip short administrative labels
-            admin_labels = ['COORDINATOR', 'POSTGRADUATE', 'DIRECTOR', 'HEAD OF DEPARTMENT',
-                          'SUPERVISOR', 'DATE:', 'NAME:', 'APPROVED', 'REJECTED', 'GENERAL']
-            if any(lbl in text_upper for lbl in admin_labels):
-                continue
-            
-            # Topic should have topic-like keywords or patterns
-            topic_keywords = ['ANALYSIS', 'STUDY', 'IMPACT', 'EFFECT OF', 'EFFECTS OF',
-                            'ROLE OF', 'ASSESSMENT', 'EVALUATION', 'INVESTIGATION', 
-                            'INFLUENCE', 'RELATIONSHIP', 'FACTORS AFFECTING',
-                            'STRATEGIES', 'IMPLEMENTATION', 'EFFECTIVENESS', 
-                            'CASE OF', 'CASE STUDY', 'CHALLENGES', 'PERFORMANCE IN',
-                            'PERFORMANCE OF', 'DETERMINANTS', 'CONTRIBUTION']
-            
-            has_topic_keyword = any(kw in text_upper for kw in topic_keywords)
-            
-            # Accept if it has keyword OR is sufficiently long and looks like a title (all caps or title case)
-            is_likely_title = len(text) > 40 and (text.isupper() or text.istitle())
-            
-            if (has_topic_keyword or is_likely_title) and len(text) > best_shape_length:
-                best_shape_topic = text.replace('**', '').strip()
-                best_shape_length = len(text)
-                logger.info(f"Found potential topic in shape: {text[:60]}...")
-        
-        if best_shape_topic:
-            self.extracted_data['topic'] = best_shape_topic
-            logger.info(f"Topic extracted from shape: {best_shape_topic[:50]}...")
-
-    def _extract_name_from_shapes(self):
-        """Extract author name from shapes if not found in paragraphs"""
-        if self.extracted_data['name']:
-            return
-            
-        # Look for short, all-caps text in shapes that isn't the topic
-        for shape_text in self.shape_texts:
-            text = shape_text.strip()
-            
-            # Check for "BY:" prefix (common in shapes)
-            by_match = re.search(r'BY[:\s]+([A-Z\s]+)', text, re.IGNORECASE)
-            if by_match:
-                name_candidate = by_match.group(1).strip()
-                # Clean up (remove degrees, numbers, etc.)
-                name_candidate = re.split(r'[\(\[\{0-9]', name_candidate)[0].strip()
-                if len(name_candidate) > 3:
-                    self.extracted_data['name'] = name_candidate
-                    logger.info(f"Name extracted from shape (BY prefix): {name_candidate}")
-                    return
-            
-            # Skip if it's the topic
-            if text == self.extracted_data.get('topic'):
-                continue
-                
-            # Skip if it contains "Department", "University", etc.
-            if any(w in text.upper() for w in ['DEPARTMENT', 'UNIVERSITY', 'INSTITUTE', 'FACULTY', 'SCHOOL', 'COLLEGE', 'HUMAN RESOURCE']):
-                continue
-                
-            # Skip if it contains "Supervisor"
-            if 'SUPERVISOR' in text.upper():
-                continue
-                
-            # Name criteria: 2-4 words, all caps (usually), reasonable length
-            words = text.split()
-            if 2 <= len(words) <= 4 and 10 <= len(text) <= 40:
-                # Check if it looks like a name (no numbers, no special chars except maybe dot)
-                if not re.search(r'[0-9!@#$%^&*()_+={}\[\]|\\:;"<>,?/~`]', text.replace('.', '')):
-                    # Prefer all caps
-                    if text.isupper():
-                        self.extracted_data['name'] = text
-                        logger.info(f"Name extracted from shape: {text}")
-                        return
-                    # Or Title Case
-                    elif text.istitle():
-                        self.extracted_data['name'] = text
-                        logger.info(f"Name extracted from shape: {text}")
-                        return
-
+# Note: CoverPageHandler class was removed - cover page templates are now used instead
 
 class CertificationPageHandler:
     """
@@ -9018,11 +9149,11 @@ class DocumentProcessor:
         self.policy = policy or FormatPolicy()
         self.engine = PatternEngine(policy=self.policy)
         self.image_extractor = ImageExtractor()
+        self.shape_extractor = ShapeExtractor()  # NEW: Extract shapes/flowcharts
         self.extracted_images = []  # Store extracted images
+        self.extracted_shapes = []  # NEW: Store extracted shapes/flowcharts
         self.text_formatter = TextFormatterWithRegex(policy=self.policy)  # Add regex formatter
-        self.cover_page_handler = CoverPageHandler()  # Cover page detection
-        self.cover_page_data = None  # Extracted cover page data
-        self.cover_page_end_index = 0  # Where cover page ends
+        # Note: Cover page handler removed - templates are now used instead
         self.certification_handler = CertificationPageHandler()  # Certification page detection
         self.certification_data = None  # Extracted certification page data
         self.certification_start_index = 0  # Where certification page starts
@@ -9039,16 +9170,14 @@ class DocumentProcessor:
         self.extracted_images = self.image_extractor.extract_all_images(file_path)
         logger.info(f"Extracted {len(self.extracted_images)} images from document")
         
-        # Step 0.5: COVER PAGE DETECTION - Extract cover page info from first page only
-        has_cover_page, cover_data, cover_end_idx = self.cover_page_handler.detect_and_extract(doc)
-        if has_cover_page:
-            self.cover_page_data = cover_data
-            self.cover_page_end_index = cover_end_idx
-            logger.info(f"Cover page detected! Skipping first {cover_end_idx} paragraphs")
+        # Step 0.1: Extract all shapes/flowcharts from document
+        self.extracted_shapes = self.shape_extractor.extract_all_shapes(file_path)
+        logger.info(f"Extracted {len(self.extracted_shapes)} shapes/flowcharts from document")
         
-        # Step 0.6: CERTIFICATION PAGE DETECTION - After cover page
-        search_start = self.cover_page_end_index if has_cover_page else 0
-        has_cert, cert_data, cert_start, cert_end = self.certification_handler.detect_and_extract(doc, search_start)
+        # Note: Cover page detection removed - templates are now used instead
+        
+        # Step 0.6: CERTIFICATION PAGE DETECTION
+        has_cert, cert_data, cert_start, cert_end = self.certification_handler.detect_and_extract(doc, 0)
         if has_cert:
             self.certification_data = cert_data
             self.certification_start_index = cert_start
@@ -9073,6 +9202,15 @@ class DocumentProcessor:
                     image_positions[key] = []
                 image_positions[key].append(img)
         
+        # Create shape position lookup for tracking flowcharts/diagrams
+        shape_positions = {}
+        for shape in self.extracted_shapes:
+            if shape['position_type'] in ['inline', 'anchor', 'vml']:
+                key = shape['paragraph_index']
+                if key not in shape_positions:
+                    shape_positions[key] = []
+                shape_positions[key].append(shape)
+        
         # Extract all content in document order (paragraphs and tables)
         lines = []
         paragraph_index = 0
@@ -9084,15 +9222,10 @@ class DocumentProcessor:
                 # Find the corresponding paragraph object
                 for para in doc.paragraphs:
                     if para._element is element:
-                        # SKIP COVER PAGE PARAGRAPHS - they will be replaced with standardized cover
-                        if has_cover_page and paragraph_index < cover_end_idx:
-                            paragraph_index += 1
-                            break
-                        
-                        # SKIP CERTIFICATION PAGE PARAGRAPHS - they will be replaced with standardized certification
-                        if has_cert and self.certification_start_index <= paragraph_index < self.certification_end_index:
-                            paragraph_index += 1
-                            break
+                        # PRESERVE CERTIFICATION/DECLARATION PAGE PARAGRAPHS - do not skip or replace
+                        # The original content with names should be kept as-is
+                        # Mark these paragraphs as protected from content modification
+                        is_certification_content = has_cert and self.certification_start_index <= paragraph_index < self.certification_end_index
                         
                         text = para.text.strip()
                         
@@ -9107,6 +9240,20 @@ class DocumentProcessor:
                                     text = f"• {text}"
                         except Exception:
                             pass
+                        
+                        # Check if this paragraph has shapes/flowcharts
+                        if paragraph_index in shape_positions:
+                            for shape in shape_positions[paragraph_index]:
+                                # Insert shape placeholder
+                                lines.append({
+                                    'text': f'[SHAPE:{shape["shape_id"]}]',
+                                    'style': 'Shape',
+                                    'bold': False,
+                                    'font_size': 12,
+                                    'type': 'shape_placeholder',
+                                    'shape_id': shape['shape_id'],
+                                })
+                                logger.info(f"Added shape placeholder for {shape['shape_id']} at paragraph {paragraph_index}")
                         
                         # Check if this paragraph has images (skip cover page images)
                         if paragraph_index in image_positions:
@@ -9155,6 +9302,7 @@ class DocumentProcessor:
                                 'bold': is_bold,
                                 'bold_all': is_bold_all,
                                 'font_size': font_size,
+                                'is_protected': is_certification_content,  # Preserve original content for certification/declaration pages
                             })
                         
                         paragraph_index += 1
@@ -9183,6 +9331,15 @@ class DocumentProcessor:
                                             loc['cell_index'] == cell_idx):
                                             cell_text = f'[IMAGE:{img["image_id"]}] {cell_text}'
                                 
+                                # Check for shapes in this cell
+                                for shape in self.extracted_shapes:
+                                    if shape['position_type'] in ['table', 'table_vml']:
+                                        loc = shape['table_location']
+                                        if (loc['table_index'] == table_index and 
+                                            loc['row_index'] == row_idx and 
+                                            loc['cell_index'] == cell_idx):
+                                            cell_text = f'[SHAPE:{shape["shape_id"]}] {cell_text}'
+                                
                                 row_cells.append(cell_text)
                             
                             row_text = ' | '.join(row_cells)
@@ -9192,7 +9349,7 @@ class DocumentProcessor:
                         break
                     table_index += 1
         
-        return self.process_lines(lines), self.extracted_images
+        return self.process_lines(lines), self.extracted_images, self.extracted_shapes
     
     def process_text(self, text):
         """Process plain text (no images in plain text)"""
@@ -9248,7 +9405,7 @@ class DocumentProcessor:
         # FOURTH: Optimize Page Breaks for AI
         lines = self.engine.optimize_page_breaks_for_ai(lines)
         
-        return self.process_lines(lines), []  # No images in plain text
+        return self.process_lines(lines), [], []  # No images or shapes in plain text
     
     def process_lines(self, lines):
         """Core line-by-line processing"""
@@ -9317,6 +9474,60 @@ class DocumentProcessor:
                 stats['images'] = stats.get('images', 0) + 1
                 continue
             
+            # Check for shape placeholder (flowcharts, diagrams, arrows)
+            if isinstance(line_data, dict) and line_data.get('type') == 'shape_placeholder':
+                analysis = {
+                    'type': 'shape_placeholder',
+                    'text': text,
+                    'shape_id': line_data.get('shape_id'),
+                    'confidence': 1.0,
+                }
+                analyzed.append(analysis)
+                stats['shapes'] = stats.get('shapes', 0) + 1
+                continue
+            
+            # Check for PROTECTED content (certification/declaration pages)
+            # Protected content is preserved exactly as-is without any modification
+            if isinstance(line_data, dict) and line_data.get('is_protected'):
+                # Check if this is a section TITLE (CERTIFICATION, DECLARATION, etc.)
+                text_upper = text.upper().strip()
+                is_section_title = text_upper in ['CERTIFICATION', 'DECLARATION', 'CERTIFICATION PAGE', 'DECLARATION PAGE']
+                
+                if is_section_title:
+                    # Treat as a heading with page break
+                    analysis = {
+                        'type': 'heading',
+                        'content': text,
+                        'text': text,
+                        'level': 1,  # Heading level 1
+                        'line_num': i,
+                        'confidence': 1.0,
+                        'is_protected': True,
+                        'needs_page_break': True,  # Start on new page
+                        'should_center': True,  # Center the title
+                        'original_style': line_data.get('style', 'Normal'),
+                        'original_bold': True,  # Titles should be bold
+                        'original_bold_all': True,
+                        'original_font_size': line_data.get('font_size', 12),
+                    }
+                else:
+                    # Regular protected content - preserve as-is
+                    analysis = {
+                        'type': 'protected_content',  # Special type to preserve content
+                        'content': text,
+                        'text': text,
+                        'line_num': i,
+                        'confidence': 1.0,
+                        'is_protected': True,
+                        'original_style': line_data.get('style', 'Normal'),
+                        'original_bold': line_data.get('bold', False),
+                        'original_bold_all': line_data.get('bold_all', False),
+                        'original_font_size': line_data.get('font_size', 12),
+                    }
+                analyzed.append(analysis)
+                stats['paragraphs'] += 1
+                continue
+            
             # Build context for dissertation-specific detection
             context = {
                 'prev_was_chapter': False,
@@ -9325,15 +9536,13 @@ class DocumentProcessor:
                 'prev_analysis': analyzed[-1] if analyzed else None,
             }
             
-            # Check if previous line was a chapter heading or author header
+            # Check if previous line was a chapter heading or front matter heading
             if i > 0 and analyzed:
                 prev_analysis = analyzed[-1]
                 if prev_analysis.get('type') == 'chapter_heading':
                     context['prev_was_chapter'] = True
                 elif prev_analysis.get('type') == 'front_matter_heading':
                     context['prev_front_matter'] = prev_analysis.get('front_matter_type')
-                elif prev_analysis.get('type') == 'cover_page_author_header':
-                    context['prev_was_author_header'] = True
             
             analysis = self.engine.analyze_line(
                 text, 
@@ -9414,7 +9623,14 @@ class DocumentProcessor:
                     analysis['content'] = clean_numbered
                     logger.debug(f"Auto-numbered heading: '{text}' -> '{number_result['numbered']}'")
                 elif number_result.get('number'):
+                    # CRITICAL FIX: Even when not renumbered, set text and content to preserve existing number
+                    # The analyze_line content may have stripped the number due to regex patterns
                     analysis['heading_number'] = number_result['number']
+                    analysis['text'] = number_result['numbered']  # Use the preserved numbered text
+                    # Also update 'content' to include the number
+                    clean_numbered = re.sub(r'^#+\s*', '', number_result['numbered']).strip()
+                    analysis['content'] = clean_numbered
+                    logger.debug(f"Preserved existing heading number: '{text}' -> '{number_result['numbered']}'")
                 
                 # Store chapter context info
                 analysis['chapter'] = number_result['chapter']
@@ -9567,6 +9783,8 @@ class DocumentProcessor:
                             current_section['content'].extend(content_to_add)
                     else:
                         current_section['content'].append(current_list)
+                    # CRITICAL FIX: Reset current_list to prevent duplication across sections
+                    current_list = None
                 
                 # Save previous section
                 if current_section:
@@ -9633,16 +9851,66 @@ class DocumentProcessor:
                     current_section['content'].append(current_list)
                     current_list = None
             
-            # Handle tables
-            if line['type'] == 'table':
-                # Start or continue table based on subtype
+            # Handle tables (including markdown tables with pipe syntax: |cell|cell|)
+            # Also handle table_start and table_end markers from Word documents
+            if line['type'] in ['table', 'table_row', 'table_separator', 'table_caption', 'table_start', 'table_end']:
+                
+                # Handle table_start - begin a new table
+                if line['type'] == 'table_start':
+                    # If there's an existing table, finalize it first
+                    if hasattr(self, '_current_table') and self._current_table:
+                        if len(self._current_table['content']) >= 1:
+                            current_section['content'].append(self._current_table)
+                    # Start fresh table
+                    self._current_table = {
+                        'type': 'table',
+                        'subtype': 'word_table',
+                        'content': [],
+                        'metadata': {},
+                        'caption': pending_table_caption if pending_table_caption else ''
+                    }
+                    pending_table_caption = ''
+                    continue
+                
+                # Handle table_end - finalize current table
+                if line['type'] == 'table_end':
+                    if hasattr(self, '_current_table') and self._current_table:
+                        if len(self._current_table['content']) >= 1:
+                            current_section['content'].append(self._current_table)
+                        self._current_table = None
+                    continue
+                
+                # Start or continue table based on type (for non-start/end types)
                 if not hasattr(self, '_current_table') or self._current_table is None:
                     self._current_table = {
                         'type': 'table',
-                        'subtype': line.get('subtype', 'unknown'),
+                        'subtype': line.get('subtype', 'markdown' if line['type'] in ['table_row', 'table_separator'] else 'unknown'),
                         'content': [],
-                        'metadata': {}
+                        'metadata': {},
+                        'caption': ''
                     }
+
+                # Handle table caption
+                if line['type'] == 'table_caption':
+                    self._current_table['caption'] = line.get('content', '')
+                    continue
+
+                # Handle table_row type (markdown tables with pipes)
+                if line['type'] == 'table_row':
+                    cells = line.get('cells', [])
+                    if cells:
+                        self._current_table['content'].append({
+                            'type': 'row',
+                            'cells': cells
+                        })
+                    continue
+
+                # Handle table_separator type
+                if line['type'] == 'table_separator':
+                    self._current_table['content'].append({
+                        'type': 'separator'
+                    })
+                    continue
 
                 # Add row to current table
                 if line.get('subtype') == 'markdown':
@@ -9669,13 +9937,17 @@ class DocumentProcessor:
                     })
 
                 # Check if we should finalize the table (minimum 2 rows)
-                if len(self._current_table['content']) >= 2:
+                # Skip this for word_table subtype - they use explicit table_end
+                if self._current_table.get('subtype') != 'word_table' and len(self._current_table['content']) >= 2:
                     # Look ahead to see if next lines continue the table
                     should_finalize = True
                     if i + 1 < len(analyzed):
                         next_line = analyzed[i + 1]
-                        if (next_line['type'] == 'table' and
-                            next_line.get('subtype') == self._current_table['subtype']):
+                        # Continue table if next line is also a table row (any type)
+                        next_type = next_line.get('type', '')
+                        if next_type in ['table', 'table_row', 'table_separator', 'table_start', 'table_end']:
+                            should_finalize = False
+                        elif next_type == 'table' and next_line.get('subtype') == self._current_table['subtype']:
                             should_finalize = False
 
                     if should_finalize:
@@ -9686,7 +9958,7 @@ class DocumentProcessor:
 
             # Close current table if we encounter non-table content
             if hasattr(self, '_current_table') and self._current_table:
-                if len(self._current_table['content']) >= 2:  # Minimum 2 rows
+                if len(self._current_table['content']) >= 1:  # At least 1 row for markdown tables
                     current_section['content'].append(self._current_table)
                 self._current_table = None
 
@@ -10338,6 +10610,19 @@ class DocumentProcessor:
                 })
                 continue
 
+            # Handle PROTECTED content (certification/declaration pages) - pass through unchanged
+            if line['type'] == 'protected_content' or line.get('is_protected'):
+                current_section['content'].append({
+                    'type': 'protected_content',
+                    'text': line.get('content', line.get('text', '')),
+                    'is_protected': True,
+                    'original_style': line.get('original_style', 'Normal'),
+                    'original_bold': line.get('original_bold', False),
+                    'original_bold_all': line.get('original_bold_all', False),
+                    'original_font_size': line.get('original_font_size', 12),
+                })
+                continue
+
             # Handle paragraphs
             if line['type'] == 'paragraph':
                 current_section['content'].append({
@@ -10493,22 +10778,10 @@ class DocumentProcessor:
         # PRIORITY 2: Pasted Content -> Smart Naming
         base_name = "document"
         
-        # 1. Check Cover Page Data
-        if self.cover_page_data:
-            title = self.cover_page_data.get('title', '')
-            student = self.cover_page_data.get('student_name', '')
-            
-            if title and student:
-                # Shorten title if too long
-                short_title = ' '.join(title.split()[:5])
-                base_name = f"{short_title} - {student}"
-            elif title:
-                short_title = ' '.join(title.split()[:5])
-                base_name = short_title
-        
-        # 2. Check First Heading if no cover page title
-        elif structured_data:
-            # 2a. Look for H1
+        # Note: Cover page data check removed - templates are now used instead
+        # Check First Heading if available
+        if structured_data:
+            # Look for H1
             for section in structured_data:
                 if section.get('level') == 1 and section.get('heading'):
                     heading = section.get('heading').strip()
@@ -10561,7 +10834,7 @@ class DocumentProcessor:
 
 
 class WordGenerator:
-    """Generate formatted Word documents with image support"""
+    """Generate formatted Word documents with image and shape support"""
     
     # Path to cover page logo
     COVER_LOGO_PATH = os.path.join(os.path.dirname(__file__), 'coverpage_template', 'cover_logo.png')
@@ -10572,6 +10845,9 @@ class WordGenerator:
         self.images = []  # Extracted images
         self.image_lookup = {}  # image_id -> image_data
         self.image_inserter = None
+        self.shapes = []  # Extracted shapes/flowcharts
+        self.shape_lookup = {}  # shape_id -> shape_data
+        self.shape_inserter = None
         self.toc_entries = []  # Track headings for TOC generation
         self.toc_placeholder_index = None  # Index where TOC should be inserted
         self.heading_numberer = HeadingNumberer(policy=self.policy)  # For numbering headings
@@ -10583,6 +10859,7 @@ class WordGenerator:
         self.has_tables = False  # Whether document contains tables
         self.use_continuous_arabic = False # Whether to use continuous Arabic numbering
         self.is_short_document = False  # Suppress page breaks for short documents
+        self._consecutive_bold_count = 0  # Track consecutive bold paragraphs (max 2)
         # Formatting options
         self.font_size = 12
         self.line_spacing = 1.5
@@ -10623,6 +10900,39 @@ class WordGenerator:
         for para in self._iter_paragraphs_in_doc(doc):
             for run in para.runs:
                 yield run
+
+    def _should_allow_bold(self, is_heading=False):
+        """
+        Check if we should allow bold for the next paragraph.
+        Limits consecutive bold lines to 2 (for non-heading content).
+        Headings (chapter titles) are always allowed.
+        
+        Returns:
+            bool: True if bold is allowed, False otherwise
+        """
+        if is_heading:
+            # Headings are always allowed to be bold
+            return True
+        
+        # For non-heading bold content, limit to 2 consecutive
+        return self._consecutive_bold_count < 2
+    
+    def _track_bold_paragraph(self, is_bold, is_heading=False):
+        """
+        Track whether a paragraph was bolded for consecutive bold limiting.
+        
+        Args:
+            is_bold: Whether the paragraph was bolded
+            is_heading: Whether this is a heading (resets counter)
+        """
+        if is_heading:
+            # Headings reset the counter (they're expected to be followed by content)
+            self._consecutive_bold_count = 0
+        elif is_bold:
+            self._consecutive_bold_count += 1
+        else:
+            # Non-bold paragraph resets the counter
+            self._consecutive_bold_count = 0
 
     def _enforce_no_italics(self, doc):
         """Force italics off for all styles and runs."""
@@ -10701,14 +11011,14 @@ class WordGenerator:
         fldChar2.set(qn('w:fldCharType'), 'end')
         run._r.append(fldChar2)
         
-    def generate(self, structured_data, output_path, images=None, cover_page_data=None, certification_data=None, questionnaire_data=None, is_free_tier=False, include_toc=False, font_size=12, line_spacing=1.5, margins=None):
-        """Generate Word document from structured data with images
+    def generate(self, structured_data, output_path, images=None, shapes=None, certification_data=None, questionnaire_data=None, is_free_tier=False, include_toc=False, font_size=12, line_spacing=1.5, margins=None):
+        """Generate Word document from structured data with images and shapes
         
         Args:
             structured_data: List of structured sections
             output_path: Path to save the output document
             images: List of extracted images
-            cover_page_data: Dict with extracted cover page information (or None)
+            shapes: List of extracted shapes/flowcharts/diagrams
             certification_data: Dict with extracted certification page information (or None)
             questionnaire_data: Dict with extracted questionnaire structure (or None)
             include_toc: Whether to include table of contents
@@ -10766,13 +11076,7 @@ class WordGenerator:
             return output_path
             
         # --- STANDARD DOCUMENT GENERATION ---
-        
-        # 1. Generate Cover Page (if data available)
-        # NOTE: Don't reset margins here - use the user-specified margins from above
-        if cover_page_data:
-            # Only set temporarily if needed for cover page styling
-            # but restore to user-specified margins later
-            pass
+        # Note: Cover page generation removed - templates are now used instead
             
         self._setup_styles()
         
@@ -10820,15 +11124,25 @@ class WordGenerator:
             self.image_inserter = ImageInserter(self.doc, images)
             logger.info(f"WordGenerator initialized with {len(images)} images")
         
-        # INSERT COVER PAGE FIRST if detected
-        if cover_page_data:
-            self._create_cover_page(cover_page_data)
-            logger.info("Cover page created from extracted data")
+        # Store shapes/flowcharts for reinsertion
+        if shapes:
+            self.shapes = shapes
+            self.shape_lookup = {shape['shape_id']: shape for shape in shapes}
+            self.shape_inserter = ShapeInserter(self.doc, shapes)
+            logger.info(f"WordGenerator initialized with {len(shapes)} shapes/flowcharts")
+        else:
+            self.shapes = []
+            self.shape_lookup = {}
+            self.shape_inserter = None
         
-        # INSERT CERTIFICATION PAGE AFTER COVER PAGE if detected
-        if certification_data:
-            self._create_certification_page(certification_data, cover_page_data)
-            logger.info("Certification page created from extracted data")
+        # Note: Cover page generation removed - templates are now used instead
+        
+        # DISABLED: Certification page replacement
+        # We now preserve the original certification/declaration content instead of replacing it
+        # The original content (including names, signatures, etc.) is kept intact
+        # if certification_data:
+        #     self._create_certification_page(certification_data)
+        #     logger.info("Certification page created from extracted data")
         
         # Handle case where structured_data might be nested lists
         flat_structured_data = []
@@ -10878,13 +11192,13 @@ class WordGenerator:
         
         # Count preliminary pages/sections to determine numbering style
         prelim_count = 0
-        if cover_page_data: prelim_count += 1
+        # Note: cover_page_data removed - templates are now used instead
         if certification_data: prelim_count += 1
         if needs_toc: prelim_count += 1  # TOC itself counts as a page
         prelim_count += sum(1 for s in structured_data if isinstance(s, dict) and s.get('type') == 'front_matter')
         
         # Determine numbering style
-        has_preliminary = bool(cover_page_data or certification_data or needs_toc)
+        has_preliminary = bool(certification_data or needs_toc)
         
         # Use Roman numerals for preliminary pages if any preliminary content exists
         if not has_preliminary:
@@ -11092,275 +11406,9 @@ class WordGenerator:
         except Exception as e:
             logger.error(f"Failed to add watermark: {e}")
     
-    def _create_cover_page(self, data):
-        """
-        Create a standardized cover page with ALL MANDATORY textboxes.
-        
-        Layout (all elements are MANDATORY):
-        1. University name at TOP (THE UNIVERSITY OF BAMENDA)
-        2. Faculty (LEFT) | Logo (CENTER) | Department (RIGHT) - 3-column header
-        3. TOPIC BOX - visible thick black outline, square, centered, ALL CAPS
-        4. Submission statement
-        5. BY label
-        6. NAME BOX - no visible borders, centered
-        7. Registration number
-        8. SUPERVISOR BOXES - two columns (Supervisor | Co-Supervisor/Field Supervisor)
-        9. DATE BOX - mandatory, centered at bottom, default "2025/2026" if not found
-        """
-        from docx.shared import Inches, Pt, Cm, Twips
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-        from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
-        from docx.oxml.ns import qn
-        from docx.oxml import OxmlElement
-        
-        # Default date if not found
-        DEFAULT_DATE = '2025/2026'
-        
-        def remove_cell_borders(cell):
-            """Remove all borders from a table cell."""
-            tc = cell._tc
-            tcPr = tc.get_or_add_tcPr()
-            tcBorders = OxmlElement('w:tcBorders')
-            for border_name in ['top', 'left', 'bottom', 'right']:
-                border_elem = OxmlElement(f'w:{border_name}')
-                border_elem.set(qn('w:val'), 'nil')
-                tcBorders.append(border_elem)
-            tcPr.append(tcBorders)
-        
-        def add_thick_black_borders(cell, width_pt=2):
-            """Add thick black borders to a table cell (for topic box)."""
-            tc = cell._tc
-            tcPr = tc.get_or_add_tcPr()
-            tcBorders = OxmlElement('w:tcBorders')
-            # Width in eighths of a point (24 = 3pt, 16 = 2pt, 12 = 1.5pt)
-            border_width = str(int(width_pt * 8))
-            for border_name in ['top', 'left', 'bottom', 'right']:
-                border_elem = OxmlElement(f'w:{border_name}')
-                border_elem.set(qn('w:val'), 'single')
-                border_elem.set(qn('w:sz'), border_width)
-                border_elem.set(qn('w:color'), '000000')
-                border_elem.set(qn('w:space'), '0')
-                tcBorders.append(border_elem)
-            tcPr.append(tcBorders)
-        
-        def add_centered_text(doc, text, font_size=12, bold=False, italic=False, 
-                             space_before=0, space_after=6, all_caps=False):
-            """Add centered paragraph text."""
-            para = doc.add_paragraph()
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            para.paragraph_format.space_before = Pt(space_before)
-            para.paragraph_format.space_after = Pt(space_after)
-            
-            display_text = text.upper() if all_caps else text
-            run = para.add_run(display_text)
-            run.font.name = 'Times New Roman'
-            run.font.size = Pt(font_size)
-            run.bold = bold
-            run.italic = False
-            return para
-        
-        def create_textbox_table(doc, text, has_border=True, font_size=14, bold=True, 
-                                 all_caps=True, width_inches=5.5, padding_pt=12):
-            """Create a centered table that acts as a textbox."""
-            table = doc.add_table(rows=1, cols=1)
-            table.alignment = WD_TABLE_ALIGNMENT.CENTER
-            table.autofit = False
-            table.columns[0].width = Inches(width_inches)
-            
-            cell = table.cell(0, 0)
-            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-            
-            if has_border:
-                add_thick_black_borders(cell, width_pt=2)
-            else:
-                remove_cell_borders(cell)
-            
-            # Add padding
-            tc = cell._tc
-            tcPr = tc.get_or_add_tcPr()
-            tcMar = OxmlElement('w:tcMar')
-            for side in ['top', 'left', 'bottom', 'right']:
-                margin = OxmlElement(f'w:{side}')
-                margin.set(qn('w:w'), str(int(padding_pt * 20)))  # Twips
-                margin.set(qn('w:type'), 'dxa')
-                tcMar.append(margin)
-            tcPr.append(tcMar)
-            
-            para = cell.paragraphs[0]
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            
-            display_text = text.upper() if all_caps else text
-            run = para.add_run(display_text)
-            run.font.name = 'Times New Roman'
-            run.font.size = Pt(font_size)
-            run.bold = bold
-            
-            return table
-        
-        # ========== 1. UNIVERSITY NAME AT TOP (Above everything) ==========
-        add_centered_text(self.doc, data.get('university', 'THE UNIVERSITY OF BAMENDA'), 
-                         font_size=16, bold=True, space_after=6, all_caps=True)
-        
-        # ========== 2. FACULTY (LEFT) + LOGO (CENTER) + DEPARTMENT (RIGHT) ==========
-        faculty_text = data.get('faculty') or 'HIGHER INSTITUTE OF COMMERCE AND MANAGEMENT'
-        dept_text = data.get('department') or 'MANAGEMENT'
-        
-        # Create a 3-column table: Faculty | Logo | Department
-        header_table = self.doc.add_table(rows=1, cols=3)
-        header_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        header_table.autofit = False
-        
-        # Set column widths
-        header_table.columns[0].width = Inches(2.5)  # Faculty
-        header_table.columns[1].width = Inches(1.5)  # Logo
-        header_table.columns[2].width = Inches(2.5)  # Department
-        
-        # Remove borders from all cells
-        for cell in header_table.rows[0].cells:
-            remove_cell_borders(cell)
-        
-        # LEFT CELL: Faculty/School text
-        faculty_cell = header_table.cell(0, 0)
-        faculty_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        faculty_para = faculty_cell.paragraphs[0]
-        faculty_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        faculty_run = faculty_para.add_run(faculty_text.upper())
-        faculty_run.bold = True
-        faculty_run.font.name = 'Times New Roman'
-        faculty_run.font.size = Pt(11)
-        
-        # CENTER CELL: Logo
-        logo_cell = header_table.cell(0, 1)
-        logo_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        logo_para = logo_cell.paragraphs[0]
-        logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        if os.path.exists(self.COVER_LOGO_PATH):
-            try:
-                logo_run = logo_para.add_run()
-                logo_run.add_picture(self.COVER_LOGO_PATH, width=Inches(1.2))
-            except Exception as e:
-                logger.warning(f"Could not add logo: {e}")
-        
-        # RIGHT CELL: Department
-        dept_cell = header_table.cell(0, 2)
-        dept_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
-        dept_para = dept_cell.paragraphs[0]
-        dept_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        dept_run = dept_para.add_run(f"DEPARTMENT OF {dept_text.upper()}")
-        dept_run.bold = True
-        dept_run.font.name = 'Times New Roman'
-        dept_run.font.size = Pt(11)
-        
-        # Spacing after header
-        self.doc.add_paragraph().paragraph_format.space_after = Pt(18)
-        
-        # ========== 3. TOPIC BOX (MANDATORY - thick black outline, square, centered) ==========
-        topic_text = data.get('topic') or 'RESEARCH TOPIC'
-        create_textbox_table(self.doc, topic_text, has_border=True, font_size=13, 
-                            bold=True, all_caps=True, width_inches=5.5, padding_pt=15)
-        
-        # Spacing after topic
-        self.doc.add_paragraph().paragraph_format.space_after = Pt(12)
-        
-        # ========== 4. SUBMISSION STATEMENT ==========
-        degree_text = data.get('degree') or 'Master'
-        dept_for_statement = (data.get('department') or 'Management').title()
-        faculty_for_statement = (data.get('faculty') or 'Higher Institute of Commerce and Management').title()
-        
-        submission_text = (
-            f"A Dissertation submitted to the Department of {dept_for_statement}, "
-            f"{faculty_for_statement} of The University of Bamenda in partial fulfillment "
-            f"of the requirements for the award of a {degree_text} Degree."
-        )
-        add_centered_text(self.doc, submission_text, font_size=11, italic=True, space_after=12)
-        
-        # ========== 5. "BY" LABEL ==========
-        add_centered_text(self.doc, 'BY', font_size=12, bold=True, space_before=6, space_after=6)
-        
-        # ========== 6. NAME BOX (MANDATORY - no visible borders) ==========
-        name_text = data.get('name') or 'STUDENT NAME'
-        create_textbox_table(self.doc, name_text, has_border=False, font_size=14, 
-                            bold=True, all_caps=True, width_inches=4.0, padding_pt=8)
-        
-        # ========== 7. REGISTRATION NUMBER ==========
-        reg_num = data.get('registration_number') or ''
-        if reg_num:
-            add_centered_text(self.doc, f"({reg_num})", font_size=11, space_before=3, space_after=12)
-        else:
-            self.doc.add_paragraph().paragraph_format.space_after = Pt(12)
-        
-        # ========== 8. SUPERVISOR BOXES (MANDATORY - two columns) ==========
-        supervisor = data.get('supervisor') or ''
-        co_supervisor = data.get('co_supervisor') or data.get('field_supervisor') or ''
-        
-        # Create a 2-column table for supervisors (always show both columns)
-        sup_table = self.doc.add_table(rows=2, cols=2)
-        sup_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-        sup_table.autofit = False
-        
-        sup_table.columns[0].width = Inches(3.0)
-        sup_table.columns[1].width = Inches(3.0)
-        
-        # Remove borders from all cells
-        for row in sup_table.rows:
-            for cell in row.cells:
-                remove_cell_borders(cell)
-        
-        # Row 0: Headers (always show)
-        sup_header_cell = sup_table.cell(0, 0)
-        sup_header_para = sup_header_cell.paragraphs[0]
-        sup_header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        sup_h_run = sup_header_para.add_run('SUPERVISOR')
-        sup_h_run.bold = True
-        sup_h_run.underline = True
-        sup_h_run.font.name = 'Times New Roman'
-        sup_h_run.font.size = Pt(11)
-        
-        cosup_header_cell = sup_table.cell(0, 1)
-        cosup_header_para = cosup_header_cell.paragraphs[0]
-        cosup_header_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # Determine co-supervisor label
-        if data.get('field_supervisor'):
-            cosup_label = 'FIELD SUPERVISOR'
-        else:
-            cosup_label = 'CO-SUPERVISOR'
-        cosup_h_run = cosup_header_para.add_run(cosup_label)
-        cosup_h_run.bold = True
-        cosup_h_run.underline = True
-        cosup_h_run.font.name = 'Times New Roman'
-        cosup_h_run.font.size = Pt(11)
-        
-        # Row 1: Names (show placeholder if empty)
-        sup_name_cell = sup_table.cell(1, 0)
-        sup_name_para = sup_name_cell.paragraphs[0]
-        sup_name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        sup_display = supervisor if supervisor else '________________'
-        sup_n_run = sup_name_para.add_run(sup_display)
-        sup_n_run.font.name = 'Times New Roman'
-        sup_n_run.font.size = Pt(11)
-        
-        cosup_name_cell = sup_table.cell(1, 1)
-        cosup_name_para = cosup_name_cell.paragraphs[0]
-        cosup_name_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        cosup_display = co_supervisor if co_supervisor else '________________'
-        cosup_n_run = cosup_name_para.add_run(cosup_display)
-        cosup_n_run.font.name = 'Times New Roman'
-        cosup_n_run.font.size = Pt(11)
-        
-        # Spacing before date
-        self.doc.add_paragraph().paragraph_format.space_after = Pt(24)
-        
-        # ========== 9. DATE BOX (MANDATORY - centered at bottom) ==========
-        month_year = data.get('month_year') or DEFAULT_DATE
-        create_textbox_table(self.doc, month_year.upper(), has_border=False, font_size=12, 
-                            bold=True, all_caps=True, width_inches=2.5, padding_pt=6)
-        
-        # Add page break after cover page
-        self.doc.add_page_break()
-        logger.info("Cover page created with all mandatory elements")
-    
-    def _create_certification_page(self, cert_data, cover_data=None):
+    # Note: _create_cover_page method removed - templates are now used instead
+
+    def _create_certification_page(self, cert_data):
         """
         Create a standardized certification page.
         
@@ -11438,12 +11486,12 @@ class WordGenerator:
             
             return table
         
-        # Get data from certification extraction or fall back to cover page data
-        topic = cert_data.get('topic') or (cover_data.get('topic') if cover_data else None) or '[RESEARCH TOPIC]'
-        author = cert_data.get('author') or (cover_data.get('name') if cover_data else None) or '[AUTHOR NAME]'
-        degree = cert_data.get('degree') or (cover_data.get('degree') if cover_data else None) or "Master's in Business Administration (MBA)"
-        program = cert_data.get('program') or (cover_data.get('department') if cover_data else None) or 'Management and Entrepreneurship'
-        supervisor = cert_data.get('supervisor') or (cover_data.get('supervisor') if cover_data else None)
+        # Get data from certification extraction
+        topic = cert_data.get('topic') or '[RESEARCH TOPIC]'
+        author = cert_data.get('author') or '[AUTHOR NAME]'
+        degree = cert_data.get('degree') or "Master's in Business Administration (MBA)"
+        program = cert_data.get('program') or 'Management and Entrepreneurship'
+        supervisor = cert_data.get('supervisor')
         hod = cert_data.get('head_of_department')
         director = cert_data.get('director')
         institution = cert_data.get('institution') or 'The Higher Institute of Commerce and Management of The University of Bamenda'
@@ -11846,7 +11894,7 @@ class WordGenerator:
         run_instr = paragraph.add_run("Right click and update field to get list of figures")
         run_instr.font.name = 'Times New Roman'
         run_instr.font.size = Pt(self.font_size)
-        run_instr.font.bold = True
+        run_instr.font.bold = False  # LOF entries should not be bold
         run_instr.font.color.rgb = RGBColor(68, 114, 196) # Word Blue
         
         # Add some spacing after
@@ -11915,7 +11963,7 @@ class WordGenerator:
         run_instr = paragraph.add_run("Right click and update field to get list of tables")
         run_instr.font.name = 'Times New Roman'
         run_instr.font.size = Pt(self.font_size)
-        run_instr.font.bold = True
+        run_instr.font.bold = False  # LOT entries should not be bold
         run_instr.font.color.rgb = RGBColor(68, 114, 196) # Word Blue
         
         # Add some spacing after
@@ -12380,6 +12428,57 @@ class WordGenerator:
             para.add_run(f"[IMAGE: {image_id} - Error: {str(e)}]")
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
+    def _insert_shape(self, shape_id):
+        """
+        Insert a shape/flowchart/diagram into the document at current position.
+        Preserves original positioning, groupings, and formatting.
+        
+        Args:
+            shape_id: The ID of the shape to insert
+        """
+        if not shape_id:
+            logger.warning("No shape_id provided to _insert_shape")
+            return
+        
+        if not hasattr(self, 'shape_lookup') or shape_id not in self.shape_lookup:
+            logger.warning(f"Shape {shape_id} not found in shape lookup")
+            # Add placeholder text
+            para = self.doc.add_paragraph()
+            para.add_run(f"[SHAPE/DIAGRAM: {shape_id} - Not found]")
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            return
+        
+        shape_data = self.shape_lookup[shape_id]
+        
+        try:
+            # Create paragraph for shape
+            para = self.doc.add_paragraph()
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            para.paragraph_format.space_before = Pt(6)
+            para.paragraph_format.space_after = Pt(6)
+            
+            # Add shape from stored XML
+            run = para.add_run()
+            
+            # Check if this is a VML shape or modern drawing
+            if shape_data.get('is_vml'):
+                # Insert VML pict element
+                pict_xml = shape_data['pict_xml']
+                run._element.append(pict_xml)
+                logger.info(f"Inserted VML shape {shape_id}")
+            else:
+                # Insert modern drawing element
+                drawing_xml = shape_data['drawing_xml']
+                run._element.append(drawing_xml)
+                logger.info(f"Inserted drawing shape {shape_id} (contains {shape_data.get('shape_count', 1)} shape elements)")
+            
+        except Exception as e:
+            logger.error(f"Error inserting shape {shape_id}: {str(e)}")
+            # Add error placeholder
+            para = self.doc.add_paragraph()
+            para.add_run(f"[SHAPE/DIAGRAM: {shape_id} - Error: {str(e)}]")
+            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
     def _add_section(self, section):
         """Add a document section"""
         section_type = section.get('type', 'section')
@@ -12404,19 +12503,24 @@ class WordGenerator:
              section['use_page_break_before'] = True
              section['needs_page_break'] = False # Disable manual break
         
-        # Regex for "CHAPTER 1" or "CHAPTER ONE"
-        is_chapter_one = bool(re.search(r'^CHAP?TER\s+(1|ONE)\b', heading_text))
+        # Regex for any chapter heading (CHAPTER 1, 2, 3... or CHAPTER ONE, TWO, etc.)
+        is_any_chapter = bool(re.search(r'^CHAP?TER\s+(\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|[IVXLC]+)\b', heading_text, re.IGNORECASE))
+        is_chapter_one = bool(re.search(r'^CHAP?TER\s+(1|ONE)\b', heading_text, re.IGNORECASE))
         
-        # Allow CHAPTER 1 page break even in short documents (for Roman->Arabic numeral transition)
-        if is_chapter_one and not self.use_continuous_arabic:
-            # Add Section Break (Next Page) to switch to Arabic numbering
-            new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
-            self._set_page_numbering(new_section, fmt='decimal', start=1)
-            new_section.footer.is_linked_to_previous = False
-            self._add_page_number_to_footer(new_section)
+        # All chapters should start on a new page
+        if is_any_chapter:
+            if is_chapter_one and not self.use_continuous_arabic:
+                # Add Section Break (Next Page) to switch to Arabic numbering for Chapter 1
+                new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
+                self._set_page_numbering(new_section, fmt='decimal', start=1)
+                new_section.footer.is_linked_to_previous = False
+                self._add_page_number_to_footer(new_section)
+            else:
+                # Add page break for all other chapters
+                self.doc.add_page_break()
         # Skip other page breaks for short documents
         elif self.is_short_document:
-            pass  # No page breaks for short documents
+            pass  # No page breaks for short documents (except chapters handled above)
         elif section.get('needs_page_break', False):
             self.doc.add_page_break()
         
@@ -13229,6 +13333,34 @@ class WordGenerator:
                 self._insert_image(item.get('image_id'))
                 continue
             
+            # Handle shape placeholders (flowcharts, diagrams, arrows)
+            if item.get('type') == 'shape_placeholder':
+                self._insert_shape(item.get('shape_id'))
+                continue
+            
+            # Handle PROTECTED content (certification/declaration pages) - preserve exactly as-is
+            if item.get('type') == 'protected_content' or item.get('is_protected'):
+                text = item.get('text', '') or item.get('content', '')
+                if text:
+                    # Preserve original styling without modification
+                    para = self.doc.add_paragraph(text)
+                    # Apply original formatting
+                    original_style = item.get('original_style', 'Normal')
+                    try:
+                        para.style = original_style
+                    except:
+                        pass  # If style doesn't exist, keep default
+                    # Apply original bold if present
+                    if item.get('original_bold_all', False):
+                        for run in para.runs:
+                            run.bold = True
+                    # Apply original font size
+                    original_font_size = item.get('original_font_size', 12)
+                    for run in para.runs:
+                        run.font.size = Pt(original_font_size)
+                        run.font.name = 'Times New Roman'
+                continue
+            
             if item.get('type') == 'paragraph':
                 text = item.get('text', '')
                 
@@ -13250,8 +13382,10 @@ class WordGenerator:
                 
                 # Bold decision: only bold short labels like "Definition:" when present.
                 label_split = self._split_label_for_bold(text)
+                is_bold_paragraph = False
                 if item.get('original_bold_all') and self.policy.preserve_existing_bold:
                     para = self.doc.add_paragraph(text, style='AcademicBody')
+                    is_bold_paragraph = True
                 elif label_split and not item.get('original_bold', False):
                     para = self.doc.add_paragraph(style='AcademicBody')
                     self._add_label_bold_runs(para, label_split[0], label_split[1])
@@ -13269,6 +13403,9 @@ class WordGenerator:
                     run.font.size = Pt(self.font_size)
                     if item.get('original_bold_all') and self.policy.preserve_existing_bold:
                         run.bold = True
+                
+                # Track bold for consecutive bold limiting
+                self._track_bold_paragraph(is_bold_paragraph, is_heading=False)
             
             elif item.get('type') == 'instruction':
                 text = item.get('text', '')
@@ -13282,11 +13419,15 @@ class WordGenerator:
                 para.paragraph_format.first_line_indent = Pt(0)
                 para.paragraph_format.space_before = Pt(6)
                 para.paragraph_format.space_after = Pt(6)
+                
+                # Apply bold only if consecutive bold limit not exceeded
+                should_bold = self._should_allow_bold(is_heading=False)
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
                     run.italic = False
-                    run.bold = True
+                    run.bold = should_bold
+                self._track_bold_paragraph(should_bold, is_heading=False)
             
             elif item.get('type') == 'question':
                 text = item.get('text', '')
@@ -13300,10 +13441,14 @@ class WordGenerator:
                 para.paragraph_format.first_line_indent = Pt(0)
                 para.paragraph_format.space_before = Pt(12)
                 para.paragraph_format.space_after = Pt(6)
+                
+                # Apply bold only if consecutive bold limit not exceeded
+                should_bold = self._should_allow_bold(is_heading=False)
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                    run.bold = True
+                    run.bold = should_bold
+                self._track_bold_paragraph(should_bold, is_heading=False)
 
             elif item.get('type') == 'academic_metadata':
                  text = item.get('text', '')
@@ -13810,6 +13955,8 @@ class WordGenerator:
                     run.font.size = Pt(self.font_size)
                     run.font.bold = True
                     run.font.color.rgb = RGBColor(0, 0, 0)  # Black
+                # Reset consecutive bold counter for headings
+                self._track_bold_paragraph(True, is_heading=True)
             
             elif item.get('type') == 'block_quote':
                 # Block quote - indented, plain text
@@ -14069,6 +14216,8 @@ class WordGenerator:
                 para.paragraph_format.space_before = Pt(0)
                 para.paragraph_format.space_after = Pt(0)
                 para.paragraph_format.line_spacing = self.line_spacing
+                # Reset consecutive bold counter for headings
+                self._track_bold_paragraph(True, is_heading=True)
             
             # ================================================================
             # SHORT DOCUMENT KEY POINT RENDERING (December 30, 2025)
@@ -14092,13 +14241,18 @@ class WordGenerator:
                 # Parse and apply formatting (handle markdown-style bold only)
                 clean_text = text.strip()
                 
+                # Check if bold is allowed (max 2 consecutive)
+                should_bold = self._should_allow_bold(is_heading=False)
+                is_bold = False
+                
                 # Apply formatting based on key point type
                 if key_point_type in ['warning', 'concept', 'exercise', 'learning', 'summary', 'procedure']:
-                    # Bold for emphasis
+                    # Bold for emphasis (if allowed)
                     run = para.add_run(clean_text)
-                    run.bold = True
+                    run.bold = should_bold
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
+                    is_bold = should_bold
                 elif key_point_type == 'example':
                     # Plain text for examples (italics disabled)
                     run = para.add_run(clean_text)
@@ -14111,29 +14265,35 @@ class WordGenerator:
                     if ':' in clean_text:
                         parts = clean_text.split(':', 1)
                         term_run = para.add_run(parts[0] + ':')
-                        term_run.bold = True
+                        term_run.bold = should_bold
                         term_run.font.name = 'Times New Roman'
                         term_run.font.size = Pt(self.font_size)
                         if len(parts) > 1:
                             defn_run = para.add_run(' ' + parts[1].strip())
                             defn_run.font.name = 'Times New Roman'
                             defn_run.font.size = Pt(self.font_size)
+                        is_bold = should_bold
                     else:
                         run = para.add_run(clean_text)
-                        run.bold = True
+                        run.bold = should_bold
                         run.font.name = 'Times New Roman'
                         run.font.size = Pt(self.font_size)
+                        is_bold = should_bold
                 else:
-                    # Default: bold
+                    # Default: bold (if allowed)
                     run = para.add_run(clean_text)
-                    run.bold = True
+                    run.bold = should_bold
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
+                    is_bold = should_bold
                 
                 para.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 para.paragraph_format.line_spacing = self.line_spacing
                 para.paragraph_format.space_before = Pt(6)
                 para.paragraph_format.space_after = Pt(6)
+                
+                # Track consecutive bold
+                self._track_bold_paragraph(is_bold, is_heading=False)
             
             elif item.get('type') == 'assignment_header_field':
                 # Assignment header field (Student Name, Course, etc.) - bold
@@ -14484,7 +14644,7 @@ def health_check():
 
 
 @app.route('/upload', methods=['POST'])
-@login_required
+@allow_guest
 def upload_document():
     """Upload and process document"""
     
@@ -14598,6 +14758,9 @@ def upload_document():
             logger.warning(f"Error estimating pages: {e}")
             estimated_pages = 1 # Fallback
 
+    # Initialize limit_reached_warning for all users (guests included)
+    limit_reached_warning = False
+    
     # Check limits and reset monthly counter if needed
     if current_user.is_authenticated:
         # Reload user to ensure fresh data and avoid proxy issues
@@ -14615,7 +14778,6 @@ def upload_document():
             db.session.commit()
             
         # Check Free Tier Limit (300 pages)
-        limit_reached_warning = False
         if user.plan == 'free':
             limit = 300
             current_usage = user.pages_this_month
@@ -14707,27 +14869,46 @@ def upload_document():
         policy = FormatPolicy()
         processor = DocumentProcessor(policy=policy)
         images = []  # Extracted images
+        shapes = []  # Extracted shapes/flowcharts
         
         if file_ext == '.docx':
-            # Robust unpacking to handle both dict and tuple returns
+            # Robust unpacking to handle both dict and tuple returns (now returns 3-tuple with shapes)
             proc_result = processor.process_docx(input_path)
-            if isinstance(proc_result, tuple) and len(proc_result) == 2:
-                result, images = proc_result
+            if isinstance(proc_result, tuple):
+                if len(proc_result) == 3:
+                    result, images, shapes = proc_result
+                elif len(proc_result) == 2:
+                    result, images = proc_result
+                    shapes = []
+                else:
+                    result = proc_result[0] if proc_result else {}
+                    images = []
+                    shapes = []
             else:
                 result = proc_result
                 images = []
-            logger.info(f"Processed document with {len(images)} images")
+                shapes = []
+            logger.info(f"Processed document with {len(images)} images and {len(shapes)} shapes/flowcharts")
         else:
-            # Read as text (txt, md, etc.) - no images in plain text
+            # Read as text (txt, md, etc.) - no images or shapes in plain text
             with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
                 text = f.read()
-            # Robust unpacking for text processing too
+            # Robust unpacking for text processing too (now returns 3-tuple with shapes)
             proc_result = processor.process_text(text)
-            if isinstance(proc_result, tuple) and len(proc_result) == 2:
-                result, images = proc_result
+            if isinstance(proc_result, tuple):
+                if len(proc_result) == 3:
+                    result, images, shapes = proc_result
+                elif len(proc_result) == 2:
+                    result, images = proc_result
+                    shapes = []
+                else:
+                    result = proc_result[0] if proc_result else {}
+                    images = []
+                    shapes = []
             else:
                 result = proc_result
                 images = []
+                shapes = []
         
         # Validate result format
         if not isinstance(result, dict) or 'structured' not in result:
@@ -14763,8 +14944,7 @@ def upload_document():
         output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_formatted.docx")
         generator = WordGenerator(policy=policy)
         
-        # Pass cover page data and certification data if detected
-        cover_page_data = getattr(processor, 'cover_page_data', None)
+        # Pass certification data if detected (cover page detection removed - templates are now used)
         certification_data = getattr(processor, 'certification_data', None)
         
         is_free = False
@@ -14775,7 +14955,7 @@ def upload_document():
             result['structured'], 
             output_path, 
             images=images,
-            cover_page_data=cover_page_data,
+            shapes=shapes,  # Pass shapes/flowcharts to generator
             certification_data=certification_data,
             is_free_tier=is_free,
             # Formatting options
@@ -14794,8 +14974,9 @@ def upload_document():
         # Generate preview markdown
         preview = generate_preview_markdown(structured_for_preview)
         
-        # Add image count to stats
+        # Add image and shape count to stats
         result['stats']['images'] = len(images)
+        result['stats']['shapes'] = len(shapes)
         
         return jsonify({
             'job_id': job_id,
@@ -14805,6 +14986,7 @@ def upload_document():
             'download_url': f'/download/{job_id}',
             'status': 'complete',
             'images_preserved': len(images),
+            'shapes_preserved': len(shapes),
             'filename': f"{smart_filename}.docx",
             'limit_reached': limit_reached_warning
         })
@@ -14826,14 +15008,21 @@ def upload_document():
 
 @app.route('/download/<job_id>', methods=['GET'])
 def download_document(job_id):
-    """Download formatted document - allows user to download own docs or admin to download any"""
+    """Download formatted document - allows guests, authenticated users, and admins"""
     output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_formatted.docx")
     
-    # Check authorization: allow if admin or if user owns the document
+    # For guests: allow download if the file exists (they just generated it)
+    # For authenticated users: allow if admin or if they own the document
     is_authorized = False
-    if current_user.is_authenticated and current_user.is_admin:
+    
+    # Guests can download if the file exists (no ownership tracking for guests)
+    if not current_user.is_authenticated:
+        # Allow guests to download any document they have the job_id for
+        # This works because job_ids are UUIDs and not guessable
+        is_authorized = True
+    elif current_user.is_admin:
         is_authorized = True  # Admins can download anything
-    elif current_user.is_authenticated:
+    else:
         # Check if user owns this document
         doc = DocumentRecord.query.filter_by(job_id=job_id, user_id=current_user.id).first()
         if doc:
@@ -14972,6 +15161,8 @@ def _convert_docx_to_pdf(docx_path, pdf_path):
     import sys
     import subprocess
     
+    logger.info(f"Converting DOCX to PDF: {docx_path} -> {pdf_path}")
+    
     if sys.platform == 'win32':
         # Windows: Use docx2pdf (requires Word installed)
         # Use a lock to prevent concurrent Word instances/COM access
@@ -14989,18 +15180,24 @@ def _convert_docx_to_pdf(docx_path, pdf_path):
                 
                 for attempt in range(max_retries):
                     try:
+                        logger.info(f"PDF conversion attempt {attempt + 1}/{max_retries}")
                         convert(docx_path, pdf_path)
+                        logger.info(f"PDF conversion successful: {pdf_path}")
                         return True, None
                     except Exception as e:
                         last_error = e
+                        logger.warning(f"PDF conversion attempt {attempt + 1} failed: {e}")
                         # Wait a bit before retry
                         time.sleep(1)
                         
+                logger.error(f"PDF conversion failed after {max_retries} attempts: {last_error}")
                 return False, f'Windows PDF conversion failed after {max_retries} attempts: {str(last_error)}'
                 
-            except ImportError:
-                return False, 'docx2pdf not installed'
+            except ImportError as e:
+                logger.error(f"docx2pdf not installed: {e}")
+                return False, 'docx2pdf not installed. Install with: pip install docx2pdf'
             except Exception as e:
+                logger.error(f"Windows PDF conversion error: {e}")
                 return False, f'Windows PDF conversion failed (Word installed?): {str(e)}'
             finally:
                 try:
@@ -15227,7 +15424,7 @@ def search_courses():
     return jsonify(matches[:10]) # Limit to 10 results
 
 @app.route('/api/coverpage/generate', methods=['POST'])
-@login_required
+@allow_guest
 def api_generate_coverpage():
     """Generate cover page from form data"""
     data = request.json
@@ -15581,34 +15778,6 @@ def download_file(job_id):
         return send_file(formatted_file, as_attachment=as_attachment)
         
     return jsonify({'error': 'Document not found'}), 404
-
-@app.route('/download-pdf/<job_id>/<filename>', methods=['GET'])
-def download_pdf_file(job_id, filename):
-    """Download PDF by job_id and filename"""
-    inline = request.args.get('inline', 'false').lower() == 'true'
-    as_attachment = not inline
-    
-    # Look for DOCX file first
-    docx_file = os.path.join(OUTPUT_FOLDER, f"{job_id}_formatted.docx")
-    if not os.path.exists(docx_file):
-        return jsonify({'error': 'Document not found'}), 404
-        
-    # Define PDF path
-    pdf_file = os.path.join(OUTPUT_FOLDER, f"{job_id}_formatted.pdf")
-    
-    # Check if PDF exists
-    if os.path.exists(pdf_file):
-        return send_file(pdf_file, as_attachment=as_attachment, mimetype='application/pdf')
-        
-    # Convert to PDF
-    success, error = _convert_docx_to_pdf(docx_file, pdf_file)
-    
-    if success and os.path.exists(pdf_file):
-        return send_file(pdf_file, as_attachment=as_attachment, mimetype='application/pdf')
-    else:
-        return jsonify({'error': error or 'PDF conversion failed'}), 500
-
-
 
 
 # --- End Cover Page Generator Integration ---

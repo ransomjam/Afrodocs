@@ -1,12 +1,24 @@
 import re
 import requests
 import os
+import logging
+
+# Load .env file if it exists
+try:
+    from dotenv import load_dotenv
+    # Load from .env file in the same directory
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    load_dotenv(env_path)
+except ImportError:
+    pass  # python-dotenv not installed, rely on environment variables
+
+logger = logging.getLogger(__name__)
 
 # Configuration - Production Mode
 # API credentials should be set via environment variables
 BASE_URL = 'https://live.fapshi.com'
-API_USER = os.environ.get('FAPSHI_API_USER', 'c02a978a-5e79-4b8e-9906-32847acaacc5')
-API_KEY = os.environ.get('FAPSHI_API_KEY', '')
+API_USER = os.environ.get('FAPSHI_API_USER', '172eaf6b-8104-4b46-83fe-07e8a943d695')
+API_KEY = os.environ.get('FAPSHI_API_KEY', 'FAK_72d40a861aeb1a075c48f8a4833a6af3')
 
 HEADERS = {
     'apiuser': API_USER,
@@ -20,6 +32,15 @@ ERRORS = [
     'amount must be of type integer',
     'amount cannot be less than 100 XAF',
 ]
+
+# Check if API key is configured
+if not API_KEY:
+    logger.warning("⚠️ FAPSHI_API_KEY is not configured! Set FAPSHI_API_KEY environment variable or payment will fail.")
+    logger.warning("   To fix: Set environment variable 'FAPSHI_API_KEY' with your Fapshi API key")
+
+def is_api_configured():
+    """Check if the Fapshi API is properly configured"""
+    return bool(API_KEY and API_USER)
 
 def initiate_pay(data: dict):
     '''
@@ -36,6 +57,15 @@ def initiate_pay(data: dict):
             "message": String
         }
     '''
+    # Check if API is configured
+    if not is_api_configured():
+        logger.error("Payment failed: Fapshi API key not configured")
+        return {
+            'statusCode': 503, 
+            'message': 'Payment service not configured. Please contact support.',
+            'error': 'PAYMENT_SERVICE_UNAVAILABLE'
+        }
+    
     if(type(data) is not dict):
         return {'statusCode':400, 'message':ERRORS[1]}
 
