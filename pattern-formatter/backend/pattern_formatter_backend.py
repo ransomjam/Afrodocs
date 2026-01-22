@@ -82,17 +82,19 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Detect production environment
-IS_PRODUCTION = os.environ.get('FLASK_ENV') == 'production' or os.environ.get('RENDER') == 'true'
+# Detect production environment (Render sets RENDER=true)
+IS_PRODUCTION = os.environ.get('RENDER', '').lower() == 'true' or os.environ.get('RENDER_EXTERNAL_URL', '') != ''
+logger.info(f"Running in {'PRODUCTION' if IS_PRODUCTION else 'DEVELOPMENT'} mode")
 
 # Session cookie configuration for proper authentication
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax' if IS_PRODUCTION else 'Lax'
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = IS_PRODUCTION  # True in production with HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax' if IS_PRODUCTION else 'Lax'
+app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION  # True in production with HTTPS
 
 # CORS configuration - allow production domain
+RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
 ALLOWED_ORIGINS = [
     "http://localhost:3000", 
     "http://localhost:5000", 
@@ -101,6 +103,12 @@ ALLOWED_ORIGINS = [
     "https://afrodocs.app",
     "https://www.afrodocs.app"
 ]
+# Add Render URL if available
+if RENDER_EXTERNAL_URL:
+    ALLOWED_ORIGINS.append(RENDER_EXTERNAL_URL)
+    # Also add the https version if not already https
+    if not RENDER_EXTERNAL_URL.startswith('https'):
+        ALLOWED_ORIGINS.append(RENDER_EXTERNAL_URL.replace('http://', 'https://'))
 CORS(app, expose_headers=["Content-Disposition"], supports_credentials=True, origins=ALLOWED_ORIGINS)
 db = SQLAlchemy(app)
 login_manager = LoginManager()
