@@ -2309,14 +2309,6 @@
                                 <button onClick={handleNewChat} className="ai-new-chat-btn" title="New Chat">
                                     <span>+</span> New
                                 </button>
-                                <button
-                                    onClick={() => setSidebarOpen(false)}
-                                    className="ai-sidebar-toggle"
-                                    style={{display: 'flex'}}
-                                    title="Collapse chat history"
-                                >
-                                    <Icons.History size={16} />
-                                </button>
                             </div>
                             <div className="ai-chat-list">
                                 {chatHistory.length === 0 ? (
