@@ -15381,7 +15381,7 @@ def mobile_pdf_viewer():
         '  <div id="fallback" class="fallback-msg">If preview fails, use the "Open" button below to open full PDF.</div>'
         '  <script>'
         '    (function(){'
-        f'      const fileUrl = "{file_url}";'
+        f'      const fileUrl = {json.dumps(file_url)};'
         '      const container = document.getElementById("container");'
 
         '      // Try embedding via object tag'
