@@ -2208,9 +2208,10 @@
                     // Add assistant messages - split into content and comment
                     if (fullContent) {
                         const { mainContent, aiComment } = splitAIResponse(fullContent);
+                        const sanitizedMain = sanitizeAiBold(mainContent);
                         // Add main content first (this is what can be formatted/copied)
-                        if (mainContent) {
-                            setMessages(prev => [...prev, { role: 'assistant', content: mainContent, isContent: true }]);
+                        if (sanitizedMain) {
+                            setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                         }
                         // Add AI comment separately (no format/copy buttons)
                         if (aiComment) {
@@ -2243,8 +2244,9 @@
                         if (data.success && data.response) {
                             // Split response into content and comment
                             const { mainContent, aiComment } = splitAIResponse(data.response);
-                            if (mainContent) {
-                                setMessages(prev => [...prev, { role: 'assistant', content: mainContent, isContent: true }]);
+                            const sanitizedMain = sanitizeAiBold(mainContent);
+                            if (sanitizedMain) {
+                                setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                             }
                             if (aiComment) {
                                 setMessages(prev => [...prev, { role: 'assistant', content: aiComment, isComment: true }]);
@@ -2356,6 +2358,15 @@
             const stripAIComments = (content) => {
                 const { mainContent } = splitAIResponse(content);
                 return mainContent;
+            };
+
+            const sanitizeAiBold = (content) => {
+                if (!content) return content;
+                const headingRegex = /^(?:\s*\**\s*(?:chapter|table of contents|references|bibliography)\b|\s*\**\s*\d+(?:\.\d+){0,3}\s+\S+|\s*\**\s*[IVX]+\.\s+\S+|\s*\**\s*[A-Z][A-Z\s]{3,})/i;
+                return content
+                    .split('\n')
+                    .map(line => (line.includes('**') && !headingRegex.test(line) ? line.replace(/\*\*/g, '') : line))
+                    .join('\n');
             };
 
             const handleSuggestionClick = (suggestion) => {
