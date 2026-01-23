@@ -808,6 +808,18 @@
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
+            transition: width 0.2s ease, transform 0.2s ease;
+            overflow: hidden;
+        }
+
+        .ai-sidebar:not(.open) {
+            width: 0;
+            border-right: none;
+        }
+
+        .ai-sidebar:not(.open) .ai-sidebar-header,
+        .ai-sidebar:not(.open) .ai-chat-list {
+            display: none;
         }
 
         .ai-sidebar-header {
@@ -922,7 +934,7 @@
         }
 
         .ai-sidebar-toggle {
-            display: none;
+            display: flex;
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 0.5rem;
@@ -1926,7 +1938,7 @@
             const [formattingIndex, setFormattingIndex] = useState(null);
             const [chatHistory, setChatHistory] = useState([]);
             const [currentChatId, setCurrentChatId] = useState(null);
-            const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
+            const [internalSidebarOpen, setInternalSidebarOpen] = useState(true);
             const sidebarOpen = typeof sidebarOpenProp !== 'undefined' ? sidebarOpenProp : internalSidebarOpen;
             const setSidebarOpen = setSidebarOpenProp || setInternalSidebarOpen;
             const messagesEndRef = useRef(null);
@@ -4301,7 +4313,7 @@
             const [showPricingModal, setShowPricingModal] = useState(false);
             // AI Assistant state
             const [showAiAssistant, setShowAiAssistant] = useState(false);
-            const [aiSidebarOpen, setAiSidebarOpen] = useState(false);
+            const [aiSidebarOpen, setAiSidebarOpen] = useState(true);
             // Documents expansion state
             const [showAllDocuments, setShowAllDocuments] = useState(false);
             // Payment success modal state
