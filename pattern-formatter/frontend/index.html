@@ -1734,152 +1734,36 @@
         const API_BASE = window.location.origin || 'http://localhost:5000';
 
         // ============================================================================
-        // MOBILE PDF VIEWER COMPONENT (uses PDF.js)
+        // MOBILE PDF VIEWER COMPONENT (simple iframe embed)
         // ============================================================================
         const MobilePdfViewer = ({ pdfUrl, maxHeight = 400 }) => {
-            const canvasRef = useRef(null);
-            const containerRef = useRef(null);
             const [loading, setLoading] = useState(true);
-            const [error, setError] = useState(null);
-            const [currentPage, setCurrentPage] = useState(1);
-            const [totalPages, setTotalPages] = useState(0);
-            const [pdfDoc, setPdfDoc] = useState(null);
-            const [scale, setScale] = useState(1);
 
-            useEffect(() => {
-                if (!pdfUrl || typeof pdfjsLib === 'undefined') {
-                    setError('PDF viewer not available');
-                    setLoading(false);
-                    return;
-                }
-
-                // Set PDF.js worker
-                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-                setLoading(true);
-                setError(null);
-
-                // Clean the URL (remove hash fragments for loading)
-                const cleanUrl = pdfUrl.split('#')[0];
-
-                pdfjsLib.getDocument(cleanUrl).promise
-                    .then(pdf => {
-                        setPdfDoc(pdf);
-                        setTotalPages(pdf.numPages);
-                        setCurrentPage(1);
-                        setLoading(false);
-                    })
-                    .catch(err => {
-                        console.error('PDF load error:', err);
-                        setError('Failed to load PDF');
-                        setLoading(false);
-                    });
-
-                return () => {
-                    if (pdfDoc) {
-                        pdfDoc.destroy();
-                    }
-                };
-            }, [pdfUrl]);
-
-            useEffect(() => {
-                if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
-
-                const renderPage = async (pageNum) => {
-                    try {
-                        const page = await pdfDoc.getPage(pageNum);
-                        const canvas = canvasRef.current;
-                        const ctx = canvas.getContext('2d');
-                        
-                        // Calculate scale to fit container width
-                        const containerWidth = containerRef.current.clientWidth - 20;
-                        const viewport = page.getViewport({ scale: 1 });
-                        const calculatedScale = containerWidth / viewport.width;
-                        setScale(calculatedScale);
-                        
-                        const scaledViewport = page.getViewport({ scale: calculatedScale });
-                        
-                        canvas.height = scaledViewport.height;
-                        canvas.width = scaledViewport.width;
-
-                        await page.render({
-                            canvasContext: ctx,
-                            viewport: scaledViewport
-                        }).promise;
-                    } catch (err) {
-                        console.error('Page render error:', err);
-                    }
-                };
-
-                renderPage(currentPage);
-            }, [pdfDoc, currentPage]);
-
-            const goToPrevPage = () => {
-                if (currentPage > 1) setCurrentPage(currentPage - 1);
-            };
-
-            const goToNextPage = () => {
-                if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-            };
-
-            if (loading) {
-                return (
-                    <div className="flex items-center justify-center h-full text-mist flex-col gap-4 p-6">
-                        <div className="lightning-loading">
-                            <Icons.Zap />
-                        </div>
-                        <p className="text-sm">Loading PDF...</p>
-                    </div>
-                );
-            }
-
-            if (error) {
-                return (
-                    <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
-                        <Icons.FileText size={48} className="text-teal/30" />
-                        <p className="text-mist text-center text-sm">{error}</p>
-                        <a 
-                            href={pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-6 py-2 bg-teal/20 hover:bg-teal/30 text-teal rounded-lg transition-colors flex items-center gap-2 font-medium text-sm"
-                        >
-                            <Icons.ExternalLink size={16} /> Open in New Tab
-                        </a>
-                    </div>
-                );
-            }
+            // Add parameters to hide toolbar/navbar in PDF viewer
+            const embedUrl = pdfUrl ? `${pdfUrl.split('#')[0]}#toolbar=0&navpanes=0&scrollbar=1&view=FitH` : '';
 
             return (
-                <div ref={containerRef} className="flex flex-col h-full">
-                    {/* Page navigation */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-center gap-4 py-2 bg-black/30 border-b border-white/10">
-                            <button 
-                                onClick={goToPrevPage} 
-                                disabled={currentPage === 1}
-                                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                                <Icons.ChevronLeft size={20} />
-                            </button>
-                            <span className="text-sm text-mist">
-                                {currentPage} / {totalPages}
-                            </span>
-                            <button 
-                                onClick={goToNextPage} 
-                                disabled={currentPage === totalPages}
-                                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                                <Icons.ChevronRight size={20} />
-                            </button>
-                        </div>
-                    )}
-                    {/* PDF canvas */}
+                <div className="flex flex-col h-full">
+                    {/* PDF iframe container */}
                     <div 
-                        className="flex-1 overflow-auto custom-scrollbar flex justify-center p-2 bg-slate-800"
-                        style={{ maxHeight: `${maxHeight}px` }}
+                        className="flex-1 overflow-hidden bg-slate-800 rounded-lg"
+                        style={{ height: `${maxHeight}px` }}
                     >
-                        <canvas ref={canvasRef} className="shadow-lg" />
+                        {loading && (
+                            <div className="absolute inset-0 flex items-center justify-center text-mist flex-col gap-4 p-6 z-10">
+                                <div className="lightning-loading">
+                                    <Icons.Zap />
+                                </div>
+                                <p className="text-sm">Loading PDF...</p>
+                            </div>
+                        )}
+                        <iframe
+                            src={embedUrl}
+                            className="w-full h-full border-0 rounded-lg"
+                            style={{ minHeight: `${maxHeight}px` }}
+                            onLoad={() => setLoading(false)}
+                            title="PDF Preview"
+                        />
                     </div>
                     {/* Open in new tab link */}
                     <div className="flex justify-center py-2 bg-black/30 border-t border-white/10">
