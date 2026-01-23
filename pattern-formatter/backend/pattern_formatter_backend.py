@@ -15347,6 +15347,112 @@ def download_pdf(job_id, filename):
         return jsonify({'error': error or 'PDF conversion failed'}), 500
 
 
+@app.route('/mobile-pdf-viewer', methods=['GET'])
+def mobile_pdf_viewer():
+    """Serve a minimal HTML page that embeds the PDF specified by the `file` query parameter.
+    The wrapper first attempts to embed the PDF natively via an <object> tag and, if that fails,
+    falls back to rendering the first page using PDF.js. This improves mobile preview compatibility.
+    """
+    file_url = request.args.get('file', '')
+    if not file_url:
+        return "Missing 'file' parameter", 400
+
+    # Basic safety checks
+    if '\n' in file_url or '\r' in file_url:
+        return "Invalid file URL", 400
+
+    html = (
+        '<!doctype html>'
+        '<html lang="en">'
+        '<head>'
+        '  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">'
+        '  <meta charset="utf-8">'
+        '  <title>Preview</title>'
+        '  <style>html,body{height:100%;margin:0;background:#111}.viewer{width:100%;height:100%;border:0;display:block}.fallback-msg{color:#9aa6b2;position:absolute;bottom:12px;left:12px;font-size:13px}</style>'
+        '  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>'
+        '</head>'
+        '<body>'
+        '  <div id="container" style="width:100%;height:100%;position:relative;background:#111"></div>'
+        '  <div id="fallback" class="fallback-msg">If preview fails, use the "Open" button below to open full PDF.</div>'
+        '  <script>'
+        '    (function(){'
+        f'      const fileUrl = "{file_url}";'
+        '      const container = document.getElementById("container");'
+
+        '      // Try embedding via object tag'
+        '      const obj = document.createElement("object");'
+        '      obj.data = fileUrl;'
+        '      obj.type = "application/pdf";'
+        '      obj.className = "viewer";'
+        '      obj.width = "100%";'
+        '      obj.height = "100%";'
+
+        '      let loaded = false;'
+        '      obj.onload = function(){ loaded = true; };'
+        '      obj.onerror = function(){ loaded = false; };'
+
+        '      container.appendChild(obj);'
+
+        '      // After short timeout, if not loaded, fallback to PDF.js render'
+        '      setTimeout(async function(){'
+        '        if (loaded) return;'
+        '        try { container.removeChild(obj); } catch(e) {}'
+        '        try {'
+        '          const resp = await fetch(fileUrl);'
+        '          if (!resp.ok) throw new Error("Fetch failed");'
+        '          const buf = await resp.arrayBuffer();'
+        '          const loadingTask = pdfjsLib.getDocument({data: buf});'
+        '          const pdf = await loadingTask.promise;'
+        '          const page = await pdf.getPage(1);'
+        '          const viewport = page.getViewport({scale: 1});'
+        '          const scale = (container.clientWidth - 20) / viewport.width;'
+        '          const scaled = page.getViewport({scale});'
+        '          const canvas = document.createElement("canvas");'
+        '          canvas.width = Math.floor(scaled.width);'
+        '          canvas.height = Math.floor(scaled.height);'
+        '          canvas.style.display = "block";'
+        '          canvas.style.margin = "0 auto";'
+        '          container.appendChild(canvas);'
+        '          const ctx = canvas.getContext("2d");'
+        '          await page.render({canvasContext: ctx, viewport: scaled}).promise;'
+        '        } catch (err) {'
+        '          console.error("PDF.js fallback failed", err);'
+        '          const iframe = document.createElement("iframe");'
+        '          iframe.src = fileUrl;'
+        '          iframe.className = "viewer";'
+        '          container.appendChild(iframe);'
+        '        }'
+        '      }, 600);'
+
+        '      // Add open full PDF button overlay (loads PDF inside the preview when tapped)'
+        '      const openBtn = document.createElement("button");'
+        '      openBtn.type = "button";'
+        '      openBtn.textContent = "Open";'
+        '      openBtn.style.position = "absolute";'
+        '      openBtn.style.left = "50%";'
+        '      openBtn.style.top = "50%";'
+        '      openBtn.style.transform = "translate(-50%,-50%)";'
+        '      openBtn.style.padding = "12px 22px";'
+        '      openBtn.style.background = "#5b9fff";'
+        '      openBtn.style.color = "#001";'
+        '      openBtn.style.border = "none";'
+        '      openBtn.style.borderRadius = "999px";'
+        '      openBtn.style.fontWeight = "600";'
+        '      openBtn.style.zIndex = "9999";'
+        '      openBtn.onclick = function(e){'
+        '          try { container.innerHTML = ""; const iframe = document.createElement("iframe"); iframe.src = fileUrl; iframe.className = "viewer"; container.appendChild(iframe); } catch(err){ window.open(fileUrl, "_blank"); }'
+        '      };'
+        '      container.appendChild(openBtn);'
+
+        '    })();'
+        '  </script>'
+        '</body>'
+        '</html>'
+    )
+
+    return Response(html, mimetype='text/html')
+
+
 def generate_preview_markdown(structured):
     """Generate markdown preview from structured data"""
     markdown = ''
