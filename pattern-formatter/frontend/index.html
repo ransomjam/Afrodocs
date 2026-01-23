@@ -2209,6 +2209,7 @@
                     if (fullContent) {
                         const { mainContent, aiComment } = splitAIResponse(fullContent);
                         const sanitizedMain = sanitizeAiOutput(mainContent);
+                        const sanitizedMain = sanitizeAiBold(mainContent);
                         // Add main content first (this is what can be formatted/copied)
                         if (sanitizedMain) {
                             setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
@@ -2245,6 +2246,7 @@
                             // Split response into content and comment
                             const { mainContent, aiComment } = splitAIResponse(data.response);
                             const sanitizedMain = sanitizeAiOutput(mainContent);
+                            const sanitizedMain = sanitizeAiBold(mainContent);
                             if (sanitizedMain) {
                                 setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                             }

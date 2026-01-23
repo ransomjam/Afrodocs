@@ -880,6 +880,69 @@ def normalize_ai_structure(text):
 def normalize_ai_output(text):
     return normalize_ai_structure(normalize_ai_bolding(text))
 
+def restructure_text_with_ai(text):
+    if not text or not text.strip():
+        return text
+
+    messages = [
+        {"role": "system", "content": AI_RESTRUCTURE_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Restructure the text below into AfroDocs academic formatting:\n\n{text}"}
+    ]
+    return normalize_ai_bolding(_call_deepseek(messages))
+
+
+def extract_text_from_docx_bytes(file_bytes):
+    doc = Document(BytesIO(file_bytes))
+    lines = []
+    for para in doc.paragraphs:
+        if para.text:
+            lines.append(para.text)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text]
+            if cells:
+                lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+AI_RESTRUCTURE_SYSTEM_PROMPT = """You are AfroDocs AI Restructuring Assistant.
+
+Task: Restructure the provided text to match AfroDocs academic formatting standards.
+
+Requirements:
+- Preserve all original meaning and content. Do NOT invent, add, or remove content.
+- Apply hierarchical numbering where appropriate: 1.0, 1.1, 1.1.1, etc.
+- Use lettered lists (a, b, c) and roman numerals (i, ii, iii) when structure calls for sub-lists.
+- Use bullet points for simple unordered items.
+- Keep headings concise and clear, and follow the AfroDocs numbering hierarchy.
+- Return ONLY the restructured text with no commentary, no explanations, and no code fences.
+"""
+
+
+def _call_deepseek(messages, temperature=0.4, max_tokens=4096, timeout=90):
+    import requests
+
+    response = requests.post(
+        DEEPSEEK_API_URL,
+        headers={
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": DEEPSEEK_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        },
+        timeout=timeout
+    )
+
+    if response.status_code != 200:
+        logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+        raise RuntimeError(f"AI service error: {response.status_code}")
+
+    result = response.json()
+    return result['choices'][0]['message']['content']
+
 
 def restructure_text_with_ai(text):
     if not text or not text.strip():
@@ -890,6 +953,7 @@ def restructure_text_with_ai(text):
         {"role": "user", "content": f"Restructure the text below into AfroDocs academic formatting:\n\n{text}"}
     ]
     return normalize_ai_output(_call_deepseek(messages))
+    return _call_deepseek(messages)
 
 
 def extract_text_from_docx_bytes(file_bytes):
@@ -948,6 +1012,7 @@ def ai_chat():
         if response.status_code == 200:
             result = response.json()
             ai_response = normalize_ai_output(result['choices'][0]['message']['content'])
+            ai_response = normalize_ai_bolding(result['choices'][0]['message']['content'])
             return jsonify({'response': ai_response, 'success': True}), 200
         else:
             logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
