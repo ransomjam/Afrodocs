@@ -4957,6 +4957,7 @@ class PatternEngine:
                 re.compile(r'^.+\s+\.{2,}\s*\d+\s*$'),  # Title .. Page
                 re.compile(r'^\s*[IVXLC]+\s+.+\s+\d+\s*$'),  # Roman numeral entry
                 re.compile(r'^\s*\d+\.\d*\s+.+\s+\d+\s*$'),  # Numbered entry
+                re.compile(r'^.+(?:\t| {2,})(?:\d+|[IVXLC]+)\s*$', re.IGNORECASE),  # Title <tab/spaces> iii
             ],
             
             # 31. HEADING_SPACE_ISSUES - Patterns for detecting spacing issues in headings
@@ -5048,6 +5049,7 @@ class PatternEngine:
                 re.compile(r'^[A-Za-z].+\.{3,}\s*\d+$'),  # Introduction ........ 5
                 re.compile(r'^.+\s+\.{5,}\s*\d+$'),  # Anything with dot leaders
                 re.compile(r'^\s*\d+\.\d+\s+.+\s+\d+\s*$'),  # 1.1 Section  5
+                re.compile(r'^.+(?:\t| {2,})(?:\d+|[IVXLC]+)\s*$', re.IGNORECASE),  # Title <tab/spaces> iii
             ],
             
             # 38. KEY_POINT_LEARNING_OBJECTIVES - Learning goals/objectives
@@ -5190,6 +5192,8 @@ class PatternEngine:
                 re.compile(r'namely:', re.IGNORECASE),  # "Namely:"
                 re.compile(r'such\s+as:', re.IGNORECASE),  # "Such as:"
                 re.compile(r'including:', re.IGNORECASE),  # "Including:"
+                re.compile(r'(?:include|includes|including)\s*$', re.IGNORECASE),  # "include" without colon
+                re.compile(r'such\s+as\s*$', re.IGNORECASE),  # "such as" without colon
                 re.compile(r':\s*$'),  # Ends with colon
             ],
             
@@ -6625,6 +6629,52 @@ class PatternEngine:
                 return True
         return False
 
+    def _has_list_leadin_phrase(self, text):
+        """Check if a line contains a list lead-in phrase without explicit bullets."""
+        if not text:
+            return False
+        clean = text.strip()
+        leadin_patterns = [
+            r'(?:include|includes|including)\s*$',
+            r'(?:such\s+as)\s*$',
+            r'(?:consist(?:s)?\s+of)\s*$',
+            r'(?:are|is)\s+(?:as\s+follows|listed|outlined)\s*:?\s*$',
+            r'(?:the\s+)?following(?:\s+\w+)?\s*$',
+        ]
+        return any(re.search(pattern, clean, re.IGNORECASE) for pattern in leadin_patterns)
+
+    def _is_list_heading_line(self, text):
+        """Check if a short line likely introduces a list (e.g., Benefits, Positive effects)."""
+        if not text:
+            return False
+        clean = text.strip()
+        heading_type, _ = self.get_point_form_heading_type(clean)
+        if heading_type:
+            return True
+        if re.match(r'^(?:positive|negative)\s+effects?$', clean, re.IGNORECASE):
+            return True
+        if re.match(r'^(?:benefits?|challenges?|advantages?|disadvantages?)$', clean, re.IGNORECASE):
+            return True
+        return False
+
+    def _is_implicit_list_item(self, text, prev_line, next_line):
+        """Infer list items from context when bullets are missing."""
+        if not text:
+            return False
+        clean = text.strip()
+        if not self.could_be_list_item(clean):
+            return False
+        if self._looks_like_question(clean):
+            return False
+        prev = prev_line.strip() if prev_line else ''
+        next_text = next_line.strip() if next_line else ''
+        if prev and (self.has_list_context_clue(prev) or self._has_list_leadin_phrase(prev) or self._is_list_heading_line(prev)):
+            return True
+        if prev and self.could_be_list_item(prev) and not prev.endswith('.'):
+            if next_text and self.could_be_list_item(next_text) and not next_text.endswith('.'):
+                return True
+        return False
+
     def _looks_like_question(self, text):
         """Check if text reads like a question to avoid misclassifying it as a heading."""
         if not text:
@@ -6984,6 +7034,14 @@ class PatternEngine:
                 analysis['confidence'] = 0.80
                 logger.info("List item inferred from context: '%s'", trimmed)
                 return analysis
+
+        # Priority 1.95: Implicit list items based on list lead-ins or headings
+        if is_short and not has_period and self._is_implicit_list_item(trimmed, prev_line, next_line):
+            analysis['type'] = 'bullet_list'
+            analysis['content'] = trimmed
+            analysis['confidence'] = 0.88
+            logger.info("Implicit list item detected: '%s'", trimmed)
+            return analysis
 
         # Priority 2: Check for heading patterns
         if is_short and not has_period:
