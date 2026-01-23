@@ -16,8 +16,27 @@ logger = logging.getLogger(__name__)
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
-TEMPLATES_DIR = os.path.join(os.path.dirname(BASE_DIR), 'Cover Pages')
-OUTPUT_DIR = os.path.join(os.path.dirname(BASE_DIR), 'outputs', 'Cover Pages')
+
+# Templates directory - check multiple possible locations for Docker and local compatibility
+# In Docker: /app/Cover Pages (same level as backend code)
+# Locally: ../Cover Pages (parent of backend folder)
+def get_templates_dir():
+    """Find the Cover Pages templates directory."""
+    possible_paths = [
+        os.path.join(BASE_DIR, 'Cover Pages'),  # Docker: /app/Cover Pages
+        os.path.join(os.path.dirname(BASE_DIR), 'Cover Pages'),  # Local: parent/Cover Pages
+        '/Cover Pages',  # Docker root fallback
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            logger.info(f"Found templates directory at: {path}")
+            return path
+    # Default fallback
+    logger.warning(f"Templates directory not found. Checked: {possible_paths}")
+    return os.path.join(os.path.dirname(BASE_DIR), 'Cover Pages')
+
+TEMPLATES_DIR = get_templates_dir()
+OUTPUT_DIR = os.path.join(BASE_DIR, 'outputs', 'Cover Pages')
 
 # Ensure output directory exists
 os.makedirs(OUTPUT_DIR, exist_ok=True)

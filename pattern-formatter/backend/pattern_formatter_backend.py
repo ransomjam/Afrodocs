@@ -74,8 +74,22 @@ class FormatPolicy:
             return False
         return has_consistent_scheme
 
+# Determine frontend folder location (Docker vs local)
+def get_frontend_folder():
+    """Find frontend folder - handles both Docker and local development."""
+    possible_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend'),  # Docker: /app/frontend
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend'),  # Local: ../frontend
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            logger.info(f"Found frontend at: {path}")
+            return path
+    # Default fallback
+    return '../frontend'
+
 # Serve frontend files directly from the backend for simple deployment
-app = Flask(__name__, static_folder='../frontend', static_url_path='')
+app = Flask(__name__, static_folder=get_frontend_folder(), static_url_path='')
 
 # Load configuration from environment variables
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')

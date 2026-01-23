@@ -18,14 +18,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the backend application
 COPY backend/ .
 
-# Copy the frontend (relative to app, going up one level like local structure)
-COPY frontend/ ../frontend/
+# Copy the frontend
+COPY frontend/ ./frontend/
 
-# Copy Cover Pages templates (relative to app, going up one level like local structure)
-COPY "Cover Pages/" "../Cover Pages/"
+# Copy Cover Pages templates (inside /app for Docker compatibility)
+COPY "Cover Pages/" "./Cover Pages/"
 
 # Create necessary directories
-RUN mkdir -p outputs uploads templates instance
+RUN mkdir -p outputs uploads templates instance outputs/Cover\ Pages
 
 # Expose port
 EXPOSE 10000

@@ -3581,11 +3581,31 @@
 
                                             <div className="flex-1 relative bg-slate-900">
                                                 {pdfPreviewUrl ? (
-                                                    <iframe 
-                                                        src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=${window.innerWidth < 768 ? 'FitH' : 'FitV'}`}
-                                                        className="w-full h-full border-0"
-                                                        title="PDF Preview"
-                                                    />
+                                                    <>
+                                                        {/* Mobile-friendly PDF display with Open button */}
+                                                        <div className="md:hidden flex flex-col items-center justify-center h-full gap-4 p-6">
+                                                            <div className="text-6xl text-teal/30 mb-2">
+                                                                <Icons.FileText size={64} />
+                                                            </div>
+                                                            <p className="text-mist text-center text-xs">
+                                                                {pdfPreviewUrl ? pdfPreviewUrl.split('/').pop()?.replace(/\?.*/,'') : 'CoverPage.pdf'}
+                                                            </p>
+                                                            <a 
+                                                                href={pdfPreviewUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="px-6 py-2 bg-teal/20 hover:bg-teal/30 text-teal rounded-lg transition-colors flex items-center gap-2 font-medium text-sm"
+                                                            >
+                                                                Open
+                                                            </a>
+                                                        </div>
+                                                        {/* Desktop iframe preview */}
+                                                        <iframe 
+                                                            src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitV`}
+                                                            className="w-full h-full border-0 hidden md:block"
+                                                            title="PDF Preview"
+                                                        />
+                                                    </>
                                                 ) : (
                                                     <div className="flex items-center justify-center h-full text-mist flex-col gap-4">
                                                         <div className="lightning-loading">
@@ -5234,17 +5254,37 @@
                                                                     </button>
                                                                 </div>
                                                             ) : (
-                                                                <iframe 
-                                                                    key={pdfPreviewKey}
-                                                                    src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                                                                    className="w-full h-full border-0"
-                                                                    title="PDF Preview"
-                                                                    onLoad={() => setPdfPreviewLoading(false)}
-                                                                    onError={() => {
-                                                                        setPdfPreviewLoading(false);
-                                                                        setPdfPreviewError(true);
-                                                                    }}
-                                                                />
+                                                                <>
+                                                                    {/* Mobile-friendly PDF display with Open button */}
+                                                                    <div className="md:hidden flex flex-col items-center justify-center h-full gap-4 p-6">
+                                                                        <div className="text-6xl text-teal/30 mb-2">
+                                                                            <Icons.FileText size={80} />
+                                                                        </div>
+                                                                        <p className="text-mist text-center text-sm mb-2">
+                                                                            {pdfPreviewUrl ? pdfPreviewUrl.split('/').pop()?.replace(/\?.*/,'') : 'document.pdf'}
+                                                                        </p>
+                                                                        <a 
+                                                                            href={pdfPreviewUrl}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="px-8 py-3 bg-teal/20 hover:bg-teal/30 text-teal rounded-xl transition-colors flex items-center gap-2 font-medium"
+                                                                        >
+                                                                            Open
+                                                                        </a>
+                                                                    </div>
+                                                                    {/* Desktop iframe preview */}
+                                                                    <iframe 
+                                                                        key={pdfPreviewKey}
+                                                                        src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                                                                        className="w-full h-full border-0 hidden md:block"
+                                                                        title="PDF Preview"
+                                                                        onLoad={() => setPdfPreviewLoading(false)}
+                                                                        onError={() => {
+                                                                            setPdfPreviewLoading(false);
+                                                                            setPdfPreviewError(true);
+                                                                        }}
+                                                                    />
+                                                                </>
                                                             )}
                                                         </>
                                                     ) : (
