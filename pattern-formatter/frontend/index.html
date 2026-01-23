@@ -2208,10 +2208,11 @@
                     // Add assistant messages - split into content and comment
                     if (fullContent) {
                         const { mainContent, aiComment } = splitAIResponse(fullContent);
-                        const sanitizedChatContent = sanitizeAiOutput(mainContent);
+                        const sanitizedMain = sanitizeAiOutput(mainContent);
+                        const sanitizedMain = sanitizeAiBold(mainContent);
                         // Add main content first (this is what can be formatted/copied)
-                        if (sanitizedChatContent) {
-                            setMessages(prev => [...prev, { role: 'assistant', content: sanitizedChatContent, isContent: true }]);
+                        if (sanitizedMain) {
+                            setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                         }
                         // Add AI comment separately (no format/copy buttons)
                         if (aiComment) {
@@ -2244,9 +2245,10 @@
                         if (data.success && data.response) {
                             // Split response into content and comment
                             const { mainContent, aiComment } = splitAIResponse(data.response);
-                            const sanitizedChatContent = sanitizeAiOutput(mainContent);
-                            if (sanitizedChatContent) {
-                                setMessages(prev => [...prev, { role: 'assistant', content: sanitizedChatContent, isContent: true }]);
+                            const sanitizedMain = sanitizeAiOutput(mainContent);
+                            const sanitizedMain = sanitizeAiBold(mainContent);
+                            if (sanitizedMain) {
+                                setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                             }
                             if (aiComment) {
                                 setMessages(prev => [...prev, { role: 'assistant', content: aiComment, isComment: true }]);
