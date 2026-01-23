@@ -6625,6 +6625,25 @@ class PatternEngine:
                 return True
         return False
 
+    def _looks_like_question(self, text):
+        """Check if text reads like a question to avoid misclassifying it as a heading."""
+        if not text:
+            return False
+        trimmed = text.strip()
+        if not trimmed:
+            return False
+        if '?' in trimmed:
+            return True
+        question_starters = (
+            r'(what|why|how|who|which|where|when|whom|whose|is|are|do|does|did|'
+            r'can|could|would|should|will|may|might)\b'
+        )
+        if re.match(question_starters, trimmed, re.IGNORECASE):
+            return True
+        if re.match(r'^to\s+what\s+extent\b', trimmed, re.IGNORECASE):
+            return True
+        return False
+
     def _is_heading_like_numbered_line(self, text):
         """Detect numbered lines that look like headings rather than list items."""
         match = re.match(r'^\s*(\d+[\.)])\s+(.+)$', text)
@@ -6632,6 +6651,8 @@ class PatternEngine:
             return False
         title = match.group(2).strip()
         if not title or title.endswith('.'):
+            return False
+        if self._looks_like_question(title):
             return False
         word_count = len(title.split())
         if word_count > 8:
@@ -7182,6 +7203,12 @@ class PatternEngine:
         
         for pattern in self.patterns['numbered_list']:
             if pattern.match(trimmed):
+                question_text = re.sub(r'^\s*\(?[0-9ivxA-Za-z]+[\.)]\s+', '', trimmed).strip()
+                if self._looks_like_question(question_text):
+                    analysis['type'] = 'numbered_list'
+                    analysis['confidence'] = 0.95
+                    logger.info("List item detected (numbered question): '%s'", trimmed)
+                    return analysis
                 if (self._matches_heading_patterns(trimmed)
                         or (self._is_heading_like_numbered_line(trimmed)
                             and not self._has_adjacent_list_context(prev_line, next_line))):
@@ -7209,6 +7236,7 @@ class PatternEngine:
             if (title and title[0].isupper() and 
                 len(title.split()) <= 8 and 
                 len(title) < 100 and
+                not self._looks_like_question(title) and
                 not title.endswith('.')):  # Not a full sentence
                 analysis['type'] = 'shortdoc_header'
                 analysis['content'] = title
@@ -7227,6 +7255,7 @@ class PatternEngine:
             if (title and title[0].isupper() and 
                 len(title.split()) <= 6 and  # Shorter than main headers
                 len(title) < 80 and
+                not self._looks_like_question(title) and
                 not title.endswith('.')):  # Not a full sentence
                 analysis['type'] = 'shortdoc_header'
                 analysis['content'] = title
@@ -7245,6 +7274,7 @@ class PatternEngine:
             if (title and title[0].isupper() and 
                 len(title.split()) <= 8 and 
                 len(title) < 100 and
+                not self._looks_like_question(title) and
                 not title.endswith('.')):  # Not a full sentence
                 analysis['type'] = 'shortdoc_header'
                 analysis['content'] = title
