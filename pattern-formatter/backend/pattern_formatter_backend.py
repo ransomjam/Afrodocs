@@ -13832,8 +13832,10 @@ class WordGenerator:
                 
                 # Remove hanging indent - use justified alignment only
                 if is_references_section:
-                    para.paragraph_format.left_indent = Pt(0)
-                    para.paragraph_format.first_line_indent = Pt(0)
+                    # Apply hanging indent for journal/reference entries: first line flush left,
+                    # subsequent lines indented by 0.5 inches.
+                    para.paragraph_format.left_indent = Inches(0.5)
+                    para.paragraph_format.first_line_indent = Inches(-0.5)
                 else:
                     # In-text reference citations - no indent
                     para.paragraph_format.left_indent = Pt(0)
