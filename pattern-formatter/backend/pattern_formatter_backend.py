@@ -795,8 +795,8 @@ Task: Restructure the provided text to match AfroDocs academic formatting standa
 Requirements:
 - Preserve all original meaning and content. Do NOT invent, add, or remove content.
 - Apply hierarchical numbering where appropriate: 1.0, 1.1, 1.1.1, etc.
-- Use lettered lists (a, b, c) and roman numerals (i, ii, iii) when structure calls for sub-lists.
-- Use bullet points for simple unordered items.
+- Use bullet points for unordered items and Arabic numerals (1, 2, 3) for ordered lists.
+- Do NOT use lettered lists (a, b, c), roman numerals (i, ii, iii), or mixed numeric-letter labels (1a, 2b).
 - Keep headings concise and clear, and follow the AfroDocs numbering hierarchy.
 - Return ONLY the restructured text with no commentary, no explanations, and no code fences.
 - Only bold headings/titles. Do NOT bold full paragraphs, tables, or list items.
@@ -837,7 +837,6 @@ def normalize_ai_bolding(text):
     heading_patterns = [
         r'^\s*\*?\*?\s*(?:chapter|table of contents|references|bibliography)\b',
         r'^\s*\*?\*?\s*\d+(\.\d+){0,3}\s+\S+',
-        r'^\s*\*?\*?\s*[IVX]+\.\s+\S+',
         r'^\s*\*?\*?\s*[A-Z][A-Z\s]{3,}$'
     ]
     heading_regex = re.compile('|'.join(heading_patterns), re.IGNORECASE)
@@ -855,8 +854,9 @@ def normalize_ai_structure(text):
         return text
 
     lines = []
-    lettered_pattern = re.compile(r'^\s*(?:\d+\s+)?([a-z])[\)\.]\s+', re.IGNORECASE)
-    roman_pattern = re.compile(r'^\s*(?:\d+\s+)?(i{1,4}|v|vi{0,3}|ix|x)\s+',
+    mixed_alpha_numeric_pattern = re.compile(r'^\s*\d+\s*[a-zA-Z][\)\.\:]?\s+', re.IGNORECASE)
+    lettered_pattern = re.compile(r'^\s*(?:\d+\s+)?[a-z][\)\.]\s+', re.IGNORECASE)
+    roman_pattern = re.compile(r'^\s*(?:\d+\s+)?(?:i{1,4}|v|vi{0,3}|ix|x)[\)\.\:]?\s+',
                                re.IGNORECASE)
     for line in text.splitlines():
         stripped = line.strip()
@@ -864,13 +864,18 @@ def normalize_ai_structure(text):
             lines.append(line)
             continue
 
+        if mixed_alpha_numeric_pattern.match(stripped):
+            updated = mixed_alpha_numeric_pattern.sub('', stripped)
+            lines.append(f"- {updated}")
+            continue
+
         if lettered_pattern.match(stripped):
-            updated = lettered_pattern.sub(r'\1) ', stripped)
+            updated = lettered_pattern.sub('', stripped)
             lines.append(f"- {updated}")
             continue
 
         if roman_pattern.match(stripped) and not stripped.lower().startswith('chapter'):
-            updated = roman_pattern.sub(lambda m: f"{m.group(1).lower()} ", stripped)
+            updated = roman_pattern.sub('', stripped)
             lines.append(f"- {updated}")
             continue
 
