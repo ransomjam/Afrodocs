@@ -1760,8 +1760,8 @@
         const MobilePdfViewer = ({ pdfUrl, maxHeight = 400 }) => {
             const [loading, setLoading] = useState(true);
 
-            // Add parameters to hide toolbar/navbar in PDF viewer
-            const embedUrl = pdfUrl ? `${pdfUrl.split('#')[0]}#toolbar=0&navpanes=0&scrollbar=1&view=FitH` : '';
+            // Use backend wrapper page for mobile embedding to improve compatibility
+            const embedUrl = pdfUrl ? `${API_BASE}/mobile-pdf-viewer?file=${encodeURIComponent(pdfUrl)}` : '';
 
             return (
                 <div className="flex flex-col h-full">
