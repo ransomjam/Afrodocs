@@ -409,7 +409,7 @@
             border-radius: 1rem;
             max-width: 85%;
             word-wrap: break-word;
-            line-height: 1.15;
+            line-height: 1.38cm;
             text-align: left;
         }
 
@@ -1849,6 +1849,10 @@
             html = html.replace(/<em>(.*?)<\/em>/g, '$1');
             html = html.replace(/_(.*?)_/g, '$1');
 
+            // Ensure References header appears in all caps in chat display
+            html = html.replace(/(<h[1-6]>\s*)(references)\s*(<\/h[1-6]>)/gi, (m, p1, p2, p3) => p1 + p2.toUpperCase() + p3);
+            html = html.replace(/(<p>\s*)(references)\s*(<\/p>)/gi, (m, p1, p2, p3) => p1 + p2.toUpperCase() + p3);
+
             return html;
         };
 
@@ -3129,31 +3133,26 @@
             }, []);
 
             // Effect to load profile once institutions are available
+            // NOTE: We intentionally do NOT auto-select institution/faculty here.
+            // The cover page should always default to 'Select Institution' and 'Select Faculty'
             React.useEffect(() => {
                 if (institutions.length > 0) {
                     const saved = localStorage.getItem('coverpage_profile');
                     if (saved) {
                         try {
                             const profile = JSON.parse(saved);
-                            
-                            // Find the institution object to get faculties
-                            const inst = institutions.find(i => i.id === profile.institution);
-                            const loadedFaculties = inst ? inst.faculties : [];
-                            
-                            // Find the faculty object to get departments
-                            const fac = loadedFaculties.find(f => f.name === profile.faculty);
-                            const loadedDepartments = fac ? fac.departments : [];
-                            
-                            setFaculties(loadedFaculties);
-                            setDepartments(loadedDepartments);
-                            
+
+                            // Only restore non-institution-specific fields. Keep institution/faculty/department blank
+                            setFaculties([]);
+                            setDepartments([]);
+
                             setFormData(prev => ({
                                 ...prev,
                                 studentName: profile.studentName || '',
                                 studentId: profile.studentId || '',
-                                institution: profile.institution || '',
-                                faculty: profile.faculty || '',
-                                department: profile.department || '',
+                                institution: '',
+                                faculty: '',
+                                department: '',
                                 level: profile.level || '300 Level'
                             }));
                         } catch (e) {
@@ -4534,7 +4533,54 @@
                 // Generate a timestamp-based name instead of "ai_generated_document"
                 const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
                 const docName = `document_${timestamp}.txt`;
-                const blob = new Blob([text], { type: 'text/plain' });
+                // Post-process AI text for formatting:
+                // 1) Ensure References header is uppercase and starts on its own page
+                // 2) Italicize journal names inside the References block using markdown emphasis
+                let processed = text;
+
+                // Find References header (case-insensitive)
+                const refMatch = processed.match(/(^|\n)(\s*)(References|REFERENCES|references)\s*:?\s*(\n|$)/i);
+                if (refMatch) {
+                    const start = processed.search(/\n?(References|REFERENCES|references)\s*:?\s*\n/i);
+                    if (start >= 0) {
+                        // Split before and after references
+                        const before = processed.slice(0, start);
+                        let refs = processed.slice(start);
+
+                        // Uppercase the header
+                        refs = refs.replace(/(References|REFERENCES|references)\s*:?/i, 'REFERENCES');
+
+                        // Ensure page break before REFERENCES using form-feed (many converters honor this)
+                        if (!/\f/.test(before.slice(-2))) {
+                            // add a form-feed to force new page
+                            refs = '\n\f\n' + refs.trim();
+                        }
+
+                        // Italicize likely journal names in each reference line by taking the text
+                        // immediately after the first period (title end) up to the next comma.
+                        const refLines = refs.split('\n');
+                        for (let i = 0; i < refLines.length; i++) {
+                            const line = refLines[i];
+                            // Only attempt on non-empty lines that look like reference entries
+                            if (line.trim().length > 10 && /\./.test(line)) {
+                                const parts = line.split('.');
+                                if (parts.length >= 3) {
+                                    const title = parts[0];
+                                    const journalCandidate = parts[1].trim();
+                                    const rest = parts.slice(2).join('.');
+                                    if (journalCandidate && journalCandidate.length > 2) {
+                                        // Wrap journal candidate in markdown italics
+                                        refLines[i] = `${title}. *${journalCandidate}*. ${rest}`.trim();
+                                    }
+                                }
+                            }
+                        }
+
+                        processed = before + refLines.join('\n');
+                    }
+                }
+
+                const blob = new Blob([processed], { type: 'text/plain' });
                 const file = new File([blob], docName, { type: "text/plain" });
                 
                 // Store pending file and show formatting modal
