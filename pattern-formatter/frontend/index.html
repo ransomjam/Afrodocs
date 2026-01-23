@@ -2208,6 +2208,7 @@
                     // Add assistant messages - split into content and comment
                     if (fullContent) {
                         const { mainContent, aiComment } = splitAIResponse(fullContent);
+                        const sanitizedMain = sanitizeAiOutput(mainContent);
                         const sanitizedMain = sanitizeAiBold(mainContent);
                         // Add main content first (this is what can be formatted/copied)
                         if (sanitizedMain) {
@@ -2244,6 +2245,7 @@
                         if (data.success && data.response) {
                             // Split response into content and comment
                             const { mainContent, aiComment } = splitAIResponse(data.response);
+                            const sanitizedMain = sanitizeAiOutput(mainContent);
                             const sanitizedMain = sanitizeAiBold(mainContent);
                             if (sanitizedMain) {
                                 setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
@@ -2369,6 +2371,30 @@
                     .join('\n');
             };
 
+            const sanitizeAiStructure = (content) => {
+                if (!content) return content;
+                const lettered = /^\s*(?:\d+\s+)?([a-z])[\)\.]\s+/i;
+                const roman = /^\s*(?:\d+\s+)?(i{1,4}|v|vi{0,3}|ix|x)\s+/i;
+                return content
+                    .split('\n')
+                    .map(line => {
+                        const trimmed = line.trim();
+                        if (!trimmed) return line;
+                        if (lettered.test(trimmed)) {
+                            const updated = trimmed.replace(lettered, (_, letter) => `${letter.toLowerCase()}) `);
+                            return `- ${updated}`;
+                        }
+                        if (roman.test(trimmed) && !/^chapter\b/i.test(trimmed)) {
+                            const updated = trimmed.replace(roman, (_, numeral) => `${numeral.toLowerCase()} `);
+                            return `- ${updated}`;
+                        }
+                        return line;
+                    })
+                    .join('\n');
+            };
+
+            const sanitizeAiOutput = (content) => sanitizeAiStructure(sanitizeAiBold(content));
+
             const handleSuggestionClick = (suggestion) => {
                 // Put the suggestion prompt in the input box for user to complete
                 setInputValue(suggestion.prompt);
@@ -2391,7 +2417,7 @@
                 if (onFormatText) {
                     setFormattingIndex(index);
                     // Strip AI comments before formatting
-                    const cleanedContent = stripAIComments(content);
+                    const cleanedContent = sanitizeAiOutput(stripAIComments(content));
                     onFormatText(cleanedContent);
                     // Reset formatting index after a short delay since the modal will open
                     setTimeout(() => setFormattingIndex(null), 500);

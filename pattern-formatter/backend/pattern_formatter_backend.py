@@ -850,6 +850,35 @@ def normalize_ai_bolding(text):
             cleaned_lines.append(line)
     return '\n'.join(cleaned_lines)
 
+def normalize_ai_structure(text):
+    if not text:
+        return text
+
+    lines = []
+    lettered_pattern = re.compile(r'^\s*(?:\d+\s+)?([a-z])[\)\.]\s+', re.IGNORECASE)
+    roman_pattern = re.compile(r'^\s*(?:\d+\s+)?(i{1,4}|v|vi{0,3}|ix|x)\s+',
+                               re.IGNORECASE)
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lines.append(line)
+            continue
+
+        if lettered_pattern.match(stripped):
+            updated = lettered_pattern.sub(r'\1) ', stripped)
+            lines.append(f"- {updated}")
+            continue
+
+        if roman_pattern.match(stripped) and not stripped.lower().startswith('chapter'):
+            updated = roman_pattern.sub(lambda m: f"{m.group(1).lower()} ", stripped)
+            lines.append(f"- {updated}")
+            continue
+
+        lines.append(line)
+    return '\n'.join(lines)
+
+def normalize_ai_output(text):
+    return normalize_ai_structure(normalize_ai_bolding(text))
 
 def restructure_text_with_ai(text):
     if not text or not text.strip():
@@ -923,6 +952,7 @@ def restructure_text_with_ai(text):
         {"role": "system", "content": AI_RESTRUCTURE_SYSTEM_PROMPT},
         {"role": "user", "content": f"Restructure the text below into AfroDocs academic formatting:\n\n{text}"}
     ]
+    return normalize_ai_output(_call_deepseek(messages))
     return _call_deepseek(messages)
 
 
@@ -981,6 +1011,7 @@ def ai_chat():
         
         if response.status_code == 200:
             result = response.json()
+            ai_response = normalize_ai_output(result['choices'][0]['message']['content'])
             ai_response = normalize_ai_bolding(result['choices'][0]['message']['content'])
             return jsonify({'response': ai_response, 'success': True}), 200
         else:
