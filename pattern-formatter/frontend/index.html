@@ -8,6 +8,8 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PDF.js for mobile PDF rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.css" rel="stylesheet">
 
@@ -407,7 +409,7 @@
             border-radius: 1rem;
             max-width: 85%;
             word-wrap: break-word;
-            line-height: 1.5;
+            line-height: 1.15;
             text-align: left;
         }
 
@@ -479,10 +481,11 @@
 
         .ai-message-assistant p {
             margin: 0;
+            line-height: 1.15;
         }
 
         .ai-message-assistant p + p {
-            margin-top: 0.25rem;
+            margin-top: 0;
         }
 
         .ai-message-assistant strong {
@@ -691,6 +694,13 @@
             gap: 0.75rem;
             font-weight: 600;
             color: white;
+        }
+
+        .ai-subtitle {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #C6E7F2;
+            opacity: 0.95;
         }
 
         .ai-header-icon {
@@ -981,20 +991,21 @@
         }
 
         .app-sidebar-header {
-            padding: 1rem;
+            padding: 0.5rem 0.6rem 0.6rem 0.6rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.18rem; /* tighten gap so text is closer to logo */
         }
 
         .app-sidebar-logo {
-            width: 72px; /* Increased size by 2 */
-            height: 72px; /* Increased size by 2 */
+            width: 84px; /* slightly smaller */
+            height: 84px;
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 4px;
+            padding: 2px;
+            margin-left: -4px; /* nudge left a bit */
         }
 
         .app-sidebar-logo img {
@@ -1004,17 +1015,28 @@
         }
 
         .app-sidebar-title {
-            font-size: 1.25rem;
+            font-size: 1.05rem;
             font-weight: 700;
             color: white;
-            letter-spacing: -0.025em;
+            letter-spacing: -0.02em;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            line-height: 1.0;
+            margin-top: 0;
         }
 
         .app-sidebar-subtitle {
-            font-size: 0.625rem;
-            color: rgba(255, 255, 255, 0.5);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
+            font-size: 0.78rem;
+            color: rgba(255, 255, 255, 0.85);
+            text-transform: none;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            letter-spacing: 0.02em;
+            margin-top: 0;
         }
 
         /* Navigation */
@@ -1444,6 +1466,13 @@
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                 </svg>
             ),
+            History: ({ size = 20 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1 4 1 10 7 10"></polyline>
+                    <path d="M3.51 15a9 9 0 1 0 .49-11"></path>
+                    <polyline points="12 7 12 12 15 15"></polyline>
+                </svg>
+            ),
             Upload: () => (
                 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -1499,6 +1528,13 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                     <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            ),
+            EyeOff: ({ size = 24, className = "" }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    <path d="M17.94 17.94A10 10 0 0 1 12 20c-7 0-11-8-11-8a18.2 18.2 0 0 1 4.06-3.11"></path>
+                    <path d="M1 1l22 22"></path>
+                    <path d="M9.88 9.88A3 3 0 0 0 14 14"></path>
                 </svg>
             ),
             AlertCircle: ({ size = 24, className = "" }) => (
@@ -1595,6 +1631,20 @@
                     <path d="M17 19h4"></path>
                 </svg>
             ),
+            ChatExpand: ({ size = 20 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+            ),
+            Menu: ({ size = 20 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            ),
             Send: ({ size = 24 }) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -1638,12 +1688,192 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
                     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
                 </svg>
+            ),
+            ChevronLeft: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            ),
+            ChevronRight: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            ),
+            ExternalLink: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
             )
         };
 
         // API Configuration
         // Use current origin to ensure same-origin requests (avoids CORS issues)
         const API_BASE = window.location.origin || 'http://localhost:5000';
+
+        // ============================================================================
+        // MOBILE PDF VIEWER COMPONENT (uses PDF.js)
+        // ============================================================================
+        const MobilePdfViewer = ({ pdfUrl, maxHeight = 400 }) => {
+            const canvasRef = useRef(null);
+            const containerRef = useRef(null);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+            const [currentPage, setCurrentPage] = useState(1);
+            const [totalPages, setTotalPages] = useState(0);
+            const [pdfDoc, setPdfDoc] = useState(null);
+            const [scale, setScale] = useState(1);
+
+            useEffect(() => {
+                if (!pdfUrl || typeof pdfjsLib === 'undefined') {
+                    setError('PDF viewer not available');
+                    setLoading(false);
+                    return;
+                }
+
+                // Set PDF.js worker
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+                setLoading(true);
+                setError(null);
+
+                // Clean the URL (remove hash fragments for loading)
+                const cleanUrl = pdfUrl.split('#')[0];
+
+                pdfjsLib.getDocument(cleanUrl).promise
+                    .then(pdf => {
+                        setPdfDoc(pdf);
+                        setTotalPages(pdf.numPages);
+                        setCurrentPage(1);
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        console.error('PDF load error:', err);
+                        setError('Failed to load PDF');
+                        setLoading(false);
+                    });
+
+                return () => {
+                    if (pdfDoc) {
+                        pdfDoc.destroy();
+                    }
+                };
+            }, [pdfUrl]);
+
+            useEffect(() => {
+                if (!pdfDoc || !canvasRef.current || !containerRef.current) return;
+
+                const renderPage = async (pageNum) => {
+                    try {
+                        const page = await pdfDoc.getPage(pageNum);
+                        const canvas = canvasRef.current;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // Calculate scale to fit container width
+                        const containerWidth = containerRef.current.clientWidth - 20;
+                        const viewport = page.getViewport({ scale: 1 });
+                        const calculatedScale = containerWidth / viewport.width;
+                        setScale(calculatedScale);
+                        
+                        const scaledViewport = page.getViewport({ scale: calculatedScale });
+                        
+                        canvas.height = scaledViewport.height;
+                        canvas.width = scaledViewport.width;
+
+                        await page.render({
+                            canvasContext: ctx,
+                            viewport: scaledViewport
+                        }).promise;
+                    } catch (err) {
+                        console.error('Page render error:', err);
+                    }
+                };
+
+                renderPage(currentPage);
+            }, [pdfDoc, currentPage]);
+
+            const goToPrevPage = () => {
+                if (currentPage > 1) setCurrentPage(currentPage - 1);
+            };
+
+            const goToNextPage = () => {
+                if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+            };
+
+            if (loading) {
+                return (
+                    <div className="flex items-center justify-center h-full text-mist flex-col gap-4 p-6">
+                        <div className="lightning-loading">
+                            <Icons.Zap />
+                        </div>
+                        <p className="text-sm">Loading PDF...</p>
+                    </div>
+                );
+            }
+
+            if (error) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
+                        <Icons.FileText size={48} className="text-teal/30" />
+                        <p className="text-mist text-center text-sm">{error}</p>
+                        <a 
+                            href={pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-6 py-2 bg-teal/20 hover:bg-teal/30 text-teal rounded-lg transition-colors flex items-center gap-2 font-medium text-sm"
+                        >
+                            <Icons.ExternalLink size={16} /> Open in New Tab
+                        </a>
+                    </div>
+                );
+            }
+
+            return (
+                <div ref={containerRef} className="flex flex-col h-full">
+                    {/* Page navigation */}
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-center gap-4 py-2 bg-black/30 border-b border-white/10">
+                            <button 
+                                onClick={goToPrevPage} 
+                                disabled={currentPage === 1}
+                                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                <Icons.ChevronLeft size={20} />
+                            </button>
+                            <span className="text-sm text-mist">
+                                {currentPage} / {totalPages}
+                            </span>
+                            <button 
+                                onClick={goToNextPage} 
+                                disabled={currentPage === totalPages}
+                                className="p-1 rounded hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                <Icons.ChevronRight size={20} />
+                            </button>
+                        </div>
+                    )}
+                    {/* PDF canvas */}
+                    <div 
+                        className="flex-1 overflow-auto custom-scrollbar flex justify-center p-2 bg-slate-800"
+                        style={{ maxHeight: `${maxHeight}px` }}
+                    >
+                        <canvas ref={canvasRef} className="shadow-lg" />
+                    </div>
+                    {/* Open in new tab link */}
+                    <div className="flex justify-center py-2 bg-black/30 border-t border-white/10">
+                        <a 
+                            href={pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-teal hover:text-teal/80 flex items-center gap-1"
+                        >
+                            <Icons.ExternalLink size={12} /> Open full PDF
+                        </a>
+                    </div>
+                </div>
+            );
+        };
 
         // ============================================================================
         // AI ASSISTANT COMPONENT
@@ -1667,14 +1897,14 @@
                 .replace(/^### (.+)$/gm, '<h3>$1</h3>')
                 .replace(/^## (.+)$/gm, '<h2>$1</h2>')
                 .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-                // Unordered lists
-                .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
-                // Ordered lists
-                .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-                // Paragraphs (double newlines)
-                .replace(/\n\n/g, '</p><p>')
-                // Single newlines
-                .replace(/\n/g, '<br/>');
+                    // Unordered lists
+                    .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
+                    // Ordered lists
+                    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+                    // Paragraphs (double newlines) -> wrap paragraphs
+                    .replace(/\n\n+/g, '</p><p>')
+                    // Single newlines -> treat as space (avoid extra <br/> spacing)
+                    .replace(/\n+/g, ' ');
             
             // Wrap consecutive li elements in ul
             html = html.replace(/(<li>.*?<\/li>)+/gs, (match) => `<ul>${match}</ul>`);
@@ -1687,7 +1917,7 @@
             return html;
         };
 
-        const AiAssistant = ({ isExpanded, onToggle, onFormatText }) => {
+        const AiAssistant = ({ isExpanded, onToggle, onFormatText, sidebarOpen: sidebarOpenProp, setSidebarOpen: setSidebarOpenProp }) => {
             const [messages, setMessages] = useState([]);
             const [inputValue, setInputValue] = useState('');
             const [isLoading, setIsLoading] = useState(false);
@@ -1697,7 +1927,9 @@
             const [formattingIndex, setFormattingIndex] = useState(null);
             const [chatHistory, setChatHistory] = useState([]);
             const [currentChatId, setCurrentChatId] = useState(null);
-            const [sidebarOpen, setSidebarOpen] = useState(false);
+            const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
+            const sidebarOpen = typeof sidebarOpenProp !== 'undefined' ? sidebarOpenProp : internalSidebarOpen;
+            const setSidebarOpen = setSidebarOpenProp || setInternalSidebarOpen;
             const messagesEndRef = useRef(null);
             const inputRef = useRef(null);
             const textareaRef = useRef(null);
@@ -1990,42 +2222,11 @@
 
             // Split AI response into content and comment parts
             const splitAIResponse = (content) => {
-                // Patterns that indicate AI meta-comments/suggestions at the end
-                // These get separated into their own message bubble
-                const closingPatterns = [
-                    /\n{2,}(Let me know if[^]*?)$/i,
-                    /\n{2,}(Feel free to[^]*?)$/i,
-                    /\n{2,}(I hope this helps[^]*?)$/i,
-                    /\n{2,}(If you (need|have|want|would like)[^]*?)$/i,
-                    /\n{2,}(Is there anything else[^]*?)$/i,
-                    /\n{2,}(Would you like me to[^]*?)$/i,
-                    /\n{2,}(Do you want me to[^]*?)$/i,
-                    /\n{2,}(Shall I[^]*?)$/i,
-                    /\n{2,}(I can also[^]*?)$/i,
-                    /\n{2,}(I('m| am) happy to[^]*?)$/i,
-                    /\n{2,}(Please let me know[^]*?)$/i,
-                    // Detect bullet lists of suggestions at the end
-                    /\n{2,}((?:[-•*]\s*[A-Z][^\n]*\n?)+)$/
-                ];
-                
-                let mainContent = content;
-                let aiComment = '';
-                
-                // Extract closing comments/suggestions
-                for (const pattern of closingPatterns) {
-                    const match = mainContent.match(pattern);
-                    if (match) {
-                        aiComment = match[1].trim();
-                        mainContent = mainContent.replace(pattern, '').trim();
-                        break;
-                    }
-                }
-                
-                // Remove dividers
-                mainContent = mainContent.replace(/^---+\s*\n/gm, '').replace(/\n---+\s*$/gm, '').trim();
-                aiComment = aiComment.trim();
-                
-                return { mainContent, aiComment };
+                // Do not separate assistant meta-notes from the main response.
+                // Return the full content as the main response so users receive
+                // a single, final assistant message (no trailing AI Notes).
+                const mainContent = (content || '').replace(/^---+\s*\n/gm, '').replace(/\n---+\s*$/gm, '').trim();
+                return { mainContent, aiComment: '' };
             };
 
             // Strip AI comments/meta text from content for formatting
@@ -2064,16 +2265,8 @@
             };
 
             if (!isExpanded) {
-                return (
-                    <button 
-                        onClick={onToggle}
-                        className="ai-toggle-button"
-                    >
-                        <Icons.Sparkles size={18} />
-                        Ask AI Assistant
-                        <Icons.ChevronDown />
-                    </button>
-                );
+                // When collapsed we render nothing — the AI is opened from the main header
+                return null;
             }
 
             return (
@@ -2088,7 +2281,6 @@
                         {/* Sidebar with chat history */}
                         <div className={`ai-sidebar ${sidebarOpen ? 'open' : ''}`}>
                             <div className="ai-sidebar-header">
-                                <span className="ai-sidebar-title">Chat History</span>
                                 <button onClick={handleNewChat} className="ai-new-chat-btn" title="New Chat">
                                     <span>+</span> New
                                 </button>
@@ -2127,18 +2319,15 @@
                             {/* Header */}
                             <div className="ai-header">
                                 <div className="ai-header-title">
-                                    <button 
-                                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                                        className="ai-sidebar-toggle"
-                                        title="Toggle chat history"
-                                    >
-                                        <Icons.List size={16} />
-                                    </button>
-                                    <div className="ai-header-icon">
-                                        <Icons.Sparkles size={16} />
+                                        <button 
+                                            onClick={() => setSidebarOpen(!sidebarOpen)}
+                                            className="ai-sidebar-toggle"
+                                            title="Toggle chat history"
+                                        >
+                                            <Icons.History size={16} />
+                                        </button>
+                                        <div className="ai-subtitle">AfroDocs, Write and Instantly format</div>
                                     </div>
-                                    <span>AfroDocs AI Assistant</span>
-                                </div>
                                 <div className="flex items-center gap-2">
                                     {messages.length > 0 && (
                                         <button 
@@ -2149,13 +2338,7 @@
                                             <Icons.Trash size={14} />
                                         </button>
                                     )}
-                                    <button 
-                                        onClick={onToggle}
-                                        className="ai-clear-button"
-                                        title="Collapse"
-                                    >
-                                        <Icons.ChevronUp size={14} />
-                                    </button>
+                                    {/* Collapse button removed as requested */}
                                 </div>
                             </div>
 
@@ -2356,7 +2539,7 @@
             const [password, setPassword] = React.useState('');
             const [email, setEmail] = React.useState('');
             const [referralCode, setReferralCode] = React.useState('');
-            const [institution, setInstitution] = React.useState('The University of Bamenda');
+            const [institution, setInstitution] = React.useState('');
             const [institutions, setInstitutions] = React.useState([]);
 
             React.useEffect(() => {
@@ -2367,13 +2550,13 @@
                         const institutionsList = data.institutions || data;
                         setInstitutions(Array.isArray(institutionsList) ? institutionsList : []);
                         if (Array.isArray(institutionsList) && institutionsList.length > 0) {
-                            setInstitution(institutionsList[0].name);
+                            setInstitution(institutionsList[0].id);
                         }
                     })
                     .catch(err => {
                         console.error("Failed to fetch institutions:", err);
                         setInstitutions(FALLBACK_INSTITUTIONS);
-                        setInstitution(FALLBACK_INSTITUTIONS[0].name);
+                        setInstitution(FALLBACK_INSTITUTIONS[0].id);
                     });
             }, []);
 
@@ -2389,6 +2572,8 @@
             const [contact, setContact] = React.useState('');
             const [error, setError] = React.useState('');
             const [loading, setLoading] = React.useState(false);
+            const [showPassword, setShowPassword] = React.useState(false);
+            const errorIsPositive = error && /account created|already created|please log in/i.test(error);
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
@@ -2396,7 +2581,7 @@
                 setLoading(true);
 
                 const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
-                const finalInstitution = institution === 'Other (Specify)' ? customInstitution : institution;
+                const finalInstitution = (institution === 'Other (Specify)' || institution === 'Others' || institution === 'Other Institution') ? customInstitution : institution;
                 
                 const payload = { username, password };
                 if (!isLogin) {
@@ -2478,14 +2663,19 @@
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
-                                <input 
-                                    type="password" 
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
-                                    placeholder="Enter password"
-                                    required
-                                />
+                                <div className="relative">
+                                    <input 
+                                        type={showPassword ? 'text' : 'password'} 
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none pr-10"
+                                        placeholder="Enter password"
+                                        required
+                                    />
+                                    <button type="button" onClick={() => setShowPassword(prev => !prev)} className="absolute right-2 top-1/2 -translate-y-1/2 text-mist p-1">
+                                        {showPassword ? <Icons.EyeOff size={18} /> : <Icons.Eye size={18} />}
+                                    </button>
+                                </div>
                             </div>
 
                             {!isLogin && (
@@ -2512,11 +2702,11 @@
                                         >
                                             <option value="">Select Institution</option>
                                             {institutions.map(inst => (
-                                                <option key={inst.id} value={inst.name}>{inst.name}</option>
+                                                <option key={inst.id} value={inst.id}>{inst.name}</option>
                                             ))}
                                         </select>
                                     </div>
-                                    {institution === 'Other Institution' && (
+                                    {(institution === 'Other Institution' || institution === 'Others' || institution === 'Other (Specify)') && (
                                         <div>
                                             <input 
                                                 type="text" 
@@ -2540,13 +2730,13 @@
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-1">Referral Code (Optional)</label>
+                                        <label className="block text-sm font-medium text-slate-300 mb-1">Promo Code (Optional)</label>
                                         <input 
                                             type="text" 
                                             value={referralCode}
                                             onChange={(e) => setReferralCode(e.target.value)}
                                             className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
-                                            placeholder="Enter referral code"
+                                            placeholder="Enter promo code"
                                         />
                                     </div>
                                 </>
@@ -3582,22 +3772,9 @@
                                             <div className="flex-1 relative bg-slate-900">
                                                 {pdfPreviewUrl ? (
                                                     <>
-                                                        {/* Mobile-friendly PDF display with Open button */}
-                                                        <div className="md:hidden flex flex-col items-center justify-center h-full gap-4 p-6">
-                                                            <div className="text-6xl text-teal/30 mb-2">
-                                                                <Icons.FileText size={64} />
-                                                            </div>
-                                                            <p className="text-mist text-center text-xs">
-                                                                {pdfPreviewUrl ? pdfPreviewUrl.split('/').pop()?.replace(/\?.*/,'') : 'CoverPage.pdf'}
-                                                            </p>
-                                                            <a 
-                                                                href={pdfPreviewUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="px-6 py-2 bg-teal/20 hover:bg-teal/30 text-teal rounded-lg transition-colors flex items-center gap-2 font-medium text-sm"
-                                                            >
-                                                                Open
-                                                            </a>
+                                                        {/* Mobile PDF.js viewer */}
+                                                        <div className="md:hidden h-full">
+                                                            <MobilePdfViewer pdfUrl={pdfPreviewUrl} maxHeight={350} />
                                                         </div>
                                                         {/* Desktop iframe preview */}
                                                         <iframe 
@@ -4090,6 +4267,7 @@
             const [showPricingModal, setShowPricingModal] = useState(false);
             // AI Assistant state
             const [showAiAssistant, setShowAiAssistant] = useState(false);
+            const [aiSidebarOpen, setAiSidebarOpen] = useState(false);
             // Documents expansion state
             const [showAllDocuments, setShowAllDocuments] = useState(false);
             // Payment success modal state
@@ -4804,8 +4982,8 @@
                                 <img src="logo/logo.png" alt="AfroDocs" />
                             </div>
                             <div>
-                                <div className="app-sidebar-title">AfroDocs</div>
-                                <div className="app-sidebar-subtitle">Document Formatter</div>
+                                    <div className="app-sidebar-title">AfroDocs</div>
+                                    <div className="app-sidebar-subtitle">Document Formatter</div>
                             </div>
                             <button 
                                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -4846,11 +5024,11 @@
                                 </button>
                                 
                                 <button
-                                    onClick={() => { setViewMode('ai'); setAppSidebarOpen(false); setShowProfile(false); }}
+                                    onClick={() => { setViewMode('ai'); setAppSidebarOpen(false); setShowProfile(false); setShowAiAssistant(true); }}
                                     className={`app-nav-item ${viewMode === 'ai' ? 'active' : ''}`}
                                     title="AI Mode"
                                 >
-                                    <span className="app-nav-item-icon"><Icons.Sparkles size={20} /></span>
+                                    <span className="app-nav-item-icon"><Icons.ChatExpand size={20} /></span>
                                     <span>AI Mode</span>
                                 </button>
                                 
@@ -4986,30 +5164,41 @@
                                     </div>
                                     <div className="p-2 pt-1.5 border-t border-teal/10 space-y-2">
                                         <button
-                                            onClick={() => { setShowPricingModal(true); setShowProfile(false); }}
+                                            onClick={() => { setShowPricingModal(true); setShowProfile(false); setSidebarCollapsed(true); }}
                                             className="w-full py-1.5 bg-gradient-to-r from-[#1E5A8E] to-teal text-white rounded text-[10px] font-bold hover:opacity-90 transition-all"
                                         >
                                             Upgrade
                                         </button>
                                         {/* Referral Link */}
                                         {currentUser?.referral_code && (
-                                            <div className="bg-white/5 rounded p-1.5">
-                                                <div className="text-[9px] text-mist mb-1">Your Referral Link</div>
-                                                <div className="flex items-center gap-1">
-                                                    <input 
-                                                        type="text" 
-                                                        readOnly 
-                                                        value={`${window.location.origin}?ref=${currentUser.referral_code}`}
-                                                        className="flex-1 bg-transparent text-[9px] text-white truncate border-none outline-none"
-                                                    />
+                                            <div className="bg-white/5 rounded p-1.5 flex items-center justify-between" style={{minWidth: '160px'}}>
+                                                <div className="text-sm text-mist">Promo Code</div>
+                                                <div className="flex items-center gap-2">
                                                     <button
                                                         onClick={() => {
-                                                            navigator.clipboard.writeText(`${window.location.origin}?ref=${currentUser.referral_code}`);
+                                                            const link = `${window.location.origin}?ref=${currentUser.referral_code}`;
+                                                            navigator.clipboard.writeText(link);
+                                                            try { alert('Promo link copied to clipboard'); } catch(e){}
                                                         }}
-                                                        className="p-1 text-teal hover:text-teal-light"
-                                                        title="Copy referral link"
+                                                        className="px-2 py-1 bg-transparent text-teal rounded text-xs font-medium hover:bg-white/5 transition-all"
+                                                        title="Copy promo link"
                                                     >
-                                                        <Icons.Copy size={10} />
+                                                        <Icons.Copy size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const link = `${window.location.origin}?ref=${currentUser.referral_code}`;
+                                                            if (navigator.share) {
+                                                                navigator.share({ title: 'AfroDocs Promo', text: 'Join AfroDocs', url: link }).catch(() => navigator.clipboard.writeText(link));
+                                                            } else {
+                                                                navigator.clipboard.writeText(link);
+                                                                try { alert('Promo link copied to clipboard'); } catch(e){}
+                                                            }
+                                                        }}
+                                                        className="px-2 py-1 bg-teal/10 text-teal rounded text-xs font-medium hover:bg-teal/20 transition-all"
+                                                        title="Share promo link"
+                                                    >
+                                                        Share
                                                     </button>
                                                 </div>
                                             </div>
@@ -5030,18 +5219,30 @@
                     <main className="app-main">
                         {/* Header */}
                         <header className="app-main-header">
-                            <div className="flex items-center gap-3">
-                                <button 
-                                    onClick={() => setAppSidebarOpen(!appSidebarOpen)}
-                                    className="app-mobile-toggle"
-                                >
-                                    <Icons.List size={20} />
-                                </button>
-                                <h1 className="app-main-title">
-                                    {viewMode === 'formatter' && 'Document Formatter'}
-                                    {viewMode === 'ai' && 'AI Mode'}
-                                    {viewMode === 'coverpage' && 'Cover Page Generator'}
-                                </h1>
+                            <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-3">
+                                    <button 
+                                        onClick={() => setAppSidebarOpen(!appSidebarOpen)}
+                                        className="app-mobile-toggle"
+                                        aria-label="Toggle sidebar"
+                                    >
+                                        <Icons.Menu size={20} />
+                                    </button>
+                                    <h1 className="app-main-title">
+                                        {viewMode === 'formatter' && 'Document Formatter'}
+                                        {viewMode === 'ai' && 'AI Mode'}
+                                        {viewMode === 'coverpage' && 'Cover Page Generator'}
+                                    </h1>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => { setViewMode('ai'); setShowAiAssistant(true); setAiSidebarOpen(true); }}
+                                        className="hidden md:inline-flex p-1.5 hover:bg-white/10 rounded-md transition-colors"
+                                        title="Open AI Assistant"
+                                    >
+                                        <Icons.ChatExpand size={20} />
+                                    </button>
+                                </div>
                             </div>
                         </header>
 
@@ -5049,11 +5250,11 @@
                         <div className="app-main-content">
                             {/* Error Display */}
                             {error && (
-                                <div className="mb-4 bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl">
+                                <div className={errorIsPositive ? "mb-4 bg-green-500/20 border border-green-500/50 text-green-200 p-4 rounded-xl" : "mb-4 bg-red-500/20 border border-red-500/50 text-red-200 p-4 rounded-xl"}>
                                     <div className="flex items-center gap-3">
-                                        <Icons.X size={20} />
+                                        {errorIsPositive ? <Icons.CheckCircle size={20} /> : <Icons.X size={20} />}
                                         <div>
-                                            <p className="font-medium">Error</p>
+                                            <p className="font-medium">{errorIsPositive ? 'Notice' : 'Error'}</p>
                                             <p className="text-sm opacity-90">{error}</p>
                                         </div>
                                     </div>
@@ -5131,26 +5332,23 @@
                                         /* Processing State */
                                         <div className="content-card">
                                             <div className="content-card-body py-16">
-                                                <div className="relative w-full h-48 flex flex-col items-center justify-center">
+                                                <div className="relative w-full h-48 flex items-center justify-center">
                                                     <div className="absolute inset-0 tech-grid opacity-30"></div>
-                                                    <div className="relative z-10 text-white/20 scale-[2] mb-6">
-                                                        <Icons.FileText />
-                                                    </div>
                                                     <div className="lightning-flash-container">
                                                         <div className="lightning-bolt">
                                                             <Icons.Zap size={64} />
                                                         </div>
                                                     </div>
-                                                    <p className="text-teal font-mono text-xl font-bold tracking-widest tabular-nums mt-8">
-                                                        {(() => {
-                                                            const mins = Math.floor(elapsedTime / 60000).toString().padStart(2, '0');
-                                                            const secs = Math.floor((elapsedTime % 60000) / 1000).toString().padStart(2, '0');
-                                                            const ms = Math.floor((elapsedTime % 1000) / 10).toString().padStart(2, '0');
-                                                            return `${mins}:${secs}:${ms}`;
-                                                        })()}
-                                                    </p>
-                                                    <p className="text-mist text-sm mt-2">{status || 'Processing...'}</p>
                                                 </div>
+                                                <p className="text-teal font-mono text-lg font-bold tracking-widest tabular-nums mt-4 text-center">
+                                                    {(() => {
+                                                        const mins = Math.floor(elapsedTime / 60000).toString().padStart(2, '0');
+                                                        const secs = Math.floor((elapsedTime % 60000) / 1000).toString().padStart(2, '0');
+                                                        const ms = Math.floor((elapsedTime % 1000) / 10).toString().padStart(2, '0');
+                                                        return `${mins}:${secs}:${ms}`;
+                                                    })()}
+                                                </p>
+                                                <p className="text-mist text-sm mt-2 text-center">{status || 'Processing...'}</p>
                                             </div>
                                         </div>
                                     ) : result && (
@@ -5256,21 +5454,9 @@
                                                             ) : (
                                                                 <>
                                                                     {/* Mobile-friendly PDF display with Open button */}
-                                                                    <div className="md:hidden flex flex-col items-center justify-center h-full gap-4 p-6">
-                                                                        <div className="text-6xl text-teal/30 mb-2">
-                                                                            <Icons.FileText size={80} />
-                                                                        </div>
-                                                                        <p className="text-mist text-center text-sm mb-2">
-                                                                            {pdfPreviewUrl ? pdfPreviewUrl.split('/').pop()?.replace(/\?.*/,'') : 'document.pdf'}
-                                                                        </p>
-                                                                        <a 
-                                                                            href={pdfPreviewUrl}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
-                                                                            className="px-8 py-3 bg-teal/20 hover:bg-teal/30 text-teal rounded-xl transition-colors flex items-center gap-2 font-medium"
-                                                                        >
-                                                                            Open
-                                                                        </a>
+                                                                    {/* Mobile PDF.js viewer */}
+                                                                    <div className="md:hidden h-full">
+                                                                        <MobilePdfViewer pdfUrl={pdfPreviewUrl} maxHeight={450} />
                                                                     </div>
                                                                     {/* Desktop iframe preview */}
                                                                     <iframe 
@@ -5306,9 +5492,11 @@
                             {viewMode === 'ai' && (
                                 <div className="h-full -m-4 md:-m-6">
                                     <AiAssistant 
-                                        isExpanded={true}
-                                        onToggle={() => {}}
+                                        isExpanded={showAiAssistant}
+                                        onToggle={() => setShowAiAssistant(false)}
                                         onFormatText={handleAiFormatText}
+                                        sidebarOpen={aiSidebarOpen}
+                                        setSidebarOpen={setAiSidebarOpen}
                                     />
                                 </div>
                             )}

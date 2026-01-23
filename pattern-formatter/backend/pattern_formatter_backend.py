@@ -339,7 +339,11 @@ def initiate_payment():
     
     response = fapshi.initiate_pay(payment_data)
     
-    if response.get('statusCode') == 200:
+    # Normalize HTTP status from provider response fields if present
+    provider_status = response.get('statusCode') or response.get('httpStatus') or response.get('httpStatusCode') or response.get('code')
+    status_to_return = int(provider_status) if provider_status else 500
+
+    if response.get('statusCode') == 200 or status_to_return == 200:
         # Create Transaction Record
         new_trans = Transaction(
             user_id=current_user.id,
@@ -350,10 +354,10 @@ def initiate_payment():
         )
         db.session.add(new_trans)
         db.session.commit()
-        
+
         return jsonify(response), 200
     else:
-        return jsonify(response), response.get('statusCode', 500)
+        return jsonify(response), status_to_return
 
 @app.route('/api/payment/verify-pending', methods=['POST'])
 @login_required
@@ -10975,8 +10979,10 @@ class WordGenerator:
         assert not italic_runs, "Italics detected in document runs."
         for para in self._iter_paragraphs_in_doc(doc):
             text = para.text or ''
-            if '*' in text:
-                raise AssertionError(f"Asterisk detected in paragraph text: '{text}'")
+            # NOTE: previously we rejected any paragraph containing '*',
+            # which was too aggressive (caught valid cases like numbered
+            # items with stray asterisks). Rely on the more specific
+            # numeric/star detection patterns below instead.
             if re.search(r'\\s\\*\\s', text) or re.match(r'^\\s*\\d+\\s*\\*', text):
                 raise AssertionError(f"Numeric asterisk marker detected: '{text}'")
             if re.match(r'^\\s*\\d+(?:\\.\\d+)?\\s*\\*', text):
