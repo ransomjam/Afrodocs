@@ -2,33 +2,37 @@ FROM python:3.11-slim
 
 # Install LibreOffice and other dependencies
 RUN apt-get update && apt-get install -y \
-    libreoffice \
-    libreoffice-writer \
-    && rm -rf /var/lib/apt/lists/*
+    FROM python:3.11-slim
 
-# Set working directory
-WORKDIR /app
+    # Install LibreOffice and other dependencies
+    RUN apt-get update && apt-get install -y \
+        libreoffice \
+        libreoffice-writer \
+        && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for caching (from backend directory)
-COPY backend/requirements.txt .
+    # Set working directory
+    WORKDIR /app
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+    # Copy requirements first for caching (from backend directory)
+    COPY backend/requirements.txt .
 
-# Copy the backend application
-COPY backend/ .
+    # Install Python dependencies
+    RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the frontend
-COPY frontend/ ./frontend/
+    # Copy the backend application
+    COPY backend/ .
 
-# Copy Cover Pages templates (inside /app for Docker compatibility)
-COPY "Cover Pages/" "./Cover Pages/"
+    # Copy the frontend
+    COPY frontend/ ./frontend/
 
-# Create necessary directories
-RUN mkdir -p outputs uploads templates instance outputs/Cover\ Pages
+    # Copy Cover Pages templates (use JSON array form to handle spaces in filenames)
+    COPY ["Cover Pages/", "Cover Pages/"]
 
-# Expose port
-EXPOSE 10000
+    # Create necessary directories
+    RUN mkdir -p outputs uploads templates instance "outputs/Cover Pages"
 
-# Run the application
-CMD ["gunicorn", "pattern_formatter_backend:app", "--bind", "0.0.0.0:10000"]
+    # Expose port
+    EXPOSE 10000
+
+    # Run the application
+    CMD ["gunicorn", "pattern_formatter_backend:app", "--bind", "0.0.0.0:10000"]
