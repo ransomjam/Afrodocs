@@ -464,6 +464,27 @@
             padding-left: 1.5rem;
         }
 
+        /* Responsive table wrapper for AI-generated tables */
+        .ai-table-wrapper {
+            overflow-x: auto;
+            width: 100%;
+            margin: 0.5rem 0;
+        }
+
+        .ai-message-assistant table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(255,255,255,0.02);
+        }
+
+        .ai-message-assistant th,
+        .ai-message-assistant td {
+            border: 1px solid rgba(255,255,255,0.06);
+            padding: 0.375rem 0.5rem;
+            text-align: left;
+            vertical-align: top;
+        }
+
         .ai-message-assistant li {
             margin: 0.25rem 0;
         }
@@ -1882,38 +1903,68 @@
         // Helper function to parse markdown-like formatting in AI responses
         const parseAIResponse = (text) => {
             if (!text) return '';
-            
-            // Convert markdown to HTML
-            let html = text
+
+            // Normalize line endings
+            let content = text.replace(/\r\n/g, '\n');
+
+            // Convert markdown tables (pipe syntax) to HTML tables first
+            const tableBlockRegex = /(^\|.*\|\n\|[-: \|]*\|\n(?:\|.*\|\n?)*)/gm;
+            content = content.replace(tableBlockRegex, (match) => {
+                const lines = match.trim().split('\n');
+                if (lines.length < 2) return match;
+                const headerLine = lines[0].replace(/^\||\|$/g, '');
+                const headers = headerLine.split('|').map(h => h.trim());
+                const bodyLines = lines.slice(2).map(l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim()));
+                const thead = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
+                const tbody = bodyLines.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
+                return `<div class="ai-table-wrapper"><table>${thead}${tbody}</table></div>`;
+            });
+
+            // Convert markdown to HTML (no italics conversion per request)
+            let html = content
                 // Code blocks with language
                 .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
                 // Inline code
                 .replace(/`([^`]+)`/g, '<code>$1</code>')
                 // Bold
                 .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                // Italic
-                .replace(/\*([^*]+)\*/g, '<em>$1</em>')
                 // Headers
                 .replace(/^### (.+)$/gm, '<h3>$1</h3>')
                 .replace(/^## (.+)$/gm, '<h2>$1</h2>')
                 .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-                    // Unordered lists
-                    .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
-                    // Ordered lists
-                    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-                    // Paragraphs (double newlines) -> wrap paragraphs
-                    .replace(/\n\n+/g, '</p><p>')
-                    // Single newlines -> treat as space (avoid extra <br/> spacing)
-                    .replace(/\n+/g, ' ');
-            
+                // Unordered lists
+                .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
+                // Ordered lists
+                .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+                // Paragraphs (double newlines) -> wrap paragraphs
+                .replace(/\n\n+/g, '</p><p>')
+                // Single newlines -> treat as space
+                .replace(/\n+/g, ' ');
+
             // Wrap consecutive li elements in ul
             html = html.replace(/(<li>.*?<\/li>)+/gs, (match) => `<ul>${match}</ul>`);
-            
+
             // Wrap in paragraph if not starting with a block element
-            if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<pre')) {
+            if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<pre') && !html.startsWith('<div')) {
                 html = '<p>' + html + '</p>';
             }
-            
+
+            // Sanitize unwanted assistant boilerplate and placeholders
+            const sanitizePatterns = [
+                /\(A preliminary list following APA 7th edition format\)/gi,
+                /Submitted by:\s*\[?[^\n\]]*\]?/gi,
+                /Institution:\s*\[?[^\n\]]*\]?/gi,
+                /Date:\s*\[?[^\n\]]*\]?/gi,
+                /Supervisor:\s*\[?[^\n\]]*\]?/gi
+            ];
+            for (const pat of sanitizePatterns) {
+                html = html.replace(pat, '');
+            }
+
+            // Remove any remaining italics tags or markdown underscores
+            html = html.replace(/<em>(.*?)<\/em>/g, '$1');
+            html = html.replace(/_(.*?)_/g, '$1');
+
             return html;
         };
 
@@ -3482,8 +3533,8 @@
                                 </div>
                             </div>
 
-                            {/* Institution Request Form */}
-                            <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-4">
+                            {/* Institution Request Form - only show when no institution is selected */}
+                            {!formData.institution && <div className="bg-blue-500/10 border border-blue-400/30 rounded-lg p-4">
                                 {showInstitutionThankYou ? (
                                     <div className="text-center space-y-4">
                                         <div className="flex justify-center">
@@ -3570,7 +3621,7 @@
                                         )}
                                     </>
                                 )}
-                            </div>
+                            </div>}
 
                             {/* Custom Faculty Input */}
                             {formData.faculty === "Others" && (

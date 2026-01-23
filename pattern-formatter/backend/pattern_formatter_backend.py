@@ -180,6 +180,14 @@ class Transaction(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class InstitutionRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    institution_name = db.Column(db.String(255), nullable=False)
+    requester_email = db.Column(db.String(120), nullable=True)
+    requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -593,14 +601,49 @@ def check_admin():
     }), 200
 
 
+@app.route('/api/institution-requests', methods=['POST'])
+def submit_institution_request():
+    """Submit a new institution request from user"""
+    data = request.get_json()
+    institution_name = data.get('institution_name', '').strip()
+    
+    if not institution_name:
+        return jsonify({'error': 'Institution name is required'}), 400
+    
+    # Get user info if logged in
+    requester_email = None
+    requester_id = None
+    if current_user.is_authenticated:
+        requester_email = current_user.email
+        requester_id = current_user.id
+    
+    # Create the request
+    new_request = InstitutionRequest(
+        institution_name=institution_name,
+        requester_email=requester_email,
+        requester_id=requester_id
+    )
+    db.session.add(new_request)
+    db.session.commit()
+    
+    return jsonify({'message': 'Request submitted successfully', 'id': new_request.id}), 201
+
+
 @app.route('/api/admin/institution-requests', methods=['GET'])
 @login_required
 def get_institution_requests():
-    """Get all institution requests (placeholder - no actual request model yet)"""
+    """Get all institution requests"""
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized - Admin access required'}), 403
-    # Return empty list as placeholder - can be expanded with actual InstitutionRequest model
-    return jsonify([]), 200
+    
+    requests = InstitutionRequest.query.order_by(InstitutionRequest.created_at.desc()).all()
+    return jsonify([{
+        'id': r.id,
+        'institution_name': r.institution_name,
+        'requester_email': r.requester_email,
+        'status': r.status,
+        'created_at': r.created_at.isoformat() if r.created_at else None
+    } for r in requests]), 200
 
 
 @app.route('/api/admin/documents', methods=['GET'])
