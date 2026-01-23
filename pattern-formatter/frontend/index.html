@@ -421,6 +421,87 @@
             gap: 0.5rem;
         }
 
+        .ai-restructure-bar {
+            padding: 0.75rem 1rem 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .ai-restructure-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.25rem;
+            background: rgba(0, 180, 166, 0.15);
+            border: 1px solid rgba(0, 180, 166, 0.4);
+            color: #00B4A6;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .ai-restructure-btn:hover {
+            background: rgba(0, 180, 166, 0.25);
+            color: #E2E8F0;
+        }
+
+        .ai-restructure-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 60;
+            padding: 1rem;
+        }
+
+        .ai-restructure-panel {
+            width: 100%;
+            max-width: 900px;
+            background: #0a1929;
+            border: 1px solid rgba(0, 180, 166, 0.3);
+            border-radius: 1rem;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .ai-restructure-textarea {
+            width: 100%;
+            min-height: 180px;
+            background: rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            color: #E2E8F0;
+            font-size: 0.875rem;
+            resize: vertical;
+            outline: none;
+        }
+
+        .ai-restructure-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .ai-restructure-output {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: rgba(255, 255, 255, 0.04);
+            color: #E2E8F0;
+            font-size: 0.875rem;
+            white-space: pre-wrap;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
         .ai-message {
             padding: 0.875rem 1rem;
             border-radius: 1rem;
@@ -1938,6 +2019,11 @@
             const [formattingIndex, setFormattingIndex] = useState(null);
             const [chatHistory, setChatHistory] = useState([]);
             const [currentChatId, setCurrentChatId] = useState(null);
+            const [showRestructureModal, setShowRestructureModal] = useState(false);
+            const [restructureInput, setRestructureInput] = useState('');
+            const [restructureOutput, setRestructureOutput] = useState('');
+            const [restructureLoading, setRestructureLoading] = useState(false);
+            const [restructureError, setRestructureError] = useState('');
             const [internalSidebarOpen, setInternalSidebarOpen] = useState(true);
             const sidebarOpen = typeof sidebarOpenProp !== 'undefined' ? sidebarOpenProp : internalSidebarOpen;
             const setSidebarOpen = setSidebarOpenProp || setInternalSidebarOpen;
@@ -2122,9 +2208,10 @@
                     // Add assistant messages - split into content and comment
                     if (fullContent) {
                         const { mainContent, aiComment } = splitAIResponse(fullContent);
+                        const sanitizedMain = sanitizeAiBold(mainContent);
                         // Add main content first (this is what can be formatted/copied)
-                        if (mainContent) {
-                            setMessages(prev => [...prev, { role: 'assistant', content: mainContent, isContent: true }]);
+                        if (sanitizedMain) {
+                            setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                         }
                         // Add AI comment separately (no format/copy buttons)
                         if (aiComment) {
@@ -2157,8 +2244,9 @@
                         if (data.success && data.response) {
                             // Split response into content and comment
                             const { mainContent, aiComment } = splitAIResponse(data.response);
-                            if (mainContent) {
-                                setMessages(prev => [...prev, { role: 'assistant', content: mainContent, isContent: true }]);
+                            const sanitizedMain = sanitizeAiBold(mainContent);
+                            if (sanitizedMain) {
+                                setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
                             }
                             if (aiComment) {
                                 setMessages(prev => [...prev, { role: 'assistant', content: aiComment, isComment: true }]);
@@ -2272,6 +2360,15 @@
                 return mainContent;
             };
 
+            const sanitizeAiBold = (content) => {
+                if (!content) return content;
+                const headingRegex = /^(?:\s*\**\s*(?:chapter|table of contents|references|bibliography)\b|\s*\**\s*\d+(?:\.\d+){0,3}\s+\S+|\s*\**\s*[IVX]+\.\s+\S+|\s*\**\s*[A-Z][A-Z\s]{3,})/i;
+                return content
+                    .split('\n')
+                    .map(line => (line.includes('**') && !headingRegex.test(line) ? line.replace(/\*\*/g, '') : line))
+                    .join('\n');
+            };
+
             const handleSuggestionClick = (suggestion) => {
                 // Put the suggestion prompt in the input box for user to complete
                 setInputValue(suggestion.prompt);
@@ -2301,12 +2398,49 @@
                 }
             };
 
+            const handleRestructureSubmit = async () => {
+                if (!restructureInput.trim() || restructureLoading) return;
+                setRestructureLoading(true);
+                setRestructureError('');
+                setRestructureOutput('');
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/ai/restructure`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ text: restructureInput })
+                    });
+
+                    const data = await response.json();
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.error || 'Failed to restructure text');
+                    }
+
+                    setRestructureOutput(data.response || '');
+                } catch (err) {
+                    setRestructureError(err.message || 'Restructure failed');
+                } finally {
+                    setRestructureLoading(false);
+                }
+            };
+
+            const handleCopyRestructureOutput = async () => {
+                if (!restructureOutput) return;
+                try {
+                    await navigator.clipboard.writeText(restructureOutput);
+                } catch (err) {
+                    console.error('Failed to copy:', err);
+                }
+            };
+
             if (!isExpanded) {
                 // When collapsed we render nothing — the AI is opened from the main header
                 return null;
             }
 
             return (
+                <>
                 <div className="ai-chat-container">
                     <div className="ai-layout-container">
                         {/* Overlay for mobile - click to close sidebar */}
@@ -2386,6 +2520,16 @@
                                     )}
                                     {/* Collapse button removed as requested */}
                                 </div>
+                            </div>
+
+                            <div className="ai-restructure-bar">
+                                <button
+                                    className="ai-restructure-btn"
+                                    onClick={() => setShowRestructureModal(true)}
+                                >
+                                    <Icons.Sparkles size={16} />
+                                    Restructure
+                                </button>
                             </div>
 
                             {/* Messages Area */}
@@ -2528,6 +2672,58 @@
                         </div>
                     </div>
                 </div>
+
+                {showRestructureModal && (
+                    <div className="ai-restructure-modal">
+                        <div className="ai-restructure-panel">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-white font-semibold flex items-center gap-2">
+                                    <Icons.Sparkles size={18} />
+                                    Restructure Text
+                                </h3>
+                                <button
+                                    onClick={() => setShowRestructureModal(false)}
+                                    className="text-mist hover:text-white transition-colors"
+                                >
+                                    <Icons.X size={18} />
+                                </button>
+                            </div>
+                            <textarea
+                                className="ai-restructure-textarea"
+                                value={restructureInput}
+                                onChange={(e) => setRestructureInput(e.target.value)}
+                                placeholder="Paste your text here to restructure..."
+                            />
+                            {restructureError && (
+                                <div className="text-red-300 text-sm bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+                                    {restructureError}
+                                </div>
+                            )}
+                            <div className="ai-restructure-actions">
+                                <button
+                                    onClick={handleRestructureSubmit}
+                                    className="ai-restructure-btn"
+                                    disabled={restructureLoading}
+                                >
+                                    {restructureLoading ? <Icons.Loader size={16} /> : <Icons.Sparkles size={16} />}
+                                    {restructureLoading ? 'Restructuring...' : 'Restructure'}
+                                </button>
+                                <button
+                                    onClick={handleCopyRestructureOutput}
+                                    className="quick-action-btn"
+                                    disabled={!restructureOutput}
+                                >
+                                    <Icons.Copy size={16} />
+                                    Copy Output
+                                </button>
+                            </div>
+                            <div className="ai-restructure-output">
+                                {restructureOutput || 'Restructured text will appear here...'}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                </>
             );
         };
 
@@ -4058,6 +4254,15 @@
                                 />
                                 <span className="text-white text-sm">Include Table of Contents</span>
                             </label>
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+                                <input
+                                    type="checkbox"
+                                    checked={options.restructureWithAi}
+                                    onChange={(e) => setOptions({...options, restructureWithAi: e.target.checked})}
+                                    className="w-4 h-4 cursor-pointer accent-teal"
+                                />
+                                <span className="text-white text-sm">Restructure with AI</span>
+                            </label>
 
                             {/* Font Size - Compact */}
                             <div className="flex items-center justify-between gap-2">
@@ -4297,6 +4502,7 @@
             const [activeTab, setActiveTab] = useState('preview');
             const [mergeJobId, setMergeJobId] = useState(null);
             const [pastedText, setPastedText] = useState('');
+            const [isRestructuringPaste, setIsRestructuringPaste] = useState(false);
             const [showSuccessMessage, setShowSuccessMessage] = useState(false);
             const [elapsedTime, setElapsedTime] = useState(0);
             const [showShare, setShowShare] = useState(false);
@@ -4323,6 +4529,7 @@
             const [pendingFile, setPendingFile] = useState(null);
             const defaultFormattingOptions = {
                 includeTOC: false,
+                restructureWithAi: false,
                 fontSize: '12',
                 lineSpacing: '1.5',
                 marginCm: '2.5',
@@ -4482,6 +4689,7 @@
                     const formData = new FormData();
                     formData.append('file', selectedFile);
                     formData.append('include_toc', String(options.includeTOC));
+                    formData.append('restructure_with_ai', String(options.restructureWithAi));
                     formData.append('font_size', String(options.fontSize));
                     formData.append('line_spacing', String(options.lineSpacing));
                     
@@ -4632,6 +4840,32 @@
                 // Store pending file and show formatting modal
                 setPendingFile(file);
                 setShowFormattingModal(true);
+            };
+
+            const handleRestructurePastedText = async () => {
+                if (!pastedText.trim() || isRestructuringPaste) return;
+                setIsRestructuringPaste(true);
+                setError(null);
+
+                try {
+                    const response = await fetch(`${API_BASE}/api/ai/restructure`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ text: pastedText })
+                    });
+
+                    const data = await response.json();
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.error || 'Failed to restructure text');
+                    }
+
+                    setPastedText(data.response || '');
+                } catch (err) {
+                    setError(`Restructure failed: ${err.message}`);
+                } finally {
+                    setIsRestructuringPaste(false);
+                }
             };
 
             // Handler for formatting AI-generated text
@@ -5441,6 +5675,14 @@
                                                                 className="quick-action-btn primary"
                                                             >
                                                                 <Icons.Zap /> Format Document
+                                                            </button>
+                                                            <button
+                                                                onClick={handleRestructurePastedText}
+                                                                className="quick-action-btn"
+                                                                disabled={isRestructuringPaste}
+                                                            >
+                                                                {isRestructuringPaste ? <Icons.Loader size={16} /> : <Icons.Sparkles size={16} />}
+                                                                {isRestructuringPaste ? 'Restructuring...' : 'Restructure'}
                                                             </button>
                                                         </div>
                                                     )}

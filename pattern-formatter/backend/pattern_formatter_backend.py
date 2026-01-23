@@ -706,6 +706,8 @@ AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing 
 2. Never use justified text alignment
 3. Use clear paragraph breaks between sections
 4. Bold section headings (e.g., **1.0 Introduction**)
+5. Only bold headings/titles. Do NOT bold full paragraphs or list items.
+6. Avoid excessive hierarchy; use at most three levels (e.g., 1.1.1) unless explicitly required.
 
 ## DOCUMENT STRUCTURES:
 
@@ -784,7 +786,94 @@ AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing 
 - When asked to write, produce complete, ready-to-use content
 - Format headings with bold markers (**)
 
-Be professional, helpful, and produce high-quality academic content following these standards."""
+ Be professional, helpful, and produce high-quality academic content following these standards."""
+
+AI_RESTRUCTURE_SYSTEM_PROMPT = """You are AfroDocs AI Restructuring Assistant.
+
+Task: Restructure the provided text to match AfroDocs academic formatting standards.
+
+Requirements:
+- Preserve all original meaning and content. Do NOT invent, add, or remove content.
+- Apply hierarchical numbering where appropriate: 1.0, 1.1, 1.1.1, etc.
+- Use lettered lists (a, b, c) and roman numerals (i, ii, iii) when structure calls for sub-lists.
+- Use bullet points for simple unordered items.
+- Keep headings concise and clear, and follow the AfroDocs numbering hierarchy.
+- Return ONLY the restructured text with no commentary, no explanations, and no code fences.
+- Only bold headings/titles. Do NOT bold full paragraphs, tables, or list items.
+- Avoid excessive hierarchy; use up to three levels unless the source clearly indicates deeper structure.
+"""
+
+
+def _call_deepseek(messages, temperature=0.4, max_tokens=4096, timeout=90):
+    import requests
+
+    response = requests.post(
+        DEEPSEEK_API_URL,
+        headers={
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": DEEPSEEK_MODEL,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        },
+        timeout=timeout
+    )
+
+    if response.status_code != 200:
+        logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+        raise RuntimeError(f"AI service error: {response.status_code}")
+
+    result = response.json()
+    return result['choices'][0]['message']['content']
+
+
+def normalize_ai_bolding(text):
+    if not text:
+        return text
+
+    heading_patterns = [
+        r'^\s*\*?\*?\s*(?:chapter|table of contents|references|bibliography)\b',
+        r'^\s*\*?\*?\s*\d+(\.\d+){0,3}\s+\S+',
+        r'^\s*\*?\*?\s*[IVX]+\.\s+\S+',
+        r'^\s*\*?\*?\s*[A-Z][A-Z\s]{3,}$'
+    ]
+    heading_regex = re.compile('|'.join(heading_patterns), re.IGNORECASE)
+
+    cleaned_lines = []
+    for line in text.splitlines():
+        if '**' in line and not heading_regex.search(line):
+            cleaned_lines.append(line.replace('**', ''))
+        else:
+            cleaned_lines.append(line)
+    return '\n'.join(cleaned_lines)
+
+
+def restructure_text_with_ai(text):
+    if not text or not text.strip():
+        return text
+
+    messages = [
+        {"role": "system", "content": AI_RESTRUCTURE_SYSTEM_PROMPT},
+        {"role": "user", "content": f"Restructure the text below into AfroDocs academic formatting:\n\n{text}"}
+    ]
+    return normalize_ai_bolding(_call_deepseek(messages))
+
+
+def extract_text_from_docx_bytes(file_bytes):
+    doc = Document(BytesIO(file_bytes))
+    lines = []
+    for para in doc.paragraphs:
+        if para.text:
+            lines.append(para.text)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text]
+            if cells:
+                lines.append(" | ".join(cells))
+    return "\n".join(lines)
 
 
 @app.route('/api/ai/chat', methods=['POST'])
@@ -828,7 +917,7 @@ def ai_chat():
         
         if response.status_code == 200:
             result = response.json()
-            ai_response = result['choices'][0]['message']['content']
+            ai_response = normalize_ai_bolding(result['choices'][0]['message']['content'])
             return jsonify({'response': ai_response, 'success': True}), 200
         else:
             logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
@@ -838,6 +927,23 @@ def ai_chat():
         return jsonify({'error': 'AI service timeout. Please try again.', 'success': False}), 504
     except Exception as e:
         logger.error(f"AI chat error: {str(e)}")
+        return jsonify({'error': f'AI service error: {str(e)}', 'success': False}), 500
+
+
+@app.route('/api/ai/restructure', methods=['POST'])
+@allow_guest
+def ai_restructure():
+    """Restructure text using DeepSeek for AfroDocs formatting."""
+    data = request.get_json() or {}
+    text = data.get('text', '')
+    if not text.strip():
+        return jsonify({'error': 'No text provided', 'success': False}), 400
+
+    try:
+        restructured = restructure_text_with_ai(text)
+        return jsonify({'response': restructured, 'success': True}), 200
+    except Exception as e:
+        logger.error(f"AI restructure error: {str(e)}")
         return jsonify({'error': f'AI service error: {str(e)}', 'success': False}), 500
 
 
@@ -14735,6 +14841,7 @@ def upload_document():
     
     # Extract formatting options from request
     include_toc = request.form.get('include_toc', 'false').lower() == 'true'
+    restructure_with_ai = request.form.get('restructure_with_ai', 'false').lower() == 'true'
     font_size = request.form.get('font_size', '12')
     line_spacing = request.form.get('line_spacing', '1.5')
     
@@ -14794,7 +14901,7 @@ def upload_document():
 #>>>>>>> main
     
     # Log formatting options for debugging
-    logger.info(f"Formatting options: TOC={include_toc}, FontSize={font_size}pt, LineSpacing={line_spacing}, Margins=[L:{margins['left']}cm T:{margins['top']}cm B:{margins['bottom']}cm R:{margins['right']}cm]")
+    logger.info(f"Formatting options: TOC={include_toc}, RestructureAI={restructure_with_ai}, FontSize={font_size}pt, LineSpacing={line_spacing}, Margins=[L:{margins['left']}cm T:{margins['top']}cm B:{margins['bottom']}cm R:{margins['right']}cm]")
     
     # Estimate page count before processing
     # We need to read the file content to estimate pages
@@ -14943,13 +15050,39 @@ def upload_document():
         logger.error(f"Failed to save metadata or record: {e}")
     
     try:
+        restructured_text = None
+        if restructure_with_ai:
+            if file_ext == '.docx':
+                extracted_text = extract_text_from_docx_bytes(file_content)
+            else:
+                extracted_text = file_content.decode('utf-8', errors='ignore')
+
+            restructured_text = restructure_text_with_ai(extracted_text)
+
         # Process document
         policy = FormatPolicy()
         processor = DocumentProcessor(policy=policy)
         images = []  # Extracted images
         shapes = []  # Extracted shapes/flowcharts
-        
-        if file_ext == '.docx':
+
+        if restructure_with_ai and restructured_text is not None:
+            # Process restructured text in place of the original file content
+            proc_result = processor.process_text(restructured_text)
+            if isinstance(proc_result, tuple):
+                if len(proc_result) == 3:
+                    result, images, shapes = proc_result
+                elif len(proc_result) == 2:
+                    result, images = proc_result
+                    shapes = []
+                else:
+                    result = proc_result[0] if proc_result else {}
+                    images = []
+                    shapes = []
+            else:
+                result = proc_result
+                images = []
+                shapes = []
+        elif file_ext == '.docx':
             # Robust unpacking to handle both dict and tuple returns (now returns 3-tuple with shapes)
             proc_result = processor.process_docx(input_path)
             if isinstance(proc_result, tuple):
