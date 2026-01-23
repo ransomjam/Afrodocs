@@ -278,8 +278,13 @@ def signup():
         pages_balance=initial_pages
     )
     db.session.add(new_user)
-    db.session.commit()
-    
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.exception('Exception on /api/auth/signup [POST]')
+        return jsonify({'error': 'Failed to create user'}), 500
+
     return jsonify({'message': 'User created successfully', 'referral_code': new_referral_code}), 201
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -15443,6 +15448,8 @@ def mobile_pdf_viewer():
         '          try { container.innerHTML = ""; const iframe = document.createElement("iframe"); iframe.src = fileUrl; iframe.className = "viewer"; container.appendChild(iframe); } catch(err){ window.open(fileUrl, "_blank"); }'
         '      };'
         '      container.appendChild(openBtn);'
+        '      // Auto-trigger open to attempt inline load on mobile devices'
+        '      try { setTimeout(function(){ openBtn.click(); }, 400); } catch(e) {}'
 
         '    })();'
         '  </script>'
