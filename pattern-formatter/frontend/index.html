@@ -1846,6 +1846,7 @@
         // API Configuration
         // Use current origin to ensure same-origin requests (avoids CORS issues)
         const API_BASE = window.location.origin || 'http://localhost:5000';
+        const REMEMBERED_USER_KEY = 'afrodocs_remembered_user';
 
         // ============================================================================
         // MOBILE PDF VIEWER COMPONENT (simple iframe embed)
@@ -2713,6 +2714,7 @@
             const [referralCode, setReferralCode] = React.useState('');
             const [institution, setInstitution] = React.useState('');
             const [institutions, setInstitutions] = React.useState([]);
+            const [rememberMe, setRememberMe] = React.useState(true);
 
             React.useEffect(() => {
                 // Fetch institutions from backend
@@ -2740,6 +2742,21 @@
                     setIsLogin(false); // Switch to signup if ref is present
                 }
             }, []);
+
+            React.useEffect(() => {
+                if (!isLogin) return;
+                const saved = localStorage.getItem(REMEMBERED_USER_KEY);
+                if (!saved) return;
+                try {
+                    const parsed = JSON.parse(saved);
+                    if (parsed?.username) {
+                        setUsername(parsed.username);
+                        setRememberMe(true);
+                    }
+                } catch (err) {
+                    console.warn('Failed to load remembered user info.', err);
+                }
+            }, [isLogin]);
             const [customInstitution, setCustomInstitution] = React.useState('');
             const [contact, setContact] = React.useState('');
             const [error, setError] = React.useState('');
@@ -2775,6 +2792,11 @@
                     
                     if (response.ok) {
                         if (isLogin) {
+                            if (rememberMe) {
+                                localStorage.setItem(REMEMBERED_USER_KEY, JSON.stringify({ username }));
+                            } else {
+                                localStorage.removeItem(REMEMBERED_USER_KEY);
+                            }
                             onLogin(data.username);
                         } else {
                             // Auto login after signup or switch to login
@@ -2849,6 +2871,17 @@
                                     </button>
                                 </div>
                             </div>
+                            {isLogin && (
+                                <label className="flex items-center gap-2 text-xs text-slate-300">
+                                    <input
+                                        type="checkbox"
+                                        className="accent-teal"
+                                        checked={rememberMe}
+                                        onChange={(e) => setRememberMe(e.target.checked)}
+                                    />
+                                    Remember me on this browser
+                                </label>
+                            )}
 
                             {!isLogin && (
                                 <div>
@@ -4404,8 +4437,8 @@
 
         // Main Application Component
         const PatternDocFormatter = () => {
-            const [viewMode, setViewMode] = useState('formatter'); // 'formatter', 'coverpage', or 'ai'
-            const [appSidebarOpen, setAppSidebarOpen] = useState(false); // Mobile sidebar state
+            const [viewMode, setViewMode] = useState(null); // null, 'formatter', 'coverpage', or 'ai'
+            const [appSidebarOpen, setAppSidebarOpen] = useState(true); // Mobile sidebar state
             const [sidebarCollapsed, setSidebarCollapsed] = useState(false); // Collapse sidebar to icons only
             const [userDocuments, setUserDocuments] = useState(() => {
                 const saved = localStorage.getItem('afrodocs_user_documents');
@@ -5025,6 +5058,9 @@
                         if (data.isAuthenticated) {
                             setIsAuthenticated(true);
                             setCurrentUser(data);
+                            if (data.username) {
+                                localStorage.setItem(REMEMBERED_USER_KEY, JSON.stringify({ username: data.username }));
+                            }
                         }
                     })
                     .catch(err => console.error("Auth check failed", err))
@@ -5039,6 +5075,9 @@
                     .then(data => {
                         if (data.isAuthenticated) {
                             setCurrentUser(data);
+                            if (data.username) {
+                                localStorage.setItem(REMEMBERED_USER_KEY, JSON.stringify({ username: data.username }));
+                            }
                         }
                     });
             };
@@ -5503,6 +5542,7 @@
                                         <Icons.Menu size={20} />
                                     </button>
                                     <h1 className="app-main-title">
+                                        {!viewMode && 'Welcome to AfroDocs'}
                                         {viewMode === 'formatter' && 'Document Formatter'}
                                         {viewMode === 'ai' && 'AI Mode'}
                                         {viewMode === 'coverpage' && 'Cover Page Generator'}
@@ -5530,6 +5570,22 @@
                                         <div>
                                             <p className="font-medium">{errorIsPositive ? 'Notice' : 'Error'}</p>
                                             <p className="text-sm opacity-90">{error}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!viewMode && (
+                                <div className="max-w-3xl mx-auto">
+                                    <div className="content-card">
+                                        <div className="content-card-body text-center py-12">
+                                            <div className="flex justify-center mb-4">
+                                                <span className="text-teal"><Icons.Sparkles size={32} /></span>
+                                            </div>
+                                            <h2 className="text-xl font-semibold text-white mb-2">Choose where to start</h2>
+                                            <p className="text-sm text-mist">
+                                                Your sidebar is open so you can explore the tools and pick the best starting point.
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
