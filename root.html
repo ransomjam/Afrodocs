@@ -141,18 +141,23 @@
             50% { box-shadow: 0 0 25px rgba(0, 180, 166, 0.4); }
         }
         
-        @keyframes lightning-pulse {
-            0%, 100% { opacity: 0.3; transform: scale(1); filter: drop-shadow(0 0 5px #00B4A6); }
-            15% { opacity: 1; transform: scale(1.2); filter: drop-shadow(0 0 20px #00B4A6) drop-shadow(0 0 40px #00B4A6); }
-            30% { opacity: 0.4; transform: scale(1); filter: drop-shadow(0 0 10px #00B4A6); }
-            45% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 25px #00B4A6) drop-shadow(0 0 50px #00B4A6); }
-            60% { opacity: 0.3; transform: scale(1); filter: drop-shadow(0 0 5px #00B4A6); }
+        /* Animated stroke tracing around bolt outline */
+        @keyframes trace-outline {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: -180; }
         }
-        
+
         .lightning-loading {
-            animation: lightning-pulse 1.5s ease-in-out infinite;
             color: #00B4A6;
-            font-size: 3rem;
+            font-size: 9rem; /* increased by 2x */
+        }
+
+        .lightning-loading svg {
+            stroke: #00B4A6;
+            stroke-width: 1.2;
+            stroke-linecap: round;
+            stroke-dasharray: 8 120;
+            animation: trace-outline 0.6s linear infinite; /* slightly slower */
         }
         
         .processing-glow {
@@ -357,15 +362,6 @@
             color: rgba(0, 0, 0, 0.48);
         }
 
-        /* Lightning Flash Animation */
-        @keyframes lightning-flash {
-            0%, 100% { opacity: 0.3; transform: scale(1); filter: drop-shadow(0 0 5px #00B4A6); }
-            10% { opacity: 1; transform: scale(1.2); filter: drop-shadow(0 0 20px #00B4A6) drop-shadow(0 0 40px #00B4A6); }
-            20% { opacity: 0.5; transform: scale(1); filter: drop-shadow(0 0 10px #00B4A6); }
-            30% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 25px #00B4A6) drop-shadow(0 0 50px #00B4A6); }
-            40% { opacity: 0.4; transform: scale(1); filter: drop-shadow(0 0 5px #00B4A6); }
-        }
-        
         .lightning-flash-container {
             position: absolute;
             inset: 0;
@@ -374,11 +370,17 @@
             justify-content: center;
             z-index: 20;
         }
-        
+
         .lightning-bolt {
             color: #00B4A6;
-            animation: lightning-flash 1.5s ease-in-out infinite;
-            font-size: 4rem;
+            font-size: 6rem;
+        }
+
+        .lightning-bolt svg {
+            stroke: #00B4A6;
+            stroke-width: 1.2;
+            stroke-dasharray: 50 50;
+            animation: trace-outline 0.4s linear infinite;
         }
 
         .tech-grid {
@@ -3158,7 +3160,7 @@
         ];
 
         // --- Cover Page Generator Component ---
-        const CoverPageGenerator = ({ mergeJobId, setPdfPreviewUrl, pdfPreviewUrl, setPdfViewParam, setShowPdfModal }) => {
+        const CoverPageGenerator = ({ mergeJobId, setPdfPreviewUrl, pdfPreviewUrl, setPdfViewParam, setShowPdfModal, opening = false, setOpening = () => {} }) => {
             const [formData, setFormData] = useState({
                 university: 'Bamenda',  // Add university selector
                 documentType: 'Assignment',
@@ -3196,6 +3198,10 @@
 
             // Load institutions on mount
             React.useEffect(() => {
+                // Clear opening state immediately when component mounts
+                if (opening) {
+                    setOpening(false);
+                }
                 fetch(`${API_BASE}/api/institutions`)
                     .then(res => res.json())
                     .then(data => {
@@ -3800,7 +3806,16 @@
                                             </div>
 
                                             <div className="flex-1 relative bg-slate-900">
-                                                {pdfPreviewUrl ? (
+                                                {loading ? (
+                                                                                    <div className="absolute inset-0 flex items-center justify-center z-10 bg-slate-900/60 backdrop-blur-sm">
+                                                                                        <div className="flex items-center justify-center h-full text-mist flex-col gap-4">
+                                                                                            <div className="lightning-loading">
+                                                                                                <Icons.Zap />
+                                                                                            </div>
+                                                                                            <p className="text-sm sm:text-base">Generating preview...</p>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ) : pdfPreviewUrl ? (
                                                     <>
                                                         {/* Mobile PDF.js viewer */}
                                                         <div className="md:hidden h-full">
@@ -4189,7 +4204,7 @@
         };
 
         // Pricing Modal Component
-        const PricingModal = ({ isOpen, onClose, onSelectPlan }) => {
+        const PricingModal = ({ isOpen, onClose, onSelectPlan, limitReached }) => {
             if (!isOpen) return null;
 
             const plans = [
@@ -4230,6 +4245,14 @@
                             </button>
                         </div>
                         
+                        {limitReached && (
+                            <div className="mx-3 mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                                <p className="text-red-400 text-sm text-center font-medium">
+                                    Free tier limit reached (300 pages/month). Please subscribe to continue.
+                                </p>
+                            </div>
+                        )}
+                        
                         <div className="p-3 space-y-2">
                             {plans.map(plan => (
                                 <div 
@@ -4251,7 +4274,7 @@
                                             onClick={() => onSelectPlan(0, plan.amount)}
                                             className="px-4 py-2 bg-gradient-to-r from-[#1E5A8E] to-teal text-white rounded-lg text-xs font-bold hover:opacity-90 transition-all"
                                         >
-                                            Buy
+                                            Subscribe
                                         </button>
                                     </div>
                                 </div>
@@ -4282,6 +4305,7 @@
             const [result, setResult] = useState(null);
             const [preview, setPreview] = useState(null);
             const [error, setError] = useState(null);
+            const errorIsPositive = error && /account created|already created|please log in|success/i.test(error);
             const [dragOver, setDragOver] = useState(false);
             const [activeTab, setActiveTab] = useState('preview');
             const [mergeJobId, setMergeJobId] = useState(null);
@@ -4295,11 +4319,13 @@
             const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
             const [showPdfModal, setShowPdfModal] = useState(false);
             const [pdfViewParam, setPdfViewParam] = useState('FitH');
+            const [coverpageOpening, setCoverpageOpening] = useState(false);
             const abortControllerRef = useRef(null);
             const [pdfPreviewError, setPdfPreviewError] = useState(false);
             const [pdfPreviewLoading, setPdfPreviewLoading] = useState(true);
             const [pdfPreviewKey, setPdfPreviewKey] = useState(0);
             const [showPricingModal, setShowPricingModal] = useState(false);
+            const [pricingLimitReached, setPricingLimitReached] = useState(false);
             // AI Assistant state
             const [showAiAssistant, setShowAiAssistant] = useState(false);
             const [aiSidebarOpen, setAiSidebarOpen] = useState(true);
@@ -4500,6 +4526,8 @@
                         const errorData = await response.json();
                         if (errorData.error === 'LIMIT_REACHED') {
                             setError('Free tier limit reached (300 pages/month). Please upgrade to continue.');
+                            setPricingLimitReached(true);
+                            setShowPricingModal(true);
                         } else {
                             throw new Error(errorData.error || 'Upload failed');
                         }
@@ -5487,6 +5515,7 @@
                                                     onClick={() => {
                                                         const currentJobId = result.job_id;
                                                         setMergeJobId(currentJobId);
+                                                        setCoverpageOpening(true);
                                                         setViewMode('coverpage');
                                                     }}
                                                     className="flex items-center justify-center gap-2 px-5 py-1.5 bg-white/10 border border-white/20 text-white rounded-lg text-sm md:text-base font-semibold hover:bg-white/20 transition-all"
@@ -5613,6 +5642,8 @@
                                     pdfPreviewUrl={pdfPreviewUrl}
                                     setPdfViewParam={setPdfViewParam}
                                     setShowPdfModal={setShowPdfModal}
+                                    opening={coverpageOpening}
+                                    setOpening={setCoverpageOpening}
                                 />
                             )}
                         </div>
@@ -5644,8 +5675,9 @@
 
                     <PricingModal 
                         isOpen={showPricingModal} 
-                        onClose={() => setShowPricingModal(false)} 
+                        onClose={() => { setShowPricingModal(false); setPricingLimitReached(false); }} 
                         onSelectPlan={handleUpgrade}
+                        limitReached={pricingLimitReached}
                     />
 
                     {/* Payment Success Modal */}

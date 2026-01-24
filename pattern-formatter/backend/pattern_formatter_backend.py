@@ -9967,15 +9967,12 @@ class DocumentProcessor:
                         context['prev_was_chapter'] = True
                     elif prev_analysis.get('type') == 'front_matter_heading':
                         context['prev_front_matter'] = prev_analysis.get('front_matter_type')
-#<<<<<<< codex/fix-chapter-heading-page-formatting-6ra63n
                     elif prev_analysis.get('type') in ['heading', 'heading_hierarchy']:
                         prev_text = prev_analysis.get('content') or prev_analysis.get('text', '')
                         prev_text = re.sub(r'[*_]+', '', str(prev_text))
                         is_chapter, _, _ = self.engine.is_chapter_heading(prev_text)
                         if is_chapter:
                             context['prev_was_chapter'] = True
-#=======
-#>>>>>>> main
             
             analysis = self.engine.analyze_line(
                 text, 
@@ -11379,6 +11376,9 @@ class WordGenerator:
     def _enforce_no_italics(self, doc):
         """Force italics off for all styles and runs (except references)."""
         for style in doc.styles:
+            # Skip ReferenceEntry style - italics are allowed within references
+            if hasattr(style, 'name') and style.name == 'ReferenceEntry':
+                continue
             if hasattr(style, 'font') and style.font is not None:
                 style.font.italic = False
         for para in self._iter_paragraphs_in_doc(doc):
@@ -11481,11 +11481,7 @@ class WordGenerator:
         self.line_spacing = line_spacing
         # Handle margins - support both dict (individual sides) and scalar (uniform)
         if margins is None:
-#<<<<<<< codex/examine-codebase-84o2ei
             self.margins = {'left': 3.0, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
-#=======
-            self.margins = {'left': 3.0, 'top': 3.0, 'bottom': 3.0, 'right': 3.0}
-#>>>>>>> main
         elif isinstance(margins, dict):
             self.margins = margins
         else:
@@ -11660,7 +11656,9 @@ class WordGenerator:
         self.arabic_started_after_toc = False
         
         # Use Roman numerals for preliminary pages if any preliminary content exists
-        if not has_preliminary:
+        # EXCEPTION: If only TOC exists in preliminary pages (no abstract, dedication, acknowledgements, etc.),
+        # use Arabic numerals throughout the entire document
+        if not has_preliminary or self.toc_only_preliminary:
             self.use_continuous_arabic = True
         else:
             self.use_continuous_arabic = False
@@ -11749,6 +11747,11 @@ class WordGenerator:
         
         # Add all sections
         rendered_section_count = 0
+        # Track if we're processing the first section (to avoid empty first page AND duplicate breaks after TOC)
+        # ALWAYS set to True - first section should never add a page break because:
+        # - If no TOC: Adding a page break would create an empty first page
+        # - If TOC exists: TOC already adds a page break, so adding another creates a double break
+        self.is_first_section = True
         for i, section in enumerate(structured_data):
             # Special handling for "Document" title section (auto-generated for unstructured text)
             if section.get('heading', '').strip().lower() == 'document':
@@ -11766,6 +11769,9 @@ class WordGenerator:
             
             self._add_section(section)
             rendered_section_count += 1
+            # After processing first section, set flag to False
+            if self.is_first_section:
+                self.is_first_section = False
         
         # Save document first
         if is_free_tier:
@@ -11959,6 +11965,11 @@ class WordGenerator:
         # Use Heading 1 style format: Times New Roman, 12pt, bold, centered, black
         cert_heading = self.doc.add_heading('CERTIFICATION', level=1)
         cert_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cert_heading.paragraph_format.page_break_before = False
+        # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+        # from jumping to new pages when there's not enough room for heading + content
+        cert_heading.paragraph_format.keep_with_next = False
+        cert_heading.paragraph_format.keep_together = False
         cert_heading.paragraph_format.space_before = Pt(12)
         cert_heading.paragraph_format.space_after = Pt(6)
         cert_heading.paragraph_format.line_spacing = self.line_spacing
@@ -12193,6 +12204,7 @@ class WordGenerator:
             1: {'size': self.font_size, 'bold': True, 'space_before': 0, 'space_after': 0},
             2: {'size': self.font_size, 'bold': True, 'space_before': 12, 'space_after': 6},
             3: {'size': self.font_size, 'bold': True, 'space_before': 12, 'space_after': 6},
+            4: {'size': self.font_size, 'bold': True, 'space_before': 12, 'space_after': 6},
         }
         
         for level, config in heading_configs.items():
@@ -12209,6 +12221,14 @@ class WordGenerator:
                 heading.paragraph_format.space_after = Pt(config['space_after'])
                 heading.paragraph_format.left_indent = Pt(0)  # No left indent
                 heading.paragraph_format.first_line_indent = Pt(0)  # No first line indent
+                # CRITICAL FIX: Ensure NO page breaks before headings by default
+                # This prevents level 2/3 headings from starting on new pages
+                heading.paragraph_format.page_break_before = False
+                # CRITICAL FIX: Disable keep_with_next and keep_together on heading styles
+                # These Word defaults cause headings to jump to next page when there's not enough
+                # room for heading + following content - this is NOT desired for sub-sections
+                heading.paragraph_format.keep_with_next = False
+                heading.paragraph_format.keep_together = False
             except KeyError:
                 pass  # Style doesn't exist, skip
 
@@ -12306,10 +12326,9 @@ class WordGenerator:
         
         # Single page break after TOC (not two)
         if self.toc_only_preliminary:
-            new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
-            self._set_page_numbering(new_section, fmt='decimal', start=1)
-            new_section.footer.is_linked_to_previous = False
-            self._add_page_number_to_footer(new_section)
+            # TOC is the only preliminary content, so we're already using Arabic numerals
+            # Just add a page break to continue the document (numbering continues)
+            self.doc.add_page_break()
             self.arabic_started_after_toc = True
         else:
             self.doc.add_page_break()
@@ -12959,8 +12978,10 @@ class WordGenerator:
         
         # Check for Chapter 1 to switch numbering
         heading_text = section.get('heading', '').strip().upper()
+        section_level = section.get('level', 1)
         
         # Force page break for specific sections (Resume, Acknowledgements) - BUT NOT FOR SHORT DOCUMENTS
+        # CRITICAL: Only apply to LEVEL 1 headings, not to numbered sub-sections like 2.1, 2.2, 3.3
         force_break_headings = [
             'RESUME', 'RÉSUMÉ', 'RÉSUME', 'RESUMÉ', 
             'ACKNOWLEDGEMENTS', 'ACKNOWLEDGMENTS', 'ACKNOWLEDGEMENT', 'ACKNOWLEDGMENT',
@@ -12971,8 +12992,19 @@ class WordGenerator:
             'DISCUSSION', 'FINDINGS AND DISCUSSION',
             'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS'
         ]
-        # Check if heading matches any of these words - skip for short documents
-        if not self.is_short_document and any(h in heading_text for h in force_break_headings):
+        
+        # Check if this is a numbered sub-section (e.g., 2.0, 2.1, 3.3) - these should NEVER get page breaks
+        is_numbered_subsection = bool(re.match(r'^\d+\.\d+', heading_text))
+        
+        # Only apply forced page breaks if:
+        # 1. It's a LEVEL 1 heading (not level 2, 3, etc.)
+        # 2. It's NOT a numbered sub-section (like 2.0, 2.1, 2.3, 3.0, etc.)
+        # 3. It's not a short document
+        # 4. The heading matches one of the force_break keywords
+        if (section_level == 1 and 
+            not is_numbered_subsection and 
+            not self.is_short_document and 
+            any(h in heading_text for h in force_break_headings)):
              # Use page_break_before property instead of manual break for better reliability
              section['use_page_break_before'] = True
              section['needs_page_break'] = False # Disable manual break
@@ -12981,8 +13013,12 @@ class WordGenerator:
         is_any_chapter = bool(re.search(r'^CHAP?TER\s+(\d+|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN|[IVXLC]+)\b', heading_text, re.IGNORECASE))
         is_chapter_one = bool(re.search(r'^CHAP?TER\s+(1|ONE)\b', heading_text, re.IGNORECASE))
         
-        # All chapters should start on a new page
-        if is_any_chapter:
+        # CRITICAL FIX: Skip page breaks for the very first section to prevent empty first page
+        # This applies when there's no TOC/cover page before the content
+        skip_first_section_break = getattr(self, 'is_first_section', False)
+        
+        # All chapters should start on a new page (EXCEPT the first section)
+        if is_any_chapter and not skip_first_section_break:
             if is_chapter_one and not self.use_continuous_arabic and not self.arabic_started_after_toc:
                 # Add Section Break (Next Page) to switch to Arabic numbering for Chapter 1
                 new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
@@ -12995,7 +13031,9 @@ class WordGenerator:
         # Skip other page breaks for short documents
         elif self.is_short_document:
             pass  # No page breaks for short documents (except chapters handled above)
-        elif section.get('needs_page_break', False):
+        elif section.get('needs_page_break', False) and section_level == 1 and not is_numbered_subsection:
+            # CRITICAL: Only add page break for level 1 sections that are NOT numbered sub-sections
+            # This prevents 2.0, 2.1, 2.3, 3.0, 3.3 etc. from getting unwanted page breaks
             self.doc.add_page_break()
         
         # Handle chapter sections (dissertation-specific)
@@ -13017,6 +13055,14 @@ class WordGenerator:
                 self.doc.add_page_break()
 
             heading = self.doc.add_heading(section.get('title', ''), level=min(section.get('level', 3), 4))
+            
+            # CRITICAL FIX: Disable page break before for prominent sections
+            # They should not start on new pages unless explicitly requested above
+            heading.paragraph_format.page_break_before = False
+            # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+            # from jumping to new pages when there's not enough room for heading + content
+            heading.paragraph_format.keep_with_next = False
+            heading.paragraph_format.keep_together = False
 
             # CRITICAL: Apply Times New Roman to ALL prominent section headings
             # This ensures consistency across all heading types (not just front matter)
@@ -13157,6 +13203,13 @@ class WordGenerator:
                 header_text = f"{section.get('numbering')}. {header_text}"
 
             heading = self.doc.add_heading(header_text, level=min(section.get('level', 3), 4))
+            
+            # CRITICAL FIX: Disable page break before for shortdoc sections
+            heading.paragraph_format.page_break_before = False
+            # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+            # from jumping to new pages when there's not enough room for heading + content
+            heading.paragraph_format.keep_with_next = False
+            heading.paragraph_format.keep_together = False
 
             # CRITICAL: Force Times New Roman for all shortdoc section headings
             header_type = section.get('header_type', 'section')
@@ -13196,9 +13249,20 @@ class WordGenerator:
         # Add heading for regular sections (use numbered heading)
         heading = self.doc.add_heading(numbered_heading, level=level)
         
-        # Apply forced page break if requested
-        if section.get('use_page_break_before'):
+        # Apply forced page break if requested - BUT ONLY for level 1 headings
+        # CRITICAL: Never apply page breaks to numbered sub-sections (2.0, 2.1, 3.3, etc.)
+        is_subsection = bool(re.match(r'^\d+\.\d+', heading_text.strip()))
+        if section.get('use_page_break_before') and level == 1 and not is_subsection:
             heading.paragraph_format.page_break_before = True
+        else:
+            # CRITICAL FIX: Explicitly disable page breaks for level 2+ headings
+            # This ensures numbered sub-sections (2.0, 2.1, 2.3, 3.3, etc.) don't start on new pages
+            heading.paragraph_format.page_break_before = False
+        
+        # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+        # from jumping to new pages when there's not enough room for heading + content
+        heading.paragraph_format.keep_with_next = False
+        heading.paragraph_format.keep_together = False
         
         # Check if this heading should be centered
         if section.get('should_center', False):
@@ -13234,14 +13298,10 @@ class WordGenerator:
         heading = self.doc.add_heading(clean_heading, level=1)
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
         heading.paragraph_format.page_break_before = False
-#<<<<<<< codex/fix-title-issues-idq1wd
-        heading.paragraph_format.keep_with_next = True
-#=======
-#<<<<<<< codex/fix-title-issues-ymuujf
-        heading.paragraph_format.keep_with_next = True
-#=======
-#>>>>>>> main
-#>>>>>>> main
+        # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+        # from jumping to new pages when there's not enough room for heading + content
+        heading.paragraph_format.keep_with_next = False
+        heading.paragraph_format.keep_together = False
         
         # Ensure consistent chapter heading formatting
         heading.paragraph_format.space_after = Pt(0)
@@ -13262,14 +13322,10 @@ class WordGenerator:
             title_para = self.doc.add_heading(chapter_title.upper(), level=1)
             title_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
             title_para.paragraph_format.page_break_before = False
-#<<<<<<< codex/fix-title-issues-idq1wd
-            title_para.paragraph_format.keep_with_next = True
-#=======
-#<<<<<<< codex/fix-title-issues-ymuujf
-            title_para.paragraph_format.keep_with_next = True
-#=======
-#>>>>>>> main
-#>>>>>>> main
+            # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+            # from jumping to new pages when there's not enough room for heading + content
+            title_para.paragraph_format.keep_with_next = False
+            title_para.paragraph_format.keep_together = False
             
             # Ensure consistent title formatting
             title_para.paragraph_format.space_before = Pt(0)
@@ -13305,6 +13361,13 @@ class WordGenerator:
         # Apply forced page break if requested
         if section.get('use_page_break_before'):
             heading.paragraph_format.page_break_before = True
+        else:
+            heading.paragraph_format.page_break_before = False
+        
+        # CRITICAL FIX: Disable keep_with_next and keep_together to prevent headings
+        # from jumping to new pages when there's not enough room for heading + content
+        heading.paragraph_format.keep_with_next = False
+        heading.paragraph_format.keep_together = False
             
         # Set alignment to center for main headings
         heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -13661,41 +13724,193 @@ class WordGenerator:
         
         return text
 
-    def _extract_journal_spans(self, text: str):
+    def _extract_apa_italic_spans(self, text: str):
         """
-        Return list of (start, end) spans for journal titles in a reference line.
+        Return list of (start, end) spans for titles that should be italicized in APA format.
+        This includes: journal titles, book titles, report titles, thesis/dissertation titles.
         Spans are indices into `text`. First valid match wins.
         """
         spans = []
-        patterns = [
+        
+        # PATTERN GROUP 1: Journal articles with volume/issue
+        # Format: Author. (Year). Article title. Journal Name, Vol(Issue), pages.
+        journal_patterns = [
+            # Journal + volume/issue pattern
             re.compile(
-                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<title>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
             ),
+            # Journal + volume only
             re.compile(
-                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<title>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
             ),
+            # Journal followed by Retrieved from / URL / DOI
             re.compile(
-                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<title>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
                 re.IGNORECASE
             ),
         ]
-        for pat in patterns:
-            m = pat.match(text)
-            if not m:
-                continue
+        
+        # PATTERN GROUP 2: Books with publisher
+        # Format: Author. (Year). Book title. Publisher.
+        # Format: Author. (Year). Book title (Edition). Publisher.
+        book_patterns = [
+            # Book with publisher at end (Publisher. or Publisher name ending with period)
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[^.]+?)(?=\.\s+(?:[A-Z][a-z]+\s+)*(?:Press|Publishers?|Publishing|Books?|Library|Libraries|University|Ltd|Inc|Co|LLC|Corporation|House|Media|Academic|Sage|Wiley|Springer|Elsevier|Routledge|Cambridge|Oxford|Pearson|McGraw|Prentice|Random|Harper|Simon|Penguin|Macmillan))',
+                re.IGNORECASE
+            ),
+            # Book with location: Publisher format (e.g., "New York: Random House")
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[^.]+?)(?=\.\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?:,\s*[A-Z]{2})?:\s+)',
+                re.IGNORECASE
+            ),
+            # Book with edition in parentheses before publisher
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[^(]+?)(?=\s*\(\d+(?:st|nd|rd|th)\s+ed\.?\))',
+                re.IGNORECASE
+            ),
+        ]
+        
+        # PATTERN GROUP 3: Edited books (chapters in edited books)
+        # Format: Author. (Year). Chapter title. In Editor (Ed.), Book title (pp. x-y). Publisher.
+        edited_book_patterns = [
+            # "In Editor (Ed.), Book Title"
+            re.compile(
+                r'^(?P<pre>.+?In\s+[^(]+\([Ee]ds?\.?\)[,.]?\s+)(?P<title>[^(]+?)(?=\s*\(pp\.)',
+                re.IGNORECASE
+            ),
+            # "In Editor (Eds.), Book Title"
+            re.compile(
+                r'^(?P<pre>.+?In\s+[^(]+\([Ee]ds\.?\)[,.]?\s+)(?P<title>[^(.]+?)(?=\s*[.(])',
+                re.IGNORECASE
+            ),
+        ]
+        
+        # PATTERN GROUP 4: Reports, theses, dissertations
+        # Format: Author. (Year). Title of report/thesis (Report No. xxx). Publisher.
+        report_patterns = [
+            # Report with report number
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[^(]+?)(?=\s*\((?:Report|Technical|Working|Discussion|Paper|Thesis|Dissertation)\s*(?:No\.?|Number)?)',
+                re.IGNORECASE
+            ),
+            # Thesis/Dissertation with university
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[^(]+?)(?=\s*\((?:Doctoral\s+dissertation|Master\'?s?\s+thesis|PhD\s+thesis|Unpublished))',
+                re.IGNORECASE
+            ),
+            # Thesis/Dissertation - title before [Unpublished/Doctoral etc]
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[^.\[\]]+?)(?=\s*[\.\[]?\s*(?:Unpublished|Doctoral|Master|PhD))',
+                re.IGNORECASE
+            ),
+        ]
+        
+        # PATTERN GROUP 5: Standalone books (fallback - book title before final period and no volume)
+        # Only matches if no volume/issue pattern and ends with publisher-like text
+        standalone_patterns = [
+            # Title followed by just a publisher name (common for books)
+            re.compile(
+                r'^(?P<pre>[^(]+\(\d{4}[a-z]?\)\.\s+)(?P<title>[A-Z][^.]+?)(?=\.\s*$)'
+            ),
+        ]
+        
+        # Try all pattern groups in order of specificity
+        all_pattern_groups = [
+            journal_patterns,
+            edited_book_patterns,
+            report_patterns,
+            book_patterns,
+            standalone_patterns,
+        ]
+        
+        for pattern_group in all_pattern_groups:
+            for pat in pattern_group:
+                m = pat.match(text)
+                if not m:
+                    continue
 
-            j_start = m.start('journal')
-            j_end = m.end('journal')
+                t_start = m.start('title')
+                t_end = m.end('title')
 
-            journal = text[j_start:j_end].strip()
-            if len(journal) < 4:
-                continue
-            if journal.lower().startswith('in '):
-                continue
-
-            spans.append((j_start, j_end))
-            break
+                title = text[t_start:t_end].strip()
+                
+                # Sanity checks to reduce false positives
+                if len(title) < 4:
+                    continue
+                # Skip if it starts with common non-title words
+                if title.lower().startswith(('in ', 'and ', 'the ', 'a ', 'an ')) and len(title.split()) <= 2:
+                    continue
+                # Skip if it looks like just author names
+                if re.match(r'^[A-Z][a-z]+,?\s+[A-Z]\.?\s*(&\s*[A-Z][a-z]+,?\s+[A-Z]\.?)?$', title):
+                    continue
+                    
+                spans.append((t_start, t_end))
+                return spans  # Return first match
+                
         return spans
+
+    def _extract_quoted_text_spans(self, text: str):
+        """
+        Extract spans for text within quotation marks.
+        Returns list of (start, end) tuples for quoted text (including the quotes).
+        Supports both regular quotes ("") and curly quotes ("").
+        """
+        spans = []
+        # Match text within various quotation mark styles
+        # Pattern matches: "text", "text", «text»
+        pattern = re.compile(r'[""«]([^""»]+)[""»]')
+        
+        for match in pattern.finditer(text):
+            # Include the full match (with quotes) for italicization
+            spans.append((match.start(), match.end()))
+        
+        return spans
+
+    def _get_all_reference_italic_spans(self, text: str):
+        """
+        Get all spans that should be italicized in a reference entry.
+        Combines APA title spans and quoted text spans, sorted by position.
+        Returns list of (start, end) tuples, non-overlapping and sorted.
+        """
+        # Get quoted text spans first
+        quoted_spans = self._extract_quoted_text_spans(text)
+        
+        # Get APA title spans (journal, book, etc.)
+        apa_spans = self._extract_apa_italic_spans(text)
+        
+        # If we have quoted spans, filter out APA spans that overlap with them
+        # This prevents APA fallback patterns from merging quoted text
+        if quoted_spans:
+            filtered_apa = []
+            for apa_span in apa_spans:
+                overlaps = False
+                for q_span in quoted_spans:
+                    # Check if APA span overlaps with any quoted span
+                    if not (apa_span[1] <= q_span[0] or apa_span[0] >= q_span[1]):
+                        overlaps = True
+                        break
+                if not overlaps:
+                    filtered_apa.append(apa_span)
+            apa_spans = filtered_apa
+        
+        # Combine all spans
+        all_spans = apa_spans + quoted_spans
+        
+        if not all_spans:
+            return []
+        
+        # Sort by start position
+        all_spans.sort(key=lambda x: x[0])
+        
+        return all_spans
+
+    def _extract_journal_spans(self, text: str):
+        """
+        Wrapper for backward compatibility. Now calls _extract_apa_italic_spans.
+        Return list of (start, end) spans for titles that should be italicized.
+        """
+        return self._extract_apa_italic_spans(text)
 
     def _clean_asterisks(self, text):
         """
@@ -14265,7 +14480,12 @@ class WordGenerator:
             
             elif item.get('type') == 'reference':
                 text = self._clean_asterisks(item.get('text', ''))
-                spans = item.get('journal_spans', []) if is_references_section else []
+                
+                # Get all italic spans (APA titles + quoted text)
+                if is_references_section:
+                    spans = self._get_all_reference_italic_spans(text)
+                else:
+                    spans = []
 
                 para = self.doc.add_paragraph()
                 try:
@@ -14274,26 +14494,35 @@ class WordGenerator:
                     pass
 
                 if spans:
-                    s, e = spans[0]
-                    before = text[:s]
-                    journal = text[s:e]
-                    after = text[e:]
-
-                    r1 = para.add_run(before)
-                    r1.italic = False
-
-                    r2 = para.add_run(journal)
-                    r2.italic = True
-
-                    r3 = para.add_run(after)
-                    r3.italic = False
+                    # Render text with multiple italic spans
+                    pos = 0
+                    for s, e in spans:
+                        # Add non-italic text before this span
+                        if pos < s:
+                            run = para.add_run(text[pos:s])
+                            run.font.name = 'Times New Roman'
+                            run.font.size = Pt(self.font_size)
+                            run.font.italic = False
+                        
+                        # Add italic text for this span
+                        run = para.add_run(text[s:e])
+                        run.font.name = 'Times New Roman'
+                        run.font.size = Pt(self.font_size)
+                        run.font.italic = True
+                        
+                        pos = e
+                    
+                    # Add remaining non-italic text after last span
+                    if pos < len(text):
+                        run = para.add_run(text[pos:])
+                        run.font.name = 'Times New Roman'
+                        run.font.size = Pt(self.font_size)
+                        run.font.italic = False
                 else:
                     r = para.add_run(text)
-                    r.italic = False
-
-                for run in para.runs:
-                    run.font.name = 'Times New Roman'
-                    run.font.size = Pt(self.font_size)
+                    r.font.name = 'Times New Roman'
+                    r.font.size = Pt(self.font_size)
+                    r.font.italic = False
 
                 if is_references_section:
                     para.paragraph_format.left_indent = Inches(0.5)
@@ -14483,6 +14712,10 @@ class WordGenerator:
                 # Appendix section - similar to heading but with distinct style
                 text = item.get('heading', item.get('text', ''))
                 heading = self.doc.add_heading(text, level=1)
+                heading.paragraph_format.page_break_before = False
+                # CRITICAL FIX: Disable keep_with_next and keep_together
+                heading.paragraph_format.keep_with_next = False
+                heading.paragraph_format.keep_together = False
                 heading.paragraph_format.line_spacing = self.line_spacing
                 for run in heading.runs:
                     run.font.name = 'Times New Roman'
@@ -14599,16 +14832,11 @@ class WordGenerator:
                     run.font.size = Pt(self.font_size)
             
             elif item.get('type') == 'horizontal_rule':
-                # Visual separator line (NOT a page break)
-                # Create a centered line of dashes
-                para = self.doc.add_paragraph()
-                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                para.paragraph_format.space_before = Pt(6)
-                para.paragraph_format.space_after = Pt(6)
-                run = para.add_run('─' * 40)  # Use em-dash for visual separator
-                run.font.name = 'Times New Roman'
-                run.font.size = Pt(10)
-                run.font.color.rgb = RGBColor(128, 128, 128)  # Gray color
+                # SKIP horizontal rules entirely - do NOT render them
+                # The --- markers in markdown are section separators, not visual elements
+                # Rendering them can cause layout issues and unwanted spacing
+                # Simply continue to the next item without adding anything to the document
+                continue
             
             elif item.get('type') == 'page_break':
                 # Insert page break - only for explicit [PAGE BREAK] markers
@@ -14742,6 +14970,10 @@ class WordGenerator:
                 text = item.get('text', '')
                 para = self.doc.add_heading(text.upper(), level=1)
                 para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                para.paragraph_format.page_break_before = False
+                # CRITICAL FIX: Disable keep_with_next and keep_together
+                para.paragraph_format.keep_with_next = False
+                para.paragraph_format.keep_together = False
                 for run in para.runs:
                     run.bold = True
                     run.font.name = 'Times New Roman'
@@ -15201,13 +15433,9 @@ def upload_document():
     margin_top = request.form.get('margin_top')
     margin_bottom = request.form.get('margin_bottom')
     margin_right = request.form.get('margin_right')
-#<<<<<<< codex/examine-codebase-84o2ei
     uniform_margin = request.form.get('margin_cm', '2.5')
     uniform_margin_provided = 'margin_cm' in request.form
     margin_left_provided = margin_left is not None and margin_left.strip()
-#=======
-    uniform_margin = request.form.get('margin_cm', '3.0')
-#>>>>>>> main
     
     # Validate formatting parameters
     try:
@@ -15244,11 +15472,7 @@ def upload_document():
     except (ValueError, TypeError):
         font_size = 12
         line_spacing = 1.5
-#<<<<<<< codex/examine-codebase-84o2ei
         margins = {'left': 3.0, 'top': 2.5, 'bottom': 2.5, 'right': 2.5}
-#=======
-        margins = {'left': 3.0, 'top': 3.0, 'bottom': 3.0, 'right': 3.0}
-#>>>>>>> main
     
     # Log formatting options for debugging
     logger.info(f"Formatting options: TOC={include_toc}, RestructureAI={restructure_with_ai}, FontSize={font_size}pt, LineSpacing={line_spacing}, Margins=[L:{margins['left']}cm T:{margins['top']}cm B:{margins['bottom']}cm R:{margins['right']}cm]")
