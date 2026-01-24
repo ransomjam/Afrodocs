@@ -2767,8 +2767,21 @@
             );
         };
 
+        const AppInstallButton = ({ onClick, disabled, title, label, icon, className = '' }) => (
+            <button
+                onClick={onClick}
+                className={`app-install-button ${className}`.trim()}
+                disabled={disabled}
+                title={title}
+                type="button"
+            >
+                {icon}
+                <span>{label}</span>
+            </button>
+        );
+
         // Auth Component
-        const AuthPage = ({ onLogin, isSignup = true, guestLimitMessage = null }) => {
+        const AuthPage = ({ onLogin, isSignup = true, guestLimitMessage = null, installButtonState = null, onInstallClick = null }) => {
             const [isLogin, setIsLogin] = React.useState(!isSignup);
             const [username, setUsername] = React.useState('');
             const [password, setPassword] = React.useState('');
@@ -2878,6 +2891,17 @@
             return (
                 <div className="min-h-screen flex items-center justify-center p-4">
                     <div className="glass-panel rounded-xl p-8 w-full max-w-md">
+                        {installButtonState && onInstallClick && (
+                            <div className="flex justify-end mb-4">
+                                <AppInstallButton
+                                    onClick={onInstallClick}
+                                    disabled={installButtonState.disabled}
+                                    title={installButtonState.title}
+                                    label={installButtonState.label}
+                                    icon={installButtonState.icon}
+                                />
+                            </div>
+                        )}
                         <div className="text-center mb-8">
                             <div className="flex justify-center mb-4">
                                 <img src="logo/logo.png" alt="AfroDocs logo" className="w-14 h-14" />
@@ -5561,12 +5585,35 @@
                 );
             }
 
+            const installButtonState = {
+                label: updateAvailable ? 'Update app' : (isInstalled ? 'Installed' : 'Install'),
+                title: updateAvailable
+                    ? 'Update AfroDocs'
+                    : (isInstalled
+                        ? 'AfroDocs is installed'
+                        : (canInstall
+                            ? 'Install AfroDocs'
+                            : (isIosDevice
+                                ? 'Install AfroDocs via Share → Add to Home Screen'
+                                : 'Install AfroDocs from your browser menu'))),
+                icon: updateAvailable ? <Icons.RefreshCw size={14} /> : <Icons.Download size={14} />,
+                disabled: isInstalled && !updateAvailable
+            };
+
             if (!isAuthenticated) {
                 // Guest mode: Allow 1 document + 1 cover page before requiring signup
                 // Once limit is reached, force signup (remove !result condition so it's blocking)
                 const guestLimitReached = (guestDocumentCount >= GUEST_DOCUMENT_LIMIT || guestCoverpageCount >= GUEST_COVERPAGE_LIMIT);
                 if (guestLimitReached) {
-                    return <AuthPage onLogin={handleLogin} isSignup={true} guestLimitMessage="Sign up now to get free 300 pages every month!" />;
+                    return (
+                        <AuthPage
+                            onLogin={handleLogin}
+                            isSignup={true}
+                            guestLimitMessage="Sign up now to get free 300 pages every month!"
+                            installButtonState={installButtonState}
+                            onInstallClick={handleInstallClick}
+                        />
+                    );
                 }
                 // Allow guest to use the app for free documents
             }
@@ -5881,17 +5928,13 @@
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <div className="app-version-tag">Afrodocs version 2.0.</div>
-                                    <button
+                                    <AppInstallButton
                                         onClick={handleInstallClick}
-                                        className="app-install-button"
-                                        disabled={isInstalled && !updateAvailable}
-                                        title={updateAvailable ? 'Update AfroDocs' : (isInstalled ? 'AfroDocs is installed' : 'Install AfroDocs')}
-                                    >
-                                        {updateAvailable ? <Icons.RefreshCw size={14} /> : <Icons.Download size={14} />}
-                                        <span>
-                                            {updateAvailable ? 'Update app' : (isInstalled ? 'Installed' : 'Install')}
-                                        </span>
-                                    </button>
+                                        disabled={installButtonState.disabled}
+                                        title={installButtonState.title}
+                                        label={installButtonState.label}
+                                        icon={installButtonState.icon}
+                                    />
                                 </div>
                             </div>
                         </header>
