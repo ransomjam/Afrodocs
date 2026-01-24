@@ -11907,12 +11907,14 @@ class WordGenerator:
                 rendered_section_count += 1
                 continue
 
-            # If we just added a TOC/LOF/LOT break, and this is the first RENDERED section,
-            # we should suppress the section's page break to avoid double breaks.
-            if rendered_section_count == 0 and added_toc_break and section.get('needs_page_break', False):
-                # Create a copy to avoid modifying original data
+            # First rendered section should never trigger additional page breaks.
+            # - Without TOC: avoids an empty first page.
+            # - With TOC/LOF/LOT: avoids double breaks after preliminary pages.
+            if rendered_section_count == 0:
                 section = section.copy()
                 section['needs_page_break'] = False
+                section['use_page_break_before'] = False
+                section['start_on_new_page'] = False
             
             self._add_section(section)
             rendered_section_count += 1
