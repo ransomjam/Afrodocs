@@ -11326,6 +11326,14 @@ class WordGenerator:
             for run in para.runs:
                 yield run
 
+    def _is_reference_paragraph(self, para):
+        """Return True if paragraph is a references entry (italic allowed)."""
+        try:
+            style = para.style
+        except Exception:
+            style = None
+        return bool(style and style.name == 'ReferenceEntry')
+
     def _should_allow_bold(self, is_heading=False):
         """
         Check if we should allow bold for the next paragraph.
@@ -11360,21 +11368,27 @@ class WordGenerator:
             self._consecutive_bold_count = 0
 
     def _enforce_no_italics(self, doc):
-        """Force italics off for all styles and runs."""
+        """Force italics off for all styles and runs (except references)."""
         for style in doc.styles:
             if hasattr(style, 'font') and style.font is not None:
                 style.font.italic = False
-        for run in self._iter_runs_in_doc(doc):
-            run.italic = False
-            if run.font is not None:
-                run.font.italic = False
+        for para in self._iter_paragraphs_in_doc(doc):
+            if self._is_reference_paragraph(para):
+                continue
+            for run in para.runs:
+                run.italic = False
+                if run.font is not None:
+                    run.font.italic = False
 
     def _run_acceptance_checks(self, doc):
         """Run acceptance checks for italics, asterisks, and list numbering leakage."""
-        italic_runs = [
-            run for run in self._iter_runs_in_doc(doc)
-            if run.italic or (run.font is not None and run.font.italic)
-        ]
+        italic_runs = []
+        for para in self._iter_paragraphs_in_doc(doc):
+            if self._is_reference_paragraph(para):
+                continue
+            for run in para.runs:
+                if run.italic or (run.font is not None and run.font.italic):
+                    italic_runs.append(run)
         assert not italic_runs, "Italics detected in document runs."
         for para in self._iter_paragraphs_in_doc(doc):
             text = para.text or ''
@@ -12195,6 +12209,14 @@ class WordGenerator:
                 style = styles[style_name]
                 if style.font is not None:
                     style.font.italic = False
+
+        # References entry style (used to allow italics within references)
+        if 'ReferenceEntry' not in styles:
+            reference_style = styles.add_style('ReferenceEntry', WD_STYLE_TYPE.PARAGRAPH)
+            reference_style.base_style = styles['Normal']
+            reference_style.font.name = 'Times New Roman'
+            reference_style.font.size = Pt(self.font_size)
+            reference_style.font.italic = False
     
     def _add_title(self, title_text):
         """Add document title"""
@@ -14237,6 +14259,10 @@ class WordGenerator:
                 spans = item.get('journal_spans', []) if is_references_section else []
 
                 para = self.doc.add_paragraph()
+                try:
+                    para.style = 'ReferenceEntry'
+                except Exception:
+                    pass
 
                 if spans:
                     s, e = spans[0]
