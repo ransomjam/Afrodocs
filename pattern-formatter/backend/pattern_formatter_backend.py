@@ -4652,6 +4652,7 @@ class PatternEngine:
                 re.compile(r'^\s*(?:header|footer|running head):?\s*.{1,50}$', re.IGNORECASE),
                 re.compile(r'^\s*(?:confidential|draft|version\s*\d+|date:|©|copyright)\b.*$', re.IGNORECASE),
                 re.compile(r'^\s*-\s*\d+\s*-\s*$'),  # Centered page numbers like - 1 -
+                re.compile(r'^\s*formatted with afrod?ocs app\s*$', re.IGNORECASE),
             ],
             
             # Academic Metadata Patterns (Title, Author, Affiliation)
@@ -6845,6 +6846,15 @@ class PatternEngine:
                 else:
                     analysis['type'] = 'table_caption'
                 analysis['confidence'] = 1.0
+                return analysis
+
+        if re.fullmatch(r'\d{1,4}', trimmed):
+            prev_clean = prev_line.strip() if isinstance(prev_line, str) else ''
+            next_clean = next_line.strip() if isinstance(next_line, str) else ''
+            if not prev_clean or not next_clean:
+                analysis['type'] = 'page_metadata'
+                analysis['confidence'] = 0.9
+                analysis['subtype'] = 'page_number'
                 return analysis
         
         for pattern in self.patterns['table_row']:
