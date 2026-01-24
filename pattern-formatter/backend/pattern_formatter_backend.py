@@ -15881,9 +15881,8 @@ def upload_document():
         # Pass certification data if detected (cover page detection removed - templates are now used)
         certification_data = getattr(processor, 'certification_data', None)
         
+        # Watermarking is disabled for free tier documents.
         is_free = False
-        if current_user.is_authenticated and current_user.plan == 'free':
-            is_free = True
             
         generator.generate(
             result['structured'], 

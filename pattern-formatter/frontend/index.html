@@ -2804,7 +2804,7 @@
         );
 
         // Auth Component
-        const AuthPage = ({ onLogin, isSignup = true, guestLimitMessage = null, installButtonState = null, onInstallClick = null }) => {
+        const AuthPage = ({ onLogin, isSignup = true, guestLimitMessage = null }) => {
             const [isLogin, setIsLogin] = React.useState(!isSignup);
             const [username, setUsername] = React.useState('');
             const [password, setPassword] = React.useState('');
@@ -2914,17 +2914,6 @@
             return (
                 <div className="min-h-screen flex items-center justify-center p-4">
                     <div className="glass-panel rounded-xl p-8 w-full max-w-md">
-                        {installButtonState && onInstallClick && (
-                            <div className="flex justify-end mb-4">
-                                <AppInstallButton
-                                    onClick={onInstallClick}
-                                    disabled={installButtonState.disabled}
-                                    title={installButtonState.title}
-                                    label={installButtonState.label}
-                                    icon={installButtonState.icon}
-                                />
-                            </div>
-                        )}
                         <div className="text-center mb-8">
                             <div className="flex justify-center mb-4">
                                 <img src="logo/logo.png" alt="AfroDocs logo" className="w-14 h-14" />
@@ -5608,6 +5597,7 @@
                 );
             }
 
+<<<<<<< HEAD
             // Determine install button state for all platforms
             const getInstallButtonState = () => {
                 if (updateAvailable) {
@@ -5649,6 +5639,19 @@
                     icon: <Icons.Download size={14} />,
                     disabled: false
                 };
+=======
+            const installButtonState = {
+                label: updateAvailable ? 'Update app' : (isInstalled ? 'Installed' : 'Install'),
+                title: updateAvailable
+                    ? 'Update AfroDocs'
+                    : (isInstalled
+                        ? 'AfroDocs is installed'
+                        : (canInstall
+                            ? 'Install AfroDocs'
+                            : 'Install AfroDocs when the install prompt is available')),
+                icon: updateAvailable ? <Icons.RefreshCw size={14} /> : <Icons.Download size={14} />,
+                disabled: isInstalled && !updateAvailable
+>>>>>>> bac1b3e0223377f4bc8699ab69aab4ef5f30ef94
             };
             const installButtonState = getInstallButtonState();
 
@@ -5662,8 +5665,6 @@
                             onLogin={handleLogin}
                             isSignup={true}
                             guestLimitMessage="Sign up now to get free 300 pages every month!"
-                            installButtonState={installButtonState}
-                            onInstallClick={handleInstallClick}
                         />
                     );
                 }
