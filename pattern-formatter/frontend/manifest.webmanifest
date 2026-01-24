@@ -1,30 +1,123 @@
 {
+  "id": "afrodocs-pwa",
   "name": "AfroDocs",
   "short_name": "AfroDocs",
-  "description": "AfroDocs document formatter.",
+  "description": "AfroDocs document formatter - format your documents professionally.",
   "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#0D2F4A",
   "theme_color": "#0D2F4A",
-  "orientation": "portrait",
+  "orientation": "any",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
-      "src": "logo/logo.png",
+      "src": "logo/logo-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "logo/logo.png",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "logo/logo-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
-      "src": "logo/logo.png",
+      "src": "logo/logo-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "logo/logo-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "screenshots": [
+    {
+      "src": "logo/logo-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "AfroDocs Document Formatter"
+    },
+    {
+      "src": "logo/logo-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "AfroDocs Mobile"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Format Document",
+      "short_name": "Format",
+      "description": "Open the document formatter",
+      "url": "./?mode=formatter&source=pwa",
+      "icons": [{ "src": "logo/logo-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Create Cover Page",
+      "short_name": "Cover Page",
+      "description": "Create a new cover page",
+      "url": "./?mode=coverpage&source=pwa",
+      "icons": [{ "src": "logo/logo-192x192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "prefer_related_applications": false,
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "handle_links": "preferred",
+  "related_applications": [],
+  "edge_side_panel": {
+    "preferred_width": 480
+  }
 }
