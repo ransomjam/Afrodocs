@@ -4414,6 +4414,22 @@ class PatternEngine:
                 re.compile(r'^[\w\s\.\-&]+\s*\(\d{4}(?:/\d{4})?\).*$'), # Organization (Year)
                 re.compile(r'^(?:Decree|Law|Order|Decision|Arrete)\s+No\.?.*$', re.IGNORECASE), # Legal
             ],
+
+            'reference_journal_span_v1': [
+                # APA journal + volume/issue
+                re.compile(
+                    r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
+                ),
+                # APA journal + volume only
+                re.compile(
+                    r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
+                ),
+                # Journal followed by Retrieved from / URL / DOI (no volume)
+                re.compile(
+                    r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
+                    re.IGNORECASE
+                ),
+            ],
             
             # Unicode Purge & Academic Symbol Preservation (Priority 0 - Pre-processor)
             'unicode_scrubber': [
@@ -6744,6 +6760,31 @@ class PatternEngine:
             return True
         return False
 
+    def _extract_journal_spans(self, text: str):
+        """
+        Return list of (start, end) spans for journal titles in a reference line.
+        Spans are indices into `text`. First valid match wins.
+        """
+        spans = []
+        for pat in self.patterns.get('reference_journal_span_v1', []):
+            m = pat.match(text)
+            if not m:
+                continue
+
+            j_start = m.start('journal')
+            j_end = m.end('journal')
+
+            journal = text[j_start:j_end].strip()
+            # Sanity checks to reduce false positives
+            if len(journal) < 4:
+                continue
+            if journal.lower().startswith('in '):
+                continue
+
+            spans.append((j_start, j_end))
+            break
+        return spans
+
     def analyze_line(self, line, line_num, prev_line='', next_line='', context=None):
         """Analyze a single line with multiple pattern checks"""
         original_line = line
@@ -7241,6 +7282,11 @@ class PatternEngine:
 
                 analysis['type'] = 'reference'
                 analysis['confidence'] = 0.90
+                if analysis.get('type') == 'reference':
+                    spans = self._extract_journal_spans(analysis['content'])
+                    if spans:
+                        analysis['journal_spans'] = spans
+                        analysis['confidence'] = max(analysis.get('confidence', 0.0), 0.92)
                 return analysis
         
         # Priority 4: Check for list patterns
@@ -9921,12 +9967,15 @@ class DocumentProcessor:
                         context['prev_was_chapter'] = True
                     elif prev_analysis.get('type') == 'front_matter_heading':
                         context['prev_front_matter'] = prev_analysis.get('front_matter_type')
+#<<<<<<< codex/fix-chapter-heading-page-formatting-6ra63n
                     elif prev_analysis.get('type') in ['heading', 'heading_hierarchy']:
                         prev_text = prev_analysis.get('content') or prev_analysis.get('text', '')
                         prev_text = re.sub(r'[*_]+', '', str(prev_text))
                         is_chapter, _, _ = self.engine.is_chapter_heading(prev_text)
                         if is_chapter:
                             context['prev_was_chapter'] = True
+#=======
+#>>>>>>> main
             
             analysis = self.engine.analyze_line(
                 text, 
@@ -10203,6 +10252,7 @@ class DocumentProcessor:
                 current_section['content'].append({
                     'type': 'reference',
                     'text': line['content'],
+                    'journal_spans': line.get('journal_spans', []),
                 })
                 continue
             
@@ -11285,6 +11335,14 @@ class WordGenerator:
             for run in para.runs:
                 yield run
 
+    def _is_reference_paragraph(self, para):
+        """Return True if paragraph is a references entry (italic allowed)."""
+        try:
+            style = para.style
+        except Exception:
+            style = None
+        return bool(style and style.name == 'ReferenceEntry')
+
     def _should_allow_bold(self, is_heading=False):
         """
         Check if we should allow bold for the next paragraph.
@@ -11319,21 +11377,27 @@ class WordGenerator:
             self._consecutive_bold_count = 0
 
     def _enforce_no_italics(self, doc):
-        """Force italics off for all styles and runs."""
+        """Force italics off for all styles and runs (except references)."""
         for style in doc.styles:
             if hasattr(style, 'font') and style.font is not None:
                 style.font.italic = False
-        for run in self._iter_runs_in_doc(doc):
-            run.italic = False
-            if run.font is not None:
-                run.font.italic = False
+        for para in self._iter_paragraphs_in_doc(doc):
+            if self._is_reference_paragraph(para):
+                continue
+            for run in para.runs:
+                run.italic = False
+                if run.font is not None:
+                    run.font.italic = False
 
     def _run_acceptance_checks(self, doc):
         """Run acceptance checks for italics, asterisks, and list numbering leakage."""
-        italic_runs = [
-            run for run in self._iter_runs_in_doc(doc)
-            if run.italic or (run.font is not None and run.font.italic)
-        ]
+        italic_runs = []
+        for para in self._iter_paragraphs_in_doc(doc):
+            if self._is_reference_paragraph(para):
+                continue
+            for run in para.runs:
+                if run.italic or (run.font is not None and run.font.italic):
+                    italic_runs.append(run)
         assert not italic_runs, "Italics detected in document runs."
         for para in self._iter_paragraphs_in_doc(doc):
             text = para.text or ''
@@ -11579,12 +11643,21 @@ class WordGenerator:
         # Count preliminary pages/sections to determine numbering style
         prelim_count = 0
         # Note: cover_page_data removed - templates are now used instead
-        if certification_data: prelim_count += 1
-        if needs_toc: prelim_count += 1  # TOC itself counts as a page
-        prelim_count += sum(1 for s in structured_data if isinstance(s, dict) and s.get('type') == 'front_matter')
+        if certification_data:
+            prelim_count += 1
+        if needs_toc:
+            prelim_count += 1  # TOC itself counts as a page
+        has_front_matter_sections = any(
+            isinstance(s, dict) and s.get('type') == 'front_matter' for s in structured_data
+        )
+        prelim_count += sum(
+            1 for s in structured_data if isinstance(s, dict) and s.get('type') == 'front_matter'
+        )
         
         # Determine numbering style
         has_preliminary = bool(certification_data or needs_toc)
+        self.toc_only_preliminary = bool(needs_toc and not certification_data and not has_front_matter_sections)
+        self.arabic_started_after_toc = False
         
         # Use Roman numerals for preliminary pages if any preliminary content exists
         if not has_preliminary:
@@ -12145,6 +12218,14 @@ class WordGenerator:
                 style = styles[style_name]
                 if style.font is not None:
                     style.font.italic = False
+
+        # References entry style (used to allow italics within references)
+        if 'ReferenceEntry' not in styles:
+            reference_style = styles.add_style('ReferenceEntry', WD_STYLE_TYPE.PARAGRAPH)
+            reference_style.base_style = styles['Normal']
+            reference_style.font.name = 'Times New Roman'
+            reference_style.font.size = Pt(self.font_size)
+            reference_style.font.italic = False
     
     def _add_title(self, title_text):
         """Add document title"""
@@ -12224,7 +12305,14 @@ class WordGenerator:
         run_end._r.append(fldChar3)
         
         # Single page break after TOC (not two)
-        self.doc.add_page_break()
+        if self.toc_only_preliminary:
+            new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
+            self._set_page_numbering(new_section, fmt='decimal', start=1)
+            new_section.footer.is_linked_to_previous = False
+            self._add_page_number_to_footer(new_section)
+            self.arabic_started_after_toc = True
+        else:
+            self.doc.add_page_break()
     
     def _add_lof_placeholder(self):
         """Add List of Figures using Microsoft Word's built-in TOC field for figures
@@ -12895,7 +12983,7 @@ class WordGenerator:
         
         # All chapters should start on a new page
         if is_any_chapter:
-            if is_chapter_one and not self.use_continuous_arabic:
+            if is_chapter_one and not self.use_continuous_arabic and not self.arabic_started_after_toc:
                 # Add Section Break (Next Page) to switch to Arabic numbering for Chapter 1
                 new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
                 self._set_page_numbering(new_section, fmt='decimal', start=1)
@@ -13573,6 +13661,42 @@ class WordGenerator:
         
         return text
 
+    def _extract_journal_spans(self, text: str):
+        """
+        Return list of (start, end) spans for journal titles in a reference line.
+        Spans are indices into `text`. First valid match wins.
+        """
+        spans = []
+        patterns = [
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
+            ),
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
+            ),
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
+                re.IGNORECASE
+            ),
+        ]
+        for pat in patterns:
+            m = pat.match(text)
+            if not m:
+                continue
+
+            j_start = m.start('journal')
+            j_end = m.end('journal')
+
+            journal = text[j_start:j_end].strip()
+            if len(journal) < 4:
+                continue
+            if journal.lower().startswith('in '):
+                continue
+
+            spans.append((j_start, j_end))
+            break
+        return spans
+
     def _clean_asterisks(self, text):
         """
         Remove all asterisk variants from text comprehensively.
@@ -13704,9 +13828,10 @@ class WordGenerator:
             for ref in references:
                 if isinstance(ref, dict) and 'text' in ref:
                     ref['text'] = self._format_single_apa_reference(ref['text'])
+                    ref['journal_spans'] = self._extract_journal_spans(ref['text'])
             
-            # Recombine: non-references first, then sorted references
-            content_items = non_references + references
+            # Recombine: sorted references first, then non-references at the end
+            content_items = references + non_references
         
         for item in content_items:
             # SAFETY CHECK: Ensure item is a dictionary
@@ -14140,19 +14265,40 @@ class WordGenerator:
             
             elif item.get('type') == 'reference':
                 text = self._clean_asterisks(item.get('text', ''))
-                para = self.doc.add_paragraph(text)
+                spans = item.get('journal_spans', []) if is_references_section else []
+
+                para = self.doc.add_paragraph()
+                try:
+                    para.style = 'ReferenceEntry'
+                except Exception:
+                    pass
+
+                if spans:
+                    s, e = spans[0]
+                    before = text[:s]
+                    journal = text[s:e]
+                    after = text[e:]
+
+                    r1 = para.add_run(before)
+                    r1.italic = False
+
+                    r2 = para.add_run(journal)
+                    r2.italic = True
+
+                    r3 = para.add_run(after)
+                    r3.italic = False
+                else:
+                    r = para.add_run(text)
+                    r.italic = False
+
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                
-                # Remove hanging indent - use justified alignment only
+
                 if is_references_section:
-                    # Apply hanging indent for journal/reference entries: first line flush left,
-                    # subsequent lines indented by 0.5 inches.
                     para.paragraph_format.left_indent = Inches(0.5)
                     para.paragraph_format.first_line_indent = Inches(-0.5)
                 else:
-                    # In-text reference citations - no indent
                     para.paragraph_format.left_indent = Pt(0)
                     para.paragraph_format.first_line_indent = Pt(0)
                 para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
