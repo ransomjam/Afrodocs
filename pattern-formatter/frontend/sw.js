@@ -1,6 +1,7 @@
 const CACHE_NAME = 'afrodocs-static-v2';
 const ASSETS = [
   './',
+  './?source=pwa',
   './index.html',
   './manifest.webmanifest',
   './logo/logo.png'
