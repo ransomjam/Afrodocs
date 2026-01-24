@@ -4643,7 +4643,13 @@
                 } else if (isIosDevice) {
                     alert('To install AfroDocs, tap Share and choose "Add to Home Screen".');
                 } else {
-                    alert('Install is not available right now. Please try again later.');
+                    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+                    const isAndroidDevice = /Android/i.test(userAgent);
+                    if (isAndroidDevice) {
+                        alert('To install AfroDocs, open your browser menu and tap "Add to Home screen" or "Install app".');
+                    } else {
+                        alert('Install isn’t available yet. If you’re on mobile, use your browser menu to install the app.');
+                    }
                 }
             };
 
