@@ -6272,12 +6272,6 @@ class PatternEngine:
             'APPENDICES', 'APPENDIX',
             'REFERENCES', 'REFERENCE',
             'BIBLIOGRAPHY',
-            'INTRODUCTION',
-            'LITERATURE REVIEW',
-            'METHODOLOGY', 'RESEARCH METHODOLOGY',
-            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
-            'DISCUSSION', 'FINDINGS AND DISCUSSION',
-            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS',
         ]
         
         # Check for exact front matter match
