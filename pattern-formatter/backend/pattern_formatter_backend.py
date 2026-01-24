@@ -13620,6 +13620,42 @@ class WordGenerator:
         
         return text
 
+    def _extract_journal_spans(self, text: str):
+        """
+        Return list of (start, end) spans for journal titles in a reference line.
+        Spans are indices into `text`. First valid match wins.
+        """
+        spans = []
+        patterns = [
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
+            ),
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
+            ),
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
+                re.IGNORECASE
+            ),
+        ]
+        for pat in patterns:
+            m = pat.match(text)
+            if not m:
+                continue
+
+            j_start = m.start('journal')
+            j_end = m.end('journal')
+
+            journal = text[j_start:j_end].strip()
+            if len(journal) < 4:
+                continue
+            if journal.lower().startswith('in '):
+                continue
+
+            spans.append((j_start, j_end))
+            break
+        return spans
+
     def _clean_asterisks(self, text):
         """
         Remove all asterisk variants from text comprehensively.
@@ -13751,9 +13787,10 @@ class WordGenerator:
             for ref in references:
                 if isinstance(ref, dict) and 'text' in ref:
                     ref['text'] = self._format_single_apa_reference(ref['text'])
+                    ref['journal_spans'] = self._extract_journal_spans(ref['text'])
             
-            # Recombine: non-references first, then sorted references
-            content_items = non_references + references
+            # Recombine: sorted references first, then non-references at the end
+            content_items = references + non_references
         
         for item in content_items:
             # SAFETY CHECK: Ensure item is a dictionary
