@@ -247,6 +247,52 @@ class TestPatternEngine:
             else:
                 ColorPrint.error(f"Failed to detect reference: {line[:50]}...")
                 self.failed += 1
+
+    def test_reference_journal_span_v1(self):
+        """Test journal span extraction for references"""
+        ColorPrint.header("TEST 4B: Reference Journal Span Extraction")
+
+        should_match = [
+            ("Smith, J. (2020). Title of article. Journal of Testing, 12(3), 45-50.",
+             "Journal of Testing"),
+            ("World Health Organization. (2019). Title. Bulletin of the World Health Organization, 97, 123–130.",
+             "Bulletin of the World Health Organization"),
+            ("Doe, J. (2021). Short title. Nature, 590(7845), 123-126.",
+             "Nature"),
+            ("Brown, A. B., & Green, C. D. (2018). Title here. Journal of Applied Psychology, 103, 123–145.",
+             "Journal of Applied Psychology"),
+            ("UNESCO. (2020). Title. International Journal of Education. Retrieved from https://example.org",
+             "International Journal of Education"),
+        ]
+
+        should_not_match = [
+            "Smith, J. (2020). Book title. Oxford University Press.",
+            "In A. Editor (Ed.), Book title (pp. 10–20). Publisher.",
+            "Smith (2020) argues this in Journal of Testing, 12(3), 45–50.",
+        ]
+
+        for text, expected in should_match:
+            spans = self.engine._extract_journal_spans(text)
+            if not spans:
+                ColorPrint.error(f"No journal span detected for: {text[:60]}...")
+                self.failed += 1
+                continue
+            s, e = spans[0]
+            if text[s:e].strip() == expected:
+                ColorPrint.success(f"Journal span matched: {expected}")
+                self.passed += 1
+            else:
+                ColorPrint.error(f"Journal span mismatch: '{text[s:e].strip()}' expected '{expected}'")
+                self.failed += 1
+
+        for text in should_not_match:
+            spans = self.engine._extract_journal_spans(text)
+            if spans:
+                ColorPrint.error(f"Unexpected journal span for: {text[:60]}...")
+                self.failed += 1
+            else:
+                ColorPrint.success(f"No journal span as expected: {text[:60]}...")
+                self.passed += 1
     
     def test_bullet_list_detection(self):
         """Test bullet list pattern matching"""
@@ -502,6 +548,7 @@ class TestPatternEngine:
         self.test_enhanced_numbering_detection()
         self.test_shortdoc_header_detection()
         self.test_reference_detection()
+        self.test_reference_journal_span_v1()
         self.test_bullet_list_detection()
         self.test_numbered_list_detection()
         self.test_definition_detection()
