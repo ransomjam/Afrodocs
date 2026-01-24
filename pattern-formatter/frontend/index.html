@@ -5597,7 +5597,6 @@
                 );
             }
 
-<<<<<<< HEAD
             // Determine install button state for all platforms
             const getInstallButtonState = () => {
                 if (updateAvailable) {
@@ -5639,19 +5638,6 @@
                     icon: <Icons.Download size={14} />,
                     disabled: false
                 };
-=======
-            const installButtonState = {
-                label: updateAvailable ? 'Update app' : (isInstalled ? 'Installed' : 'Install'),
-                title: updateAvailable
-                    ? 'Update AfroDocs'
-                    : (isInstalled
-                        ? 'AfroDocs is installed'
-                        : (canInstall
-                            ? 'Install AfroDocs'
-                            : 'Install AfroDocs when the install prompt is available')),
-                icon: updateAvailable ? <Icons.RefreshCw size={14} /> : <Icons.Download size={14} />,
-                disabled: isInstalled && !updateAvailable
->>>>>>> bac1b3e0223377f4bc8699ab69aab4ef5f30ef94
             };
             const installButtonState = getInstallButtonState();
 
