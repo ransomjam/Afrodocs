@@ -22,9 +22,50 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+const shouldHandleRequest = (request) =>
+  request.method === 'GET' && request.url.startsWith(self.location.origin);
+
+const isNavigationRequest = (request) =>
+  request.mode === 'navigate' ||
+  (request.destination === 'document' && request.headers.get('accept')?.includes('text/html'));
+
+const networkFirst = async (request) => {
+  try {
+    const response = await fetch(request);
+    const cache = await caches.open(CACHE_NAME);
+    cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+};
+
+const staleWhileRevalidate = async (request) => {
+  const cached = await caches.match(request);
+  const fetchPromise = fetch(request)
+    .then((response) => {
+      if (response && response.ok) {
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, response.clone());
+          return response;
+        });
+      }
+      return response;
+    })
+    .catch(() => undefined);
+
+  return cached || (await fetchPromise);
+};
+
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  event.respondWith(
-    caches.match(event.request).then((response) => response || fetch(event.request))
-  );
+  if (!shouldHandleRequest(event.request)) return;
+
+  if (isNavigationRequest(event.request)) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
+  event.respondWith(staleWhileRevalidate(event.request));
 });
