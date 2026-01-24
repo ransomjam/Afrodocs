@@ -1,0 +1,17 @@
+{
+  "name": "AfroDocs",
+  "short_name": "AfroDocs",
+  "description": "AfroDocs document formatter.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0D2F4A",
+  "theme_color": "#0D2F4A",
+  "icons": [
+    {
+      "src": "logo/logo.png",
+      "sizes": "2000x2000",
+      "type": "image/png"
+    }
+  ]
+}
