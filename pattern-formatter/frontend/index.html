@@ -4640,16 +4640,8 @@
                         setCanInstall(false);
                         setDeferredInstallPrompt(null);
                     }
-                } else if (isIosDevice) {
-                    alert('To install AfroDocs, tap Share and choose "Add to Home Screen".');
                 } else {
-                    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-                    const isAndroidDevice = /Android/i.test(userAgent);
-                    if (isAndroidDevice) {
-                        alert('To install AfroDocs, open your browser menu and tap "Add to Home screen" or "Install app".');
-                    } else {
-                        alert('Install isn’t available yet. If you’re on mobile, use your browser menu to install the app.');
-                    }
+                    alert('Install isn’t available yet on this device. Try again from a supported browser or when the install prompt is shown.');
                 }
             };
 
@@ -5599,9 +5591,7 @@
                         ? 'AfroDocs is installed'
                         : (canInstall
                             ? 'Install AfroDocs'
-                            : (isIosDevice
-                                ? 'Install AfroDocs via Share → Add to Home Screen'
-                                : 'Install AfroDocs from your browser menu'))),
+                            : 'Install AfroDocs when the install prompt is available'))),
                 icon: updateAvailable ? <Icons.RefreshCw size={14} /> : <Icons.Download size={14} />,
                 disabled: isInstalled && !updateAvailable
             };
