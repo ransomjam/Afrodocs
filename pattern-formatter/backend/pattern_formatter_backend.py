@@ -4414,6 +4414,22 @@ class PatternEngine:
                 re.compile(r'^[\w\s\.\-&]+\s*\(\d{4}(?:/\d{4})?\).*$'), # Organization (Year)
                 re.compile(r'^(?:Decree|Law|Order|Decision|Arrete)\s+No\.?.*$', re.IGNORECASE), # Legal
             ],
+
+            'reference_journal_span_v1': [
+                # APA journal + volume/issue
+                re.compile(
+                    r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
+                ),
+                # APA journal + volume only
+                re.compile(
+                    r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
+                ),
+                # Journal followed by Retrieved from / URL / DOI (no volume)
+                re.compile(
+                    r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
+                    re.IGNORECASE
+                ),
+            ],
             
             # Unicode Purge & Academic Symbol Preservation (Priority 0 - Pre-processor)
             'unicode_scrubber': [
@@ -6743,6 +6759,31 @@ class PatternEngine:
             return True
         return False
 
+    def _extract_journal_spans(self, text: str):
+        """
+        Return list of (start, end) spans for journal titles in a reference line.
+        Spans are indices into `text`. First valid match wins.
+        """
+        spans = []
+        for pat in self.patterns.get('reference_journal_span_v1', []):
+            m = pat.match(text)
+            if not m:
+                continue
+
+            j_start = m.start('journal')
+            j_end = m.end('journal')
+
+            journal = text[j_start:j_end].strip()
+            # Sanity checks to reduce false positives
+            if len(journal) < 4:
+                continue
+            if journal.lower().startswith('in '):
+                continue
+
+            spans.append((j_start, j_end))
+            break
+        return spans
+
     def analyze_line(self, line, line_num, prev_line='', next_line='', context=None):
         """Analyze a single line with multiple pattern checks"""
         original_line = line
@@ -7231,6 +7272,11 @@ class PatternEngine:
 
                 analysis['type'] = 'reference'
                 analysis['confidence'] = 0.90
+                if analysis.get('type') == 'reference':
+                    spans = self._extract_journal_spans(analysis['content'])
+                    if spans:
+                        analysis['journal_spans'] = spans
+                        analysis['confidence'] = max(analysis.get('confidence', 0.0), 0.92)
                 return analysis
         
         # Priority 4: Check for list patterns
@@ -10181,6 +10227,7 @@ class DocumentProcessor:
                 current_section['content'].append({
                     'type': 'reference',
                     'text': line['content'],
+                    'journal_spans': line.get('journal_spans', []),
                 })
                 continue
             
@@ -13567,6 +13614,42 @@ class WordGenerator:
         
         return text
 
+    def _extract_journal_spans(self, text: str):
+        """
+        Return list of (start, end) spans for journal titles in a reference line.
+        Spans are indices into `text`. First valid match wins.
+        """
+        spans = []
+        patterns = [
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}(?:\s*\(|\s*,))'
+            ),
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^,]+?)(?=,\s*\d{1,4}\s*,)'
+            ),
+            re.compile(
+                r'^(?P<pre>.+?\(\d{4}[a-z]?\)\.\s+.+?\.\s+)(?P<journal>(?!In\s)[^.]+?)(?=\.\s+(?:Retrieved\s+from|Available\s+at|https?://|doi:))',
+                re.IGNORECASE
+            ),
+        ]
+        for pat in patterns:
+            m = pat.match(text)
+            if not m:
+                continue
+
+            j_start = m.start('journal')
+            j_end = m.end('journal')
+
+            journal = text[j_start:j_end].strip()
+            if len(journal) < 4:
+                continue
+            if journal.lower().startswith('in '):
+                continue
+
+            spans.append((j_start, j_end))
+            break
+        return spans
+
     def _clean_asterisks(self, text):
         """
         Remove all asterisk variants from text comprehensively.
@@ -13698,9 +13781,10 @@ class WordGenerator:
             for ref in references:
                 if isinstance(ref, dict) and 'text' in ref:
                     ref['text'] = self._format_single_apa_reference(ref['text'])
+                    ref['journal_spans'] = self._extract_journal_spans(ref['text'])
             
-            # Recombine: non-references first, then sorted references
-            content_items = non_references + references
+            # Recombine: sorted references first, then non-references at the end
+            content_items = references + non_references
         
         for item in content_items:
             # SAFETY CHECK: Ensure item is a dictionary
@@ -14134,19 +14218,36 @@ class WordGenerator:
             
             elif item.get('type') == 'reference':
                 text = self._clean_asterisks(item.get('text', ''))
-                para = self.doc.add_paragraph(text)
+                spans = item.get('journal_spans', []) if is_references_section else []
+
+                para = self.doc.add_paragraph()
+
+                if spans:
+                    s, e = spans[0]
+                    before = text[:s]
+                    journal = text[s:e]
+                    after = text[e:]
+
+                    r1 = para.add_run(before)
+                    r1.italic = False
+
+                    r2 = para.add_run(journal)
+                    r2.italic = True
+
+                    r3 = para.add_run(after)
+                    r3.italic = False
+                else:
+                    r = para.add_run(text)
+                    r.italic = False
+
                 for run in para.runs:
                     run.font.name = 'Times New Roman'
                     run.font.size = Pt(self.font_size)
-                
-                # Remove hanging indent - use justified alignment only
+
                 if is_references_section:
-                    # Apply hanging indent for journal/reference entries: first line flush left,
-                    # subsequent lines indented by 0.5 inches.
                     para.paragraph_format.left_indent = Inches(0.5)
                     para.paragraph_format.first_line_indent = Inches(-0.5)
                 else:
-                    # In-text reference citations - no indent
                     para.paragraph_format.left_indent = Pt(0)
                     para.paragraph_format.first_line_indent = Pt(0)
                 para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
