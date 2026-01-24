@@ -24,6 +24,7 @@ import json
 import uuid
 import threading
 import time
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 from datetime import datetime
 from io import BytesIO
 import logging
@@ -95,15 +96,23 @@ app = Flask(__name__, static_folder=get_frontend_folder(), static_url_path='')
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
 
 # Database configuration - supports PostgreSQL (Render) and SQLite (local development)
+RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
+IS_RENDER = os.environ.get('RENDER', '').lower() == 'true' or RENDER_EXTERNAL_URL != ''
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
 # Fix for Render PostgreSQL URL format (Render uses postgres://, SQLAlchemy needs postgresql://)
 if database_url and database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+if database_url and database_url.startswith('postgresql://') and IS_RENDER:
+    parsed_db_url = urlparse(database_url)
+    query_params = dict(parse_qsl(parsed_db_url.query))
+    if 'sslmode' not in query_params:
+        query_params['sslmode'] = 'require'
+        database_url = urlunparse(parsed_db_url._replace(query=urlencode(query_params)))
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Detect production environment (Render sets RENDER=true)
-IS_PRODUCTION = os.environ.get('RENDER', '').lower() == 'true' or os.environ.get('RENDER_EXTERNAL_URL', '') != ''
+IS_PRODUCTION = IS_RENDER
 logger.info(f"Running in {'PRODUCTION' if IS_PRODUCTION else 'DEVELOPMENT'} mode")
 
 # Session cookie configuration for proper authentication
@@ -114,7 +123,6 @@ app.config['REMEMBER_COOKIE_SAMESITE'] = 'Lax'
 app.config['REMEMBER_COOKIE_SECURE'] = IS_PRODUCTION  # True in production with HTTPS
 
 # CORS configuration - allow production domain
-RENDER_EXTERNAL_URL = os.environ.get('RENDER_EXTERNAL_URL', '')
 ALLOWED_ORIGINS = [
     "http://localhost:3000", 
     "http://localhost:5000", 
@@ -166,6 +174,7 @@ class User(UserMixin, db.Model):
     
     documents_generated = db.Column(db.Integer, default=0)
     documents = db.relationship('DocumentRecord', backref='user', lazy=True, cascade="all, delete-orphan")
+    support_requests = db.relationship('SupportRequest', backref='user', lazy=True, cascade="all, delete-orphan")
 
 class DocumentRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -192,6 +201,16 @@ class InstitutionRequest(db.Model):
     requester_email = db.Column(db.String(120), nullable=True)
     requester_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     status = db.Column(db.String(20), default='pending')  # pending, approved, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class SupportRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(160), nullable=False)
+    subject = db.Column(db.String(200), nullable=True)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='open')  # open, resolved
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
@@ -639,6 +658,36 @@ def submit_institution_request():
     
     return jsonify({'message': 'Request submitted successfully', 'id': new_request.id}), 201
 
+@app.route('/api/support', methods=['POST'])
+@allow_guest
+def submit_support_request():
+    """Submit a new support request"""
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    email = (data.get('email') or '').strip()
+    subject = (data.get('subject') or '').strip()
+    message = (data.get('message') or '').strip()
+
+    if not name and current_user.is_authenticated:
+        name = current_user.username or ''
+    if not email and current_user.is_authenticated:
+        email = current_user.email or ''
+
+    if not name or not email or not message:
+        return jsonify({'error': 'Name, email, and message are required'}), 400
+
+    new_request = SupportRequest(
+        user_id=current_user.id if current_user.is_authenticated else None,
+        name=name,
+        email=email,
+        subject=subject,
+        message=message
+    )
+    db.session.add(new_request)
+    db.session.commit()
+
+    return jsonify({'message': 'Support request submitted', 'id': new_request.id}), 201
+
 
 @app.route('/api/admin/institution-requests', methods=['GET'])
 @login_required
@@ -655,6 +704,49 @@ def get_institution_requests():
         'status': r.status,
         'created_at': r.created_at.isoformat() if r.created_at else None
     } for r in requests]), 200
+
+@app.route('/api/admin/support', methods=['GET'])
+@login_required
+def get_support_requests():
+    """Get all support requests"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized - Admin access required'}), 403
+
+    requests = SupportRequest.query.order_by(SupportRequest.created_at.desc()).all()
+    return jsonify([{
+        'id': r.id,
+        'name': r.name,
+        'email': r.email,
+        'subject': r.subject,
+        'message': r.message,
+        'status': r.status,
+        'created_at': r.created_at.isoformat() if r.created_at else None,
+        'user': {
+            'id': r.user.id,
+            'username': r.user.username,
+            'institution': r.user.institution
+        } if r.user else None
+    } for r in requests]), 200
+
+@app.route('/api/admin/support/<int:request_id>/status', methods=['PATCH'])
+@login_required
+def update_support_request_status(request_id):
+    """Update a support request status"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized - Admin access required'}), 403
+
+    data = request.get_json() or {}
+    status = (data.get('status') or '').strip().lower()
+    if status not in {'open', 'resolved'}:
+        return jsonify({'error': 'Invalid status'}), 400
+
+    support_request = SupportRequest.query.get(request_id)
+    if not support_request:
+        return jsonify({'error': 'Support request not found'}), 404
+
+    support_request.status = status
+    db.session.commit()
+    return jsonify({'message': 'Status updated', 'status': support_request.status}), 200
 
 
 @app.route('/api/admin/documents', methods=['GET'])
@@ -673,6 +765,55 @@ def get_all_documents():
         'job_id': d.job_id,
         'user_id': d.user_id
     } for d in docs]), 200
+
+
+@app.route('/api/documents/<job_id>/rename', methods=['PATCH'])
+@login_required
+def rename_document(job_id):
+    data = request.get_json() or {}
+    new_name = (data.get('name') or '').strip()
+    if not new_name:
+        return jsonify({'error': 'New name is required'}), 400
+
+    doc = DocumentRecord.query.filter_by(job_id=job_id).first()
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+    if not current_user.is_admin and doc.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    sanitized = new_name
+    if not sanitized.lower().endswith('.docx'):
+        sanitized = f"{sanitized}.docx"
+    doc.filename = sanitized
+    db.session.commit()
+    return jsonify({'message': 'Document renamed', 'filename': doc.filename}), 200
+
+
+@app.route('/api/documents/<job_id>', methods=['DELETE'])
+@login_required
+def delete_document(job_id):
+    doc = DocumentRecord.query.filter_by(job_id=job_id).first()
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+    if not current_user.is_admin and doc.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    output_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_formatted.docx")
+    meta_path = os.path.join(OUTPUT_FOLDER, f"{job_id}_meta.json")
+    if os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+        except OSError as e:
+            logger.warning(f"Failed to remove output file {output_path}: {e}")
+    if os.path.exists(meta_path):
+        try:
+            os.remove(meta_path)
+        except OSError as e:
+            logger.warning(f"Failed to remove metadata file {meta_path}: {e}")
+
+    db.session.delete(doc)
+    db.session.commit()
+    return jsonify({'message': 'Document deleted'}), 200
 
 
 @app.route('/api/auth/status', methods=['GET'])
