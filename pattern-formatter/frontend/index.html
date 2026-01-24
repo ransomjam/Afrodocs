@@ -1154,20 +1154,23 @@
         .app-install-button {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            padding: 0.35rem 0.5rem;
-            font-size: 0.65rem;
+            gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.7rem;
             font-weight: 600;
-            color: #00B4A6;
-            border: 1px solid rgba(0, 180, 166, 0.4);
-            border-radius: 0.5rem;
-            background: rgba(0, 0, 0, 0.2);
+            color: #E7FFFB;
+            border: 1px solid rgba(0, 180, 166, 0.55);
+            border-radius: 0.6rem;
+            background: linear-gradient(135deg, rgba(0, 180, 166, 0.2), rgba(13, 47, 74, 0.85));
+            box-shadow: 0 4px 12px rgba(0, 180, 166, 0.15);
             transition: all 0.2s ease;
         }
 
         .app-install-button:hover {
-            background: rgba(0, 180, 166, 0.15);
-            color: #7DD3C0;
+            background: linear-gradient(135deg, rgba(0, 180, 166, 0.3), rgba(13, 47, 74, 0.95));
+            border-color: rgba(0, 180, 166, 0.75);
+            color: #FFFFFF;
+            transform: translateY(-1px);
         }
 
         .app-install-button[disabled] {
@@ -1176,8 +1179,8 @@
         }
 
         .app-sidebar-logo {
-            width: 84px; /* slightly smaller */
-            height: 84px;
+            width: 104px;
+            height: 104px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -4551,6 +4554,8 @@
             const [canInstall, setCanInstall] = useState(false);
             const [isIosDevice, setIsIosDevice] = useState(false);
             const [isInstalled, setIsInstalled] = useState(false);
+            const [updateAvailable, setUpdateAvailable] = useState(false);
+            const [serviceWorkerRegistration, setServiceWorkerRegistration] = useState(null);
             const [supportError, setSupportError] = useState('');
             // AI Assistant state
             const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -4599,6 +4604,14 @@
             };
 
             const handleInstallClick = async () => {
+                if (updateAvailable) {
+                    setUpdateAvailable(false);
+                    if (serviceWorkerRegistration) {
+                        serviceWorkerRegistration.update();
+                    }
+                    window.location.reload();
+                    return;
+                }
                 if (deferredInstallPrompt) {
                     deferredInstallPrompt.prompt();
                     const choice = await deferredInstallPrompt.userChoice;
@@ -4637,9 +4650,22 @@
                 window.addEventListener('appinstalled', handleAppInstalled);
 
                 if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('sw.js').catch((err) => {
-                        console.warn('Service worker registration failed', err);
-                    });
+                    navigator.serviceWorker.register('sw.js')
+                        .then((registration) => {
+                            setServiceWorkerRegistration(registration);
+                            registration.addEventListener('updatefound', () => {
+                                const newWorker = registration.installing;
+                                if (!newWorker) return;
+                                newWorker.addEventListener('statechange', () => {
+                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                        setUpdateAvailable(true);
+                                    }
+                                });
+                            });
+                        })
+                        .catch((err) => {
+                            console.warn('Service worker registration failed', err);
+                        });
                 }
 
                 return () => {
@@ -5581,17 +5607,6 @@
                                     <div className="app-sidebar-subtitle">Document Formatter</div>
                             </div>
                             <div className="app-sidebar-actions">
-                                {(canInstall || isIosDevice || isInstalled) && (
-                                    <button
-                                        onClick={handleInstallClick}
-                                        className="app-install-button"
-                                        disabled={isInstalled}
-                                        title={isInstalled ? 'AfroDocs is installed' : 'Install AfroDocs'}
-                                    >
-                                        <Icons.Download size={14} />
-                                        <span>{isInstalled ? 'Installed' : 'Install'}</span>
-                                    </button>
-                                )}
                                 <button 
                                     onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                                     className="p-1.5 hover:bg-white/10 rounded-md transition-colors hidden md:flex"
@@ -5868,14 +5883,20 @@
                                     </h1>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="app-version-tag">Afrodocs. Afrodocs version 2.0.</div>
-                                    <button
-                                        onClick={() => { setViewMode('ai'); setShowAiAssistant(true); setAiSidebarOpen(true); }}
-                                        className="hidden md:inline-flex p-1.5 hover:bg-white/10 rounded-md transition-colors"
-                                        title="Open AI Assistant"
-                                    >
-                                        <Icons.ChatExpand size={20} />
-                                    </button>
+                                    <div className="app-version-tag">Afrodocs version 2.0.</div>
+                                    {(canInstall || isIosDevice || isInstalled || updateAvailable) && (
+                                        <button
+                                            onClick={handleInstallClick}
+                                            className="app-install-button"
+                                            disabled={isInstalled && !updateAvailable}
+                                            title={updateAvailable ? 'Update AfroDocs' : (isInstalled ? 'AfroDocs is installed' : 'Install AfroDocs')}
+                                        >
+                                            {updateAvailable ? <Icons.RefreshCw size={14} /> : <Icons.Download size={14} />}
+                                            <span>
+                                                {updateAvailable ? 'Update app' : (isInstalled ? 'Installed' : 'Install')}
+                                            </span>
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </header>
