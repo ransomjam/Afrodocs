@@ -11563,12 +11563,21 @@ class WordGenerator:
         # Count preliminary pages/sections to determine numbering style
         prelim_count = 0
         # Note: cover_page_data removed - templates are now used instead
-        if certification_data: prelim_count += 1
-        if needs_toc: prelim_count += 1  # TOC itself counts as a page
-        prelim_count += sum(1 for s in structured_data if isinstance(s, dict) and s.get('type') == 'front_matter')
+        if certification_data:
+            prelim_count += 1
+        if needs_toc:
+            prelim_count += 1  # TOC itself counts as a page
+        has_front_matter_sections = any(
+            isinstance(s, dict) and s.get('type') == 'front_matter' for s in structured_data
+        )
+        prelim_count += sum(
+            1 for s in structured_data if isinstance(s, dict) and s.get('type') == 'front_matter'
+        )
         
         # Determine numbering style
         has_preliminary = bool(certification_data or needs_toc)
+        self.toc_only_preliminary = bool(needs_toc and not certification_data and not has_front_matter_sections)
+        self.arabic_started_after_toc = False
         
         # Use Roman numerals for preliminary pages if any preliminary content exists
         if not has_preliminary:
@@ -12208,7 +12217,14 @@ class WordGenerator:
         run_end._r.append(fldChar3)
         
         # Single page break after TOC (not two)
-        self.doc.add_page_break()
+        if self.toc_only_preliminary:
+            new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
+            self._set_page_numbering(new_section, fmt='decimal', start=1)
+            new_section.footer.is_linked_to_previous = False
+            self._add_page_number_to_footer(new_section)
+            self.arabic_started_after_toc = True
+        else:
+            self.doc.add_page_break()
     
     def _add_lof_placeholder(self):
         """Add List of Figures using Microsoft Word's built-in TOC field for figures
@@ -12879,7 +12895,7 @@ class WordGenerator:
         
         # All chapters should start on a new page
         if is_any_chapter:
-            if is_chapter_one and not self.use_continuous_arabic:
+            if is_chapter_one and not self.use_continuous_arabic and not self.arabic_started_after_toc:
                 # Add Section Break (Next Page) to switch to Arabic numbering for Chapter 1
                 new_section = self.doc.add_section(WD_SECTION.NEW_PAGE)
                 self._set_page_numbering(new_section, fmt='decimal', start=1)
