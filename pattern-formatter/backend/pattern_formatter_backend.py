@@ -9946,11 +9946,17 @@ class DocumentProcessor:
             
             # Check if previous line was a chapter heading or front matter heading
             if i > 0 and analyzed:
-                prev_analysis = analyzed[-1]
-                if prev_analysis.get('type') == 'chapter_heading':
-                    context['prev_was_chapter'] = True
-                elif prev_analysis.get('type') == 'front_matter_heading':
-                    context['prev_front_matter'] = prev_analysis.get('front_matter_type')
+                prev_analysis = None
+                for prior in reversed(analyzed):
+                    if prior.get('type') in ['empty', 'page_metadata']:
+                        continue
+                    prev_analysis = prior
+                    break
+                if prev_analysis:
+                    if prev_analysis.get('type') == 'chapter_heading':
+                        context['prev_was_chapter'] = True
+                    elif prev_analysis.get('type') == 'front_matter_heading':
+                        context['prev_front_matter'] = prev_analysis.get('front_matter_type')
             
             analysis = self.engine.analyze_line(
                 text, 
