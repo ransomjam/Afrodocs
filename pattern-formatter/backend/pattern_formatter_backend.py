@@ -4636,6 +4636,7 @@ class PatternEngine:
                 re.compile(r'^\s*(?:header|footer|running head):?\s*.{1,50}$', re.IGNORECASE),
                 re.compile(r'^\s*(?:confidential|draft|version\s*\d+|date:|©|copyright)\b.*$', re.IGNORECASE),
                 re.compile(r'^\s*-\s*\d+\s*-\s*$'),  # Centered page numbers like - 1 -
+                re.compile(r'^\s*formatted with afrod?ocs app\s*$', re.IGNORECASE),
             ],
             
             # Academic Metadata Patterns (Title, Author, Affiliation)
@@ -6272,12 +6273,6 @@ class PatternEngine:
             'APPENDICES', 'APPENDIX',
             'REFERENCES', 'REFERENCE',
             'BIBLIOGRAPHY',
-            'INTRODUCTION',
-            'LITERATURE REVIEW',
-            'METHODOLOGY', 'RESEARCH METHODOLOGY',
-            'RESULTS', 'FINDINGS', 'DATA ANALYSIS',
-            'DISCUSSION', 'FINDINGS AND DISCUSSION',
-            'CONCLUSION', 'SUMMARY', 'RECOMMENDATIONS',
         ]
         
         # Check for exact front matter match
@@ -6810,6 +6805,15 @@ class PatternEngine:
                 else:
                     analysis['type'] = 'table_caption'
                 analysis['confidence'] = 1.0
+                return analysis
+
+        if re.fullmatch(r'\d{1,4}', trimmed):
+            prev_clean = prev_line.strip() if isinstance(prev_line, str) else ''
+            next_clean = next_line.strip() if isinstance(next_line, str) else ''
+            if not prev_clean or not next_clean:
+                analysis['type'] = 'page_metadata'
+                analysis['confidence'] = 0.9
+                analysis['subtype'] = 'page_number'
                 return analysis
         
         for pattern in self.patterns['table_row']:
@@ -9906,11 +9910,23 @@ class DocumentProcessor:
             
             # Check if previous line was a chapter heading or front matter heading
             if i > 0 and analyzed:
-                prev_analysis = analyzed[-1]
-                if prev_analysis.get('type') == 'chapter_heading':
-                    context['prev_was_chapter'] = True
-                elif prev_analysis.get('type') == 'front_matter_heading':
-                    context['prev_front_matter'] = prev_analysis.get('front_matter_type')
+                prev_analysis = None
+                for prior in reversed(analyzed):
+                    if prior.get('type') in ['empty', 'page_metadata']:
+                        continue
+                    prev_analysis = prior
+                    break
+                if prev_analysis:
+                    if prev_analysis.get('type') == 'chapter_heading':
+                        context['prev_was_chapter'] = True
+                    elif prev_analysis.get('type') == 'front_matter_heading':
+                        context['prev_front_matter'] = prev_analysis.get('front_matter_type')
+                    elif prev_analysis.get('type') in ['heading', 'heading_hierarchy']:
+                        prev_text = prev_analysis.get('content') or prev_analysis.get('text', '')
+                        prev_text = re.sub(r'[*_]+', '', str(prev_text))
+                        is_chapter, _, _ = self.engine.is_chapter_heading(prev_text)
+                        if is_chapter:
+                            context['prev_was_chapter'] = True
             
             analysis = self.engine.analyze_line(
                 text, 
