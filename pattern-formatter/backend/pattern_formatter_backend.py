@@ -9967,6 +9967,15 @@ class DocumentProcessor:
                         context['prev_was_chapter'] = True
                     elif prev_analysis.get('type') == 'front_matter_heading':
                         context['prev_front_matter'] = prev_analysis.get('front_matter_type')
+#<<<<<<< codex/fix-chapter-heading-page-formatting-6ra63n
+                    elif prev_analysis.get('type') in ['heading', 'heading_hierarchy']:
+                        prev_text = prev_analysis.get('content') or prev_analysis.get('text', '')
+                        prev_text = re.sub(r'[*_]+', '', str(prev_text))
+                        is_chapter, _, _ = self.engine.is_chapter_heading(prev_text)
+                        if is_chapter:
+                            context['prev_was_chapter'] = True
+#=======
+#>>>>>>> main
             
             analysis = self.engine.analyze_line(
                 text, 
