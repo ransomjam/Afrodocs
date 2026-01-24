@@ -93,7 +93,13 @@ app = Flask(__name__, static_folder=get_frontend_folder(), static_url_path='')
 
 # Load configuration from environment variables
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this-in-production')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
+
+# Database configuration - supports PostgreSQL (Render) and SQLite (local development)
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///users.db')
+# Fix for Render PostgreSQL URL format (Render uses postgres://, SQLAlchemy needs postgresql://)
+if database_url and database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Detect production environment (Render sets RENDER=true)
