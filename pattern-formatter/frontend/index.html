@@ -2463,8 +2463,15 @@
             ];
 
             const allowedAttachmentTypes = ['.doc', '.docx', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+            const imageAttachmentTypes = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
             const maxAttachmentSizeMb = 10;
             const maxAttachmentSizeBytes = maxAttachmentSizeMb * 1024 * 1024;
+            const isImageAttachment = (attachment) => {
+                const name = attachment?.name || '';
+                const ext = name.includes('.') ? `.${name.split('.').pop().toLowerCase()}` : '';
+                const mimeType = (attachment?.type || '').toLowerCase();
+                return imageAttachmentTypes.includes(ext) || mimeType.startsWith('image/');
+            };
 
             const handleAttachmentSelect = (event) => {
                 const files = Array.from(event.target.files || []);
@@ -2547,7 +2554,12 @@
             const handleSendMessage = async (messageText = inputValue) => {
                 const trimmedMessage = messageText.trim();
                 if ((!trimmedMessage && attachments.length === 0) || isLoading) return;
+                if (!trimmedMessage && attachments.length > 0 && attachments.every(isImageAttachment)) {
+                    setAttachmentError('Please add a brief description of the image so the assistant can help.');
+                    return;
+                }
                 const messageBody = trimmedMessage || 'Uploaded file(s).';
+                setAttachmentError('');
 
                 // Create a new chat if none exists
                 if (!currentChatId) {

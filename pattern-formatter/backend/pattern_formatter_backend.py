@@ -1197,7 +1197,8 @@ def build_attachment_context(attachments, max_chars=12000):
                 snippet = f"{snippet[:max_chars]}\n[...truncated...]"
             extracted_blocks.append(f"Attachment: {name}\n{snippet}")
         elif error:
-            issues.append(error)
+            if "image OCR is not available yet" not in error:
+                issues.append(error)
         else:
             issues.append(f"{name}: no extractable text found")
 
