@@ -479,9 +479,9 @@
         }
 
         .ai-message-assistant ul, .ai-message-assistant ol {
-            margin: 0.2rem 0;
-            padding-left: 1.05rem;
-            line-height: 1.35;
+            margin: 0.15rem 0;
+            padding-left: 1rem;
+            line-height: 1.25;
         }
 
         /* Responsive table wrapper for AI-generated tables */
@@ -506,7 +506,8 @@
         }
 
         .ai-message-assistant li {
-            margin: 0.12rem 0;
+            margin: 0.08rem 0;
+            font-weight: 400;
         }
 
         .ai-message-assistant h1, .ai-message-assistant h2, .ai-message-assistant h3, 
@@ -524,8 +525,9 @@
 
         .ai-message-assistant p {
             margin: 0;
-            line-height: 1.35;
+            line-height: 1.3;
             color: white; /* body in white */
+            font-weight: 400;
         }
 
         .ai-message-assistant p + p {
@@ -534,6 +536,7 @@
 
         .ai-message-assistant strong {
             color: #00B4A6;
+            font-weight: 600;
         }
 
         .ai-message-actions {
@@ -1899,6 +1902,25 @@
                 const tbody = bodyLines.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
                 return `<div class="ai-table-wrapper"><table>${thead}${tbody}</table></div>`;
             });
+
+            // Strip excessive bolding so only headings/topics remain bold
+            const headingLineRegex = /^\s*(?:#{1,6}\s+|(?:chapter|table of contents|references|bibliography)\b|[A-Z][A-Z\s]{3,})/i;
+            const topicLabelRegex = /^\s*\*\*[^*\n]{1,80}:\*\*/;
+            const contentLines = content.split('\n').map((line) => {
+                if (!line.includes('**')) return line;
+                const trimmed = line.trim();
+                if (headingLineRegex.test(trimmed) || topicLabelRegex.test(trimmed)) {
+                    return line;
+                }
+                if (/^\s*\*\*[^*]+\*\*\s*$/.test(trimmed)) {
+                    const words = trimmed.replace(/\*\*/g, '').trim().split(/\s+/);
+                    if (words.length <= 8) {
+                        return line;
+                    }
+                }
+                return line.replace(/\*\*/g, '');
+            });
+            content = contentLines.join('\n');
 
             // Convert markdown to HTML (no italics conversion per request)
             let html = content
