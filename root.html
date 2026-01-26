@@ -1133,6 +1133,43 @@
             text-align: left;
         }
 
+        .app-nav-doc-item {
+            justify-content: space-between;
+        }
+
+        .app-nav-doc-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+            flex: 1;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: inherit;
+            padding: 0;
+        }
+
+        .app-nav-doc-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .app-nav-doc-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            flex-shrink: 0;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .app-nav-doc-actions {
+                opacity: 1;
+            }
+        }
+
         .app-nav-item:hover {
             background: rgba(255, 255, 255, 0.05);
             color: white;
