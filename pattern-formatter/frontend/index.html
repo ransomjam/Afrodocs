@@ -4743,6 +4743,14 @@
             };
             const [formattingOptions, setFormattingOptions] = useState(defaultFormattingOptions);
 
+            useEffect(() => {
+                if (!pdfPreviewUrl) return;
+                const isMobile = window.matchMedia('(max-width: 767px)').matches;
+                if (isMobile) {
+                    setPdfPreviewLoading(false);
+                }
+            }, [pdfPreviewUrl]);
+
             const handleUpgrade = async (pages, amount) => {
                 setShowPricingModal(false);
                 try {
