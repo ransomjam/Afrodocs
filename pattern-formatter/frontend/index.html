@@ -6156,40 +6156,92 @@
                             {userDocuments.length > 0 && (
                                 <div className="app-nav-section">
                                     <div className="app-nav-section-title">Your Documents</div>
-                                    {(showAllDocuments ? userDocuments : userDocuments.slice(0, 4)).map((doc, index) => (
-                                        <div key={doc.id || index} className="app-nav-item app-nav-doc-item group">
-                                            <button
-                                                onClick={() => { 
-                                                    setResult(doc.result);
-                                                    setPdfPreviewUrl(doc.pdfUrl);
-                                                    setViewMode('formatter');
-                                                    setAppSidebarOpen(false);
-                                                    setShowProfile(false);
-                                                }}
-                                                className="app-nav-doc-button"
-                                                title={doc.name}
-                                            >
-                                                <span className="app-nav-item-icon"><Icons.File size={18} /></span>
-                                                <span className="app-nav-doc-name text-xs">{doc.name}</span>
-                                            </button>
-                                            <div className="app-nav-doc-actions opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button
-                                                    onClick={(event) => { event.stopPropagation(); handleRenameDocument(doc); }}
-                                                    className="p-1 text-mist hover:text-white hover:bg-white/10 rounded"
-                                                    title="Rename document"
-                                                >
-                                                    <Icons.Edit size={12} />
-                                                </button>
-                                                <button
-                                                    onClick={(event) => { event.stopPropagation(); handleDeleteDocument(doc); }}
-                                                    className="p-1 text-mist hover:text-coral hover:bg-white/10 rounded"
-                                                    title="Delete document"
-                                                >
-                                                    <Icons.Trash size={12} />
-                                                </button>
+                                    {(showAllDocuments ? userDocuments : userDocuments.slice(0, 4)).map((doc, index) => {
+                                        const isRenaming = renameDoc?.id === doc.id;
+                                        return (
+                                            <div key={doc.id || index} className="app-nav-item app-nav-doc-item group">
+                                                {isRenaming ? (
+                                                    <div className="app-nav-doc-button flex items-center gap-2">
+                                                        <span className="app-nav-item-icon"><Icons.File size={18} /></span>
+                                                        <input
+                                                            type="text"
+                                                            value={renameValue}
+                                                            onChange={(e) => setRenameValue(e.target.value)}
+                                                            onKeyDown={(event) => {
+                                                                if (event.key === 'Enter') {
+                                                                    event.preventDefault();
+                                                                    handleApplyRename();
+                                                                }
+                                                                if (event.key === 'Escape') {
+                                                                    event.preventDefault();
+                                                                    setRenameDoc(null);
+                                                                    setRenameError('');
+                                                                }
+                                                            }}
+                                                            className="flex-1 min-w-0 px-2 py-1 rounded-md bg-white/10 border border-teal/40 text-xs text-white focus:border-teal/70 focus:outline-none"
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => { 
+                                                            setResult(doc.result);
+                                                            setPdfPreviewUrl(doc.pdfUrl);
+                                                            setViewMode('formatter');
+                                                            setAppSidebarOpen(false);
+                                                            setShowProfile(false);
+                                                        }}
+                                                        className="app-nav-doc-button"
+                                                        title={doc.name}
+                                                    >
+                                                        <span className="app-nav-item-icon"><Icons.File size={18} /></span>
+                                                        <span className="app-nav-doc-name text-xs">{doc.name}</span>
+                                                    </button>
+                                                )}
+                                                <div className="app-nav-doc-actions flex items-center gap-1">
+                                                    {isRenaming ? (
+                                                        <>
+                                                            <button
+                                                                onClick={(event) => { event.stopPropagation(); handleApplyRename(); }}
+                                                                className="p-1 text-teal hover:text-white hover:bg-white/10 rounded"
+                                                                title="Save rename"
+                                                                disabled={renameSubmitting}
+                                                            >
+                                                                <Icons.Check size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(event) => { event.stopPropagation(); setRenameDoc(null); setRenameError(''); }}
+                                                                className="p-1 text-mist hover:text-white hover:bg-white/10 rounded"
+                                                                title="Cancel rename"
+                                                            >
+                                                                <Icons.X size={12} />
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <button
+                                                                onClick={(event) => { event.stopPropagation(); handleRenameDocument(doc); }}
+                                                                className="p-1 text-mist hover:text-white hover:bg-white/10 rounded"
+                                                                title="Rename document"
+                                                            >
+                                                                <Icons.Edit size={12} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(event) => { event.stopPropagation(); handleDeleteDocument(doc); }}
+                                                                className="p-1 text-mist hover:text-coral hover:bg-white/10 rounded"
+                                                                title="Delete document"
+                                                            >
+                                                                <Icons.Trash size={12} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                                {isRenaming && renameError && (
+                                                    <div className="text-[10px] text-red-400 mt-1 pl-7">{renameError}</div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                     {userDocuments.length > 4 && (
                                         <button
                                             onClick={() => setShowAllDocuments(!showAllDocuments)}
@@ -6890,52 +6942,6 @@
                                     >
                                         Got it
                                     </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {renameDoc && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                            <div className="bg-[#0a1929] border border-teal/20 rounded-2xl w-full max-w-md shadow-2xl">
-                                <div className="p-4 border-b border-teal/10 flex items-center justify-between">
-                                    <h3 className="text-lg font-bold text-white">Rename Document</h3>
-                                    <button
-                                        onClick={() => setRenameDoc(null)}
-                                        className="text-mist hover:text-white transition-colors p-1"
-                                    >
-                                        <Icons.X size={20} />
-                                    </button>
-                                </div>
-                                <div className="p-4 space-y-3">
-                                    <label className="block text-xs text-mist">New name</label>
-                                    <input
-                                        type="text"
-                                        value={renameValue}
-                                        onChange={(e) => setRenameValue(e.target.value)}
-                                        className="w-full px-3 py-2 rounded-lg glass-input text-sm"
-                                        placeholder="Enter a new document name"
-                                    />
-                                    {renameError && (
-                                        <div className="text-xs text-red-400">{renameError}</div>
-                                    )}
-                                    <div className="flex items-center justify-end gap-2 pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setRenameDoc(null)}
-                                            className="px-4 py-2 text-xs text-mist hover:text-white"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleApplyRename}
-                                            disabled={renameSubmitting}
-                                            className="px-4 py-2 bg-gradient-to-r from-[#1E5A8E] to-teal text-white rounded-lg text-xs font-bold hover:opacity-90 transition-all disabled:opacity-60"
-                                        >
-                                            {renameSubmitting ? 'Saving...' : 'Save'}
-                                        </button>
-                                    </div>
                                 </div>
                             </div>
                         </div>
