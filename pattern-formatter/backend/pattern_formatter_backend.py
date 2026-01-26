@@ -15343,21 +15343,11 @@ class WordGenerator:
                             if content_length > col_max_lengths[col_idx]:
                                 col_max_lengths[col_idx] = content_length
                 
-                # Calculate proportional widths based on content length
-                total_content_length = sum(col_max_lengths) if sum(col_max_lengths) > 0 else 1
-                # Total table width (in inches) - standard page width minus margins
-                total_table_width = Inches(6.0)
-                # Minimum column width
-                min_col_width = Inches(0.5)
+                total_table_width = self._get_available_table_width()
+                column_widths = self._calculate_table_column_widths(total_table_width, col_max_lengths)
                 
                 # Set column widths proportionally
-                for col_idx in range(num_cols):
-                    # Calculate proportional width
-                    proportion = col_max_lengths[col_idx] / total_content_length if total_content_length > 0 else 1 / num_cols
-                    col_width = total_table_width * proportion
-                    # Ensure minimum width
-                    if col_width < min_col_width:
-                        col_width = min_col_width
+                for col_idx, col_width in enumerate(column_widths):
                     # Set width for all cells in this column
                     for row in table.rows:
                         row.cells[col_idx].width = col_width
@@ -15395,6 +15385,37 @@ class WordGenerator:
         # Add spacing after table
         spacing = self.doc.add_paragraph()
         spacing.paragraph_format.space_before = Pt(6)
+
+    def _get_available_table_width(self):
+        """Return available table width within page margins."""
+        try:
+            section = self.doc.sections[0]
+            return section.page_width - section.left_margin - section.right_margin
+        except Exception:
+            return Inches(6.0)
+
+    def _calculate_table_column_widths(self, total_table_width, col_max_lengths):
+        """Calculate stable column widths that fit within margins."""
+        num_cols = len(col_max_lengths) if col_max_lengths else 1
+        total_content_length = sum(col_max_lengths) if sum(col_max_lengths) > 0 else num_cols
+        min_col_width = Inches(0.5)
+        if min_col_width * num_cols > total_table_width:
+            min_col_width = total_table_width / num_cols
+
+        widths = []
+        for length in col_max_lengths:
+            proportion = length / total_content_length if total_content_length > 0 else 1 / num_cols
+            col_width = total_table_width * proportion
+            if col_width < min_col_width:
+                col_width = min_col_width
+            widths.append(col_width)
+
+        total_width = sum(widths, Inches(0))
+        if total_width > total_table_width and total_width > 0:
+            scale = total_table_width / total_width
+            widths = [width * scale for width in widths]
+
+        return widths
 
     def _add_plain_text_table(self, section):
         """Convert plain text table to Word table"""
@@ -15439,6 +15460,27 @@ class WordGenerator:
         # Create Word table
         table = self.doc.add_table(rows=row_count, cols=col_count)
         table.style = 'Table Grid'
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.autofit = False
+
+        col_max_lengths = [0] * col_count
+        for row_data in data_rows:
+            cells = row_data.get('cells', [])
+            if not isinstance(cells, list):
+                continue
+            for col_idx in range(min(col_count, len(cells))):
+                cell_content = cells[col_idx]
+                if not isinstance(cell_content, str):
+                    cell_content = str(cell_content) if cell_content is not None else ''
+                content_length = len(cell_content.strip())
+                if content_length > col_max_lengths[col_idx]:
+                    col_max_lengths[col_idx] = content_length
+
+        total_table_width = self._get_available_table_width()
+        column_widths = self._calculate_table_column_widths(total_table_width, col_max_lengths)
+        for col_idx, col_width in enumerate(column_widths):
+            for row in table.rows:
+                row.cells[col_idx].width = col_width
         
         # Populate table
         for row_idx, row_data in enumerate(data_rows):
@@ -15480,9 +15522,6 @@ class WordGenerator:
                                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                             else:
                                 paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        
-        # Auto-fit table
-        table.autofit = True
         
         # Add spacing after table
         self.doc.add_paragraph()
