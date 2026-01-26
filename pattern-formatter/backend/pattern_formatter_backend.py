@@ -19,6 +19,9 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn, nsmap
 from docxcompose.composer import Composer
 from dataclasses import dataclass
+from PyPDF2 import PdfReader
+import base64
+import binascii
 import re
 import os
 import json
@@ -1124,6 +1127,82 @@ def extract_text_from_docx_bytes(file_bytes):
                 lines.append(" | ".join(cells))
     return "\n".join(lines)
 
+
+def extract_text_from_pdf_bytes(file_bytes):
+    reader = PdfReader(BytesIO(file_bytes))
+    lines = []
+    for page in reader.pages:
+        text = page.extract_text()
+        if text:
+            lines.append(text)
+    return "\n".join(lines)
+
+
+def _decode_attachment_bytes(data_url):
+    if not data_url:
+        return None
+    if data_url.startswith("data:"):
+        try:
+            header, encoded = data_url.split(",", 1)
+        except ValueError:
+            return None
+        return base64.b64decode(encoded)
+    return base64.b64decode(data_url)
+
+
+def extract_text_from_attachment(attachment):
+    name = attachment.get('name') or 'attachment'
+    data_url = attachment.get('dataUrl') or attachment.get('data_url') or attachment.get('content')
+    if not data_url:
+        return None, f"{name}: no attachment content received"
+
+    file_ext = os.path.splitext(name)[1].lower()
+    try:
+        file_bytes = _decode_attachment_bytes(data_url)
+    except (ValueError, binascii.Error) as exc:
+        return None, f"{name}: invalid attachment data ({exc})"
+
+    if not file_bytes:
+        return None, f"{name}: empty attachment payload"
+
+    try:
+        if file_ext == '.docx':
+            return extract_text_from_docx_bytes(file_bytes), None
+        if file_ext == '.txt' or file_ext == '.md':
+            return file_bytes.decode('utf-8', errors='ignore'), None
+        if file_ext == '.pdf':
+            return extract_text_from_pdf_bytes(file_bytes), None
+        if file_ext in {'.png', '.jpg', '.jpeg', '.gif', '.webp'}:
+            return None, f"{name}: image OCR is not available yet"
+    except Exception as exc:
+        logger.warning(f"Attachment extraction failed for {name}: {exc}")
+        return None, f"{name}: extraction failed"
+
+    return None, f"{name}: unsupported attachment type"
+
+
+def build_attachment_context(attachments, max_chars=12000):
+    if not attachments:
+        return "", ""
+
+    extracted_blocks = []
+    issues = []
+
+    for attachment in attachments:
+        text, error = extract_text_from_attachment(attachment)
+        name = attachment.get('name') or 'attachment'
+        if text and text.strip():
+            snippet = text.strip()
+            if len(snippet) > max_chars:
+                snippet = f"{snippet[:max_chars]}\n[...truncated...]"
+            extracted_blocks.append(f"Attachment: {name}\n{snippet}")
+        elif error:
+            issues.append(error)
+        else:
+            issues.append(f"{name}: no extractable text found")
+
+    return "\n\n".join(extracted_blocks), "\n".join(issues)
+
 AI_RESTRUCTURE_SYSTEM_PROMPT = """You are AfroDocs AI Restructuring Assistant.
 
 Task: Restructure the provided text to match AfroDocs academic formatting standards.
@@ -1198,9 +1277,17 @@ def ai_chat():
     """AI chat endpoint with DeepSeek integration"""
     import requests
     
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     message = data.get('message', '')
     conversation = data.get('conversation', [])
+    attachments = data.get('attachments', [])
+    raw_message = message
+
+    attachment_context, attachment_issues = build_attachment_context(attachments)
+    if attachment_context:
+        message = f"{message}\n\nAttached content (extracted):\n{attachment_context}"
+    if attachment_issues and not attachment_context:
+        message = f"{message}\n\nAttachment notes:\n{attachment_issues}"
     
     # Build messages array
     messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
@@ -1235,7 +1322,7 @@ def ai_chat():
             result = response.json()
             ai_response = normalize_ai_output(result['choices'][0]['message']['content'])
             ai_response = normalize_ai_bolding(result['choices'][0]['message']['content'])
-            record_ai_request(message, "chat")
+            record_ai_request(raw_message, "chat")
             return jsonify({'response': ai_response, 'success': True}), 200
         else:
             logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
@@ -1272,9 +1359,17 @@ def ai_chat_stream():
     """AI chat streaming endpoint with DeepSeek integration"""
     import requests
     
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     message = data.get('message', '')
     conversation = data.get('conversation', [])
+    attachments = data.get('attachments', [])
+    raw_message = message
+
+    attachment_context, attachment_issues = build_attachment_context(attachments)
+    if attachment_context:
+        message = f"{message}\n\nAttached content (extracted):\n{attachment_context}"
+    if attachment_issues and not attachment_context:
+        message = f"{message}\n\nAttachment notes:\n{attachment_issues}"
     
     # Build messages array
     messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
@@ -1289,7 +1384,7 @@ def ai_chat_stream():
     # Add current message
     messages.append({"role": "user", "content": message})
 
-    record_ai_request(message, "stream")
+    record_ai_request(raw_message, "stream")
     
     def generate():
         try:
