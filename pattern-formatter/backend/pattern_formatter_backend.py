@@ -1929,83 +1929,86 @@ class ShapeExtractor:
         shapes = []
         
         try:
-            for run in para.runs:
-                # Look for drawing elements containing shapes
-                drawings = run._element.findall('.//' + qn('w:drawing'))
-                
-                for drawing in drawings:
-                    # Check if this drawing contains shapes (not just images)
-                    # Look for wsp (WordprocessingML Shape)
-                    wsp_elements = drawing.findall('.//' + qn('wps:wsp'))
-                    grp_elements = drawing.findall('.//' + qn('wpg:grpSp'))
-                    cxn_elements = drawing.findall('.//' + qn('wps:cxnSp'))
-                    
-                    # Also check for shapes in mc:AlternateContent
-                    mc_alternate = drawing.findall('.//' + qn('mc:AlternateContent'))
-                    for mc in mc_alternate:
-                        wsp_elements.extend(mc.findall('.//' + qn('wps:wsp')))
-                        grp_elements.extend(mc.findall('.//' + qn('wpg:grpSp')))
-                        cxn_elements.extend(mc.findall('.//' + qn('wps:cxnSp')))
-                    
-                    has_shapes = wsp_elements or grp_elements or cxn_elements
-                    
-                    # Skip if this is just an image (has blip but no shapes)
-                    has_blip = drawing.findall('.//' + qn('a:blip'))
-                    if has_blip and not has_shapes:
-                        continue  # This is an image, handled by ImageExtractor
-                    
-                    if has_shapes:
-                        # Get the complete drawing XML to preserve all formatting
+            for run_index, run in enumerate(para.runs):
+                run_elements = list(run._element)
+                for element_index, element in enumerate(run_elements):
+                    if element.tag == qn('w:drawing'):
+                        drawing = element
+                        # Check if this drawing contains shapes (not just images)
+                        # Look for wsp (WordprocessingML Shape)
+                        wsp_elements = drawing.findall('.//' + qn('wps:wsp'))
+                        grp_elements = drawing.findall('.//' + qn('wpg:grpSp'))
+                        cxn_elements = drawing.findall('.//' + qn('wps:cxnSp'))
+
+                        # Also check for shapes in mc:AlternateContent
+                        mc_alternate = drawing.findall('.//' + qn('mc:AlternateContent'))
+                        for mc in mc_alternate:
+                            wsp_elements.extend(mc.findall('.//' + qn('wps:wsp')))
+                            grp_elements.extend(mc.findall('.//' + qn('wpg:grpSp')))
+                            cxn_elements.extend(mc.findall('.//' + qn('wps:cxnSp')))
+
+                        has_shapes = wsp_elements or grp_elements or cxn_elements
+
+                        # Skip if this is just an image (has blip but no shapes)
+                        has_blip = drawing.findall('.//' + qn('a:blip'))
+                        if has_blip and not has_shapes:
+                            continue  # This is an image, handled by ImageExtractor
+
+                        if has_shapes:
+                            # Get the complete drawing XML to preserve all formatting
+                            from copy import deepcopy
+                            drawing_copy = deepcopy(drawing)
+
+                            # Get positioning info
+                            inline = drawing.find('.//' + qn('wp:inline'))
+                            anchor = drawing.find('.//' + qn('wp:anchor'))
+
+                            position_type = 'inline' if inline is not None else 'anchor'
+                            position_data = self._get_position_data(inline if inline is not None else anchor)
+
+                            shape_meta = {
+                                'shape_id': f'shape_{self.shape_count:04d}',
+                                'position_type': position_type,
+                                'paragraph_index': para_index,
+                                'table_location': None,
+                                'drawing_xml': drawing_copy,  # Store complete drawing element
+                                'run_xml': deepcopy(run._element),  # Store the run context
+                                'position_data': position_data,
+                                'shape_count': len(wsp_elements) + len(grp_elements) + len(cxn_elements),
+                                'has_group': len(grp_elements) > 0,
+                                'has_connectors': len(cxn_elements) > 0,
+                                'run_index': run_index,
+                                'element_index': element_index,
+                            }
+                            shapes.append(shape_meta)
+                            self.shape_count += 1
+                            logger.info(
+                                f"Extracted shape group {shape_meta['shape_id']} at paragraph {para_index} "
+                                f"(shapes: {len(wsp_elements)}, groups: {len(grp_elements)}, connectors: {len(cxn_elements)})"
+                            )
+                    elif element.tag == qn('w:pict'):
                         from copy import deepcopy
-                        drawing_copy = deepcopy(drawing)
-                        
-                        # Get positioning info
-                        inline = drawing.find('.//' + qn('wp:inline'))
-                        anchor = drawing.find('.//' + qn('wp:anchor'))
-                        
-                        position_type = 'inline' if inline is not None else 'anchor'
-                        position_data = self._get_position_data(inline if inline is not None else anchor)
-                        
+                        pict_copy = deepcopy(element)
+
                         shape_meta = {
                             'shape_id': f'shape_{self.shape_count:04d}',
-                            'position_type': position_type,
+                            'position_type': 'vml',
                             'paragraph_index': para_index,
                             'table_location': None,
-                            'drawing_xml': drawing_copy,  # Store complete drawing element
-                            'run_xml': deepcopy(run._element),  # Store the run context
-                            'position_data': position_data,
-                            'shape_count': len(wsp_elements) + len(grp_elements) + len(cxn_elements),
-                            'has_group': len(grp_elements) > 0,
-                            'has_connectors': len(cxn_elements) > 0,
+                            'pict_xml': pict_copy,
+                            'run_xml': deepcopy(run._element),
+                            'position_data': {},
+                            'shape_count': 1,
+                            'has_group': False,
+                            'has_connectors': False,
+                            'is_vml': True,
+                            'run_index': run_index,
+                            'element_index': element_index,
                         }
                         shapes.append(shape_meta)
                         self.shape_count += 1
-                        logger.info(f"Extracted shape group {shape_meta['shape_id']} at paragraph {para_index} "
-                                  f"(shapes: {len(wsp_elements)}, groups: {len(grp_elements)}, connectors: {len(cxn_elements)})")
-                
-                # Also check for VML shapes (legacy format)
-                pict_elements = run._element.findall('.//' + qn('w:pict'))
-                for pict in pict_elements:
-                    from copy import deepcopy
-                    pict_copy = deepcopy(pict)
-                    
-                    shape_meta = {
-                        'shape_id': f'shape_{self.shape_count:04d}',
-                        'position_type': 'vml',
-                        'paragraph_index': para_index,
-                        'table_location': None,
-                        'pict_xml': pict_copy,
-                        'run_xml': deepcopy(run._element),
-                        'position_data': {},
-                        'shape_count': 1,
-                        'has_group': False,
-                        'has_connectors': False,
-                        'is_vml': True,
-                    }
-                    shapes.append(shape_meta)
-                    self.shape_count += 1
-                    logger.info(f"Extracted VML shape {shape_meta['shape_id']} at paragraph {para_index}")
-                    
+                        logger.info(f"Extracted VML shape {shape_meta['shape_id']} at paragraph {para_index}")
+
         except Exception as e:
             logger.warning(f"Error extracting shapes from paragraph {para_index}: {str(e)}")
         
@@ -2019,27 +2022,52 @@ class ShapeExtractor:
             for row_idx, row in enumerate(table.rows):
                 for cell_idx, cell in enumerate(row.cells):
                     for para_idx, para in enumerate(cell.paragraphs):
-                        for run in para.runs:
-                            drawings = run._element.findall('.//' + qn('w:drawing'))
-                            
-                            for drawing in drawings:
-                                wsp_elements = drawing.findall('.//' + qn('wps:wsp'))
-                                grp_elements = drawing.findall('.//' + qn('wpg:grpSp'))
-                                cxn_elements = drawing.findall('.//' + qn('wps:cxnSp'))
-                                
-                                has_shapes = wsp_elements or grp_elements or cxn_elements
-                                has_blip = drawing.findall('.//' + qn('a:blip'))
-                                
-                                if has_blip and not has_shapes:
-                                    continue
-                                
-                                if has_shapes:
+                        for run_index, run in enumerate(para.runs):
+                            run_elements = list(run._element)
+                            for element_index, element in enumerate(run_elements):
+                                if element.tag == qn('w:drawing'):
+                                    drawing = element
+                                    wsp_elements = drawing.findall('.//' + qn('wps:wsp'))
+                                    grp_elements = drawing.findall('.//' + qn('wpg:grpSp'))
+                                    cxn_elements = drawing.findall('.//' + qn('wps:cxnSp'))
+
+                                    has_shapes = wsp_elements or grp_elements or cxn_elements
+                                    has_blip = drawing.findall('.//' + qn('a:blip'))
+
+                                    if has_blip and not has_shapes:
+                                        continue
+
+                                    if has_shapes:
+                                        from copy import deepcopy
+                                        drawing_copy = deepcopy(drawing)
+
+                                        shape_meta = {
+                                            'shape_id': f'shape_{self.shape_count:04d}',
+                                            'position_type': 'table',
+                                            'paragraph_index': None,
+                                            'table_location': {
+                                                'table_index': table_index,
+                                                'row_index': row_idx,
+                                                'cell_index': cell_idx,
+                                                'para_index': para_idx,
+                                            },
+                                            'drawing_xml': drawing_copy,
+                                            'run_xml': deepcopy(run._element),
+                                            'position_data': {},
+                                            'shape_count': len(wsp_elements) + len(grp_elements) + len(cxn_elements),
+                                            'has_group': len(grp_elements) > 0,
+                                            'has_connectors': len(cxn_elements) > 0,
+                                            'run_index': run_index,
+                                            'element_index': element_index,
+                                        }
+                                        shapes.append(shape_meta)
+                                        self.shape_count += 1
+                                        logger.info(f"Extracted table shape {shape_meta['shape_id']} at table {table_index}")
+                                elif element.tag == qn('w:pict'):
                                     from copy import deepcopy
-                                    drawing_copy = deepcopy(drawing)
-                                    
                                     shape_meta = {
                                         'shape_id': f'shape_{self.shape_count:04d}',
-                                        'position_type': 'table',
+                                        'position_type': 'table_vml',
                                         'paragraph_index': None,
                                         'table_location': {
                                             'table_index': table_index,
@@ -2047,41 +2075,18 @@ class ShapeExtractor:
                                             'cell_index': cell_idx,
                                             'para_index': para_idx,
                                         },
-                                        'drawing_xml': drawing_copy,
+                                        'pict_xml': deepcopy(element),
                                         'run_xml': deepcopy(run._element),
                                         'position_data': {},
-                                        'shape_count': len(wsp_elements) + len(grp_elements) + len(cxn_elements),
-                                        'has_group': len(grp_elements) > 0,
-                                        'has_connectors': len(cxn_elements) > 0,
+                                        'shape_count': 1,
+                                        'has_group': False,
+                                        'has_connectors': False,
+                                        'is_vml': True,
+                                        'run_index': run_index,
+                                        'element_index': element_index,
                                     }
                                     shapes.append(shape_meta)
                                     self.shape_count += 1
-                                    logger.info(f"Extracted table shape {shape_meta['shape_id']} at table {table_index}")
-                            
-                            # Check for VML shapes
-                            pict_elements = run._element.findall('.//' + qn('w:pict'))
-                            for pict in pict_elements:
-                                from copy import deepcopy
-                                shape_meta = {
-                                    'shape_id': f'shape_{self.shape_count:04d}',
-                                    'position_type': 'table_vml',
-                                    'paragraph_index': None,
-                                    'table_location': {
-                                        'table_index': table_index,
-                                        'row_index': row_idx,
-                                        'cell_index': cell_idx,
-                                        'para_index': para_idx,
-                                    },
-                                    'pict_xml': deepcopy(pict),
-                                    'run_xml': deepcopy(run._element),
-                                    'position_data': {},
-                                    'shape_count': 1,
-                                    'has_group': False,
-                                    'has_connectors': False,
-                                    'is_vml': True,
-                                }
-                                shapes.append(shape_meta)
-                                self.shape_count += 1
                                 
         except Exception as e:
             logger.warning(f"Error extracting shapes from table {table_index}: {str(e)}")
@@ -9736,6 +9741,48 @@ class DocumentProcessor:
         self.questionnaire_processor = QuestionnaireProcessor() # Questionnaire detection
         self.questionnaire_data = None # Extracted questionnaire data
         self.heading_numberer = HeadingNumberer(policy=self.policy)  # Auto-number headings based on chapter context
+
+    def _build_paragraph_segments(self, para, paragraph_index, shape_run_map):
+        """Build ordered text/shape segments from a paragraph's run elements."""
+        segments = []
+        has_shapes = False
+
+        for run_index, run in enumerate(para.runs):
+            shapes_in_run = shape_run_map.get((paragraph_index, run_index), [])
+            shapes_by_element_index = {}
+            for shape in sorted(shapes_in_run, key=lambda s: s.get('element_index', 0)):
+                shapes_by_element_index.setdefault(shape.get('element_index', 0), []).append(shape)
+
+            run_elements = list(run._element)
+            used_shape_ids = set()
+            saw_text_node = False
+            for element_index, element in enumerate(run_elements):
+                if element.tag == qn('w:t'):
+                    saw_text_node = True
+                    if element.text:
+                        segments.append({'type': 'text', 'text': element.text})
+                elif element.tag in (qn('w:drawing'), qn('w:pict')):
+                    for shape in shapes_by_element_index.get(element_index, []):
+                        segments.append({'type': 'shape', 'shape_id': shape['shape_id']})
+                        used_shape_ids.add(shape['shape_id'])
+                        has_shapes = True
+
+            if not saw_text_node and run.text:
+                segments.append({'type': 'text', 'text': run.text})
+
+            for shape in shapes_in_run:
+                if shape['shape_id'] not in used_shape_ids:
+                    segments.append({'type': 'shape', 'shape_id': shape['shape_id']})
+                    has_shapes = True
+
+        combined = []
+        for segment in segments:
+            if segment['type'] == 'text' and combined and combined[-1]['type'] == 'text':
+                combined[-1]['text'] += segment['text']
+            else:
+                combined.append(segment)
+
+        return combined, has_shapes
         
     def process_docx(self, file_path):
         """Process Word document line by line, preserving table and image positions"""
@@ -9777,14 +9824,17 @@ class DocumentProcessor:
                     image_positions[key] = []
                 image_positions[key].append(img)
         
-        # Create shape position lookup for tracking flowcharts/diagrams
-        shape_positions = {}
+        # Create shape run lookup for tracking flowcharts/diagrams
+        shape_run_map = {}
         for shape in self.extracted_shapes:
             if shape['position_type'] in ['inline', 'anchor', 'vml']:
-                key = shape['paragraph_index']
-                if key not in shape_positions:
-                    shape_positions[key] = []
-                shape_positions[key].append(shape)
+                run_index = shape.get('run_index')
+                if run_index is None:
+                    continue
+                key = (shape['paragraph_index'], run_index)
+                if key not in shape_run_map:
+                    shape_run_map[key] = []
+                shape_run_map[key].append(shape)
         
         # Extract all content in document order (paragraphs and tables)
         lines = []
@@ -9802,7 +9852,10 @@ class DocumentProcessor:
                         # Mark these paragraphs as protected from content modification
                         is_certification_content = has_cert and self.certification_start_index <= paragraph_index < self.certification_end_index
                         
-                        text = para.text.strip()
+                        segments, has_shapes = self._build_paragraph_segments(para, paragraph_index, shape_run_map)
+                        text = ''.join(
+                            segment['text'] for segment in segments if segment['type'] == 'text'
+                        ).strip()
                         
                         # Check for automatic numbering/bullets (Word automatic lists)
                         # Only convert to explicit list markers in assistive mode.
@@ -9815,20 +9868,6 @@ class DocumentProcessor:
                                     text = f"• {text}"
                         except Exception:
                             pass
-                        
-                        # Check if this paragraph has shapes/flowcharts
-                        if paragraph_index in shape_positions:
-                            for shape in shape_positions[paragraph_index]:
-                                # Insert shape placeholder
-                                lines.append({
-                                    'text': f'[SHAPE:{shape["shape_id"]}]',
-                                    'style': 'Shape',
-                                    'bold': False,
-                                    'font_size': 12,
-                                    'type': 'shape_placeholder',
-                                    'shape_id': shape['shape_id'],
-                                })
-                                logger.info(f"Added shape placeholder for {shape['shape_id']} at paragraph {paragraph_index}")
                         
                         # Check if this paragraph has images (skip cover page images)
                         if paragraph_index in image_positions:
@@ -9850,6 +9889,16 @@ class DocumentProcessor:
 
                             # Clean AI artifacts
                             text, metadata = self.engine.clean_ai_content(text)
+                            if has_shapes and segments:
+                                updated_segments = []
+                                for segment in segments:
+                                    if segment.get('type') == 'text':
+                                        cleaned_segment, _ = self.engine.clean_ai_content(segment.get('text', ''))
+                                        if cleaned_segment:
+                                            updated_segments.append({'type': 'text', 'text': cleaned_segment})
+                                    else:
+                                        updated_segments.append(segment)
+                                segments = updated_segments
 
                             font_size = 12  # Default
                             is_bold = False
@@ -9869,7 +9918,7 @@ class DocumentProcessor:
                             if metadata.get('heading_level'):
                                 style = f'Heading {metadata["heading_level"]}'
                             
-                            lines.append({
+                            line_data = {
                                 'text': text,
                                 'style': style,
                                 'bold': is_bold,
@@ -9877,7 +9926,24 @@ class DocumentProcessor:
                                 'font_size': font_size,
                                 'ai_meta': is_ai_meta,
                                 'is_protected': is_certification_content,  # Preserve original content for certification/declaration pages
-                            })
+                            }
+                            if has_shapes:
+                                line_data['inline_segments'] = segments
+                            lines.append(line_data)
+                        elif has_shapes:
+                            for segment in segments:
+                                if segment['type'] == 'shape':
+                                    lines.append({
+                                        'text': f'[SHAPE:{segment["shape_id"]}]',
+                                        'style': 'Shape',
+                                        'bold': False,
+                                        'font_size': 12,
+                                        'type': 'shape_placeholder',
+                                        'shape_id': segment['shape_id'],
+                                    })
+                                    logger.info(
+                                        f"Added shape placeholder for {segment['shape_id']} at paragraph {paragraph_index}"
+                                    )
                         
                         paragraph_index += 1
                         break
@@ -10137,6 +10203,9 @@ class DocumentProcessor:
                 next_line,
                 context=context
             )
+
+            if isinstance(line_data, dict) and line_data.get('inline_segments'):
+                analysis['inline_segments'] = line_data['inline_segments']
             
             # SAFETY CHECK: Ensure analysis is a dictionary
             if not isinstance(analysis, dict):
@@ -13078,6 +13147,34 @@ class WordGenerator:
             para = self.doc.add_paragraph()
             para.add_run(f"[IMAGE: {image_id} - Error: {str(e)}]")
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def _insert_shape_inline(self, shape_id, paragraph):
+        """
+        Insert a shape into an existing paragraph to preserve inline positions.
+        """
+        if not shape_id or paragraph is None:
+            logger.warning("No shape_id or paragraph provided to _insert_shape_inline")
+            return
+
+        if not hasattr(self, 'shape_lookup') or shape_id not in self.shape_lookup:
+            logger.warning(f"Shape {shape_id} not found in shape lookup")
+            paragraph.add_run(f"[SHAPE/DIAGRAM: {shape_id} - Not found]")
+            return
+
+        try:
+            if self.shape_inserter:
+                self.shape_inserter.insert_shape(shape_id, paragraph=paragraph)
+            else:
+                shape_data = self.shape_lookup[shape_id]
+                run = paragraph.add_run()
+                if shape_data.get('is_vml'):
+                    run._element.append(shape_data['pict_xml'])
+                else:
+                    run._element.append(shape_data['drawing_xml'])
+            logger.info(f"Inserted inline shape {shape_id}")
+        except Exception as e:
+            logger.error(f"Error inserting inline shape {shape_id}: {str(e)}")
+            paragraph.add_run(f"[SHAPE/DIAGRAM: {shape_id} - Error: {str(e)}]")
     
     def _insert_shape(self, shape_id):
         """
@@ -13104,9 +13201,8 @@ class WordGenerator:
         try:
             # Create paragraph for shape
             para = self.doc.add_paragraph()
-            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            para.paragraph_format.space_before = Pt(6)
-            para.paragraph_format.space_after = Pt(6)
+            para.paragraph_format.space_before = Pt(0)
+            para.paragraph_format.space_after = Pt(0)
             
             # Add shape from stored XML
             run = para.add_run()
@@ -14257,7 +14353,27 @@ class WordGenerator:
             
             if item.get('type') == 'paragraph':
                 text = item.get('text', '')
-                
+                inline_segments = item.get('inline_segments')
+
+                if inline_segments:
+                    para = self.doc.add_paragraph(style='AcademicBody')
+                    is_bold_paragraph = bool(item.get('original_bold_all')) and self.policy.preserve_existing_bold
+                    for segment in inline_segments:
+                        if segment.get('type') == 'text':
+                            run = para.add_run(segment.get('text', ''))
+                            run.font.name = 'Times New Roman'
+                            run.font.size = Pt(self.font_size)
+                            if is_bold_paragraph:
+                                run.bold = True
+                        elif segment.get('type') == 'shape':
+                            self._insert_shape_inline(segment.get('shape_id'), para)
+                    para.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                    para.paragraph_format.line_spacing = self.line_spacing
+                    para.paragraph_format.left_indent = Pt(0)
+                    para.paragraph_format.first_line_indent = Pt(0)
+                    self._track_bold_paragraph(is_bold_paragraph, is_heading=False)
+                    continue
+
                 # Check if this is a figure caption - format with SEQ field for LOF
                 if self.figure_formatter.is_figure_caption(text):
                     figure_info = self.figure_formatter.detect_figure_caption(text)
