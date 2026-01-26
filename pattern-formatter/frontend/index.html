@@ -2872,6 +2872,26 @@
                 
                 const payload = { username, password };
                 if (!isLogin) {
+                    if (!email.trim()) {
+                        setError('Email is required.');
+                        setLoading(false);
+                        return;
+                    }
+                    if (!finalInstitution) {
+                        setError('Institution is required.');
+                        setLoading(false);
+                        return;
+                    }
+                    if ((institution === 'Other (Specify)' || institution === 'Others' || institution === 'Other Institution') && !customInstitution.trim()) {
+                        setError('Please specify your institution.');
+                        setLoading(false);
+                        return;
+                    }
+                    if (!contact.trim()) {
+                        setError('Contact is required.');
+                        setLoading(false);
+                        return;
+                    }
                     payload.institution = finalInstitution;
                     payload.contact = contact;
                     payload.email = email;
@@ -2933,7 +2953,13 @@
                         )}
 
                         {error && (
-                            <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-3 rounded-lg mb-6 text-sm text-center">
+                            <div
+                                className={`p-3 rounded-lg mb-6 text-sm text-center ${
+                                    errorIsPositive
+                                        ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-200'
+                                        : 'bg-red-500/20 border border-red-500/50 text-red-200'
+                                }`}
+                            >
                                 {error}
                             </div>
                         )}
@@ -2987,6 +3013,7 @@
                                         onChange={(e) => setEmail(e.target.value)}
                                         className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none"
                                         placeholder="Enter email"
+                                        required
                                     />
                                 </div>
                             )}
@@ -2999,6 +3026,7 @@
                                             value={institution}
                                             onChange={(e) => setInstitution(e.target.value)}
                                             className="w-full glass-input rounded-lg p-2.5 text-white placeholder-white/30 focus:border-teal outline-none bg-midnight"
+                                            required
                                         >
                                             <option value="">Select Institution</option>
                                             {institutions.map(inst => (
