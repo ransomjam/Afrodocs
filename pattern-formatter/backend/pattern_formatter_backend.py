@@ -13429,10 +13429,11 @@ class WordGenerator:
         # Ensure heading is bold, black, Times New Roman, with proper spacing
         heading.paragraph_format.left_indent = Pt(0)
         heading.paragraph_format.first_line_indent = Pt(0)
+        should_bold_heading = not self._is_main_research_question_heading(heading_text)
         for run in heading.runs:
             run.font.name = 'Times New Roman'
             run.font.size = Pt(self.font_size)
-            run.font.bold = True
+            run.font.bold = should_bold_heading
             run.font.color.rgb = RGBColor(0, 0, 0)  # Black
         
         # Add content (pass section context for references handling)
@@ -14094,6 +14095,15 @@ class WordGenerator:
         if 1 <= len(label.split()) <= max_words:
             return label, remainder
         return None
+
+    def _is_main_research_question_heading(self, heading_text):
+        """Return True when the heading is exactly 'Main Research Question(s)'."""
+        if not heading_text:
+            return False
+        clean = re.sub(r'^#+\s*', '', heading_text)
+        clean = re.sub(r'^\d+(?:\.\d+)*\s*', '', clean)
+        clean = re.sub(r'[*_]+', '', clean).strip()
+        return bool(re.fullmatch(r'main\s+research\s+question(s)?', clean, re.IGNORECASE))
 
     def _add_label_bold_runs(self, para, label, remainder, prefix=''):
         """Add runs where only the label is bold."""
