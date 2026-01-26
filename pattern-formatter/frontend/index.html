@@ -747,6 +747,10 @@
             min-width: 3rem;
         }
 
+        .ai-send-button.ai-send-button-stop {
+            background: linear-gradient(135deg, #FF6B6B, #F2A93B);
+        }
+
         .ai-send-button:hover:not(:disabled) {
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0, 180, 166, 0.3);
@@ -1649,6 +1653,11 @@
                     <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
                 </svg>
             ),
+            Stop: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                </svg>
+            ),
             X: ({ size = 24 }) => (
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -2113,6 +2122,7 @@
             const textareaRef = useRef(null);
             const sidebarRef = useRef(null);
             const toggleRef = useRef(null);
+            const abortControllerRef = useRef(null);
 
             // Load chat history from localStorage on mount
             useEffect(() => {
@@ -2232,6 +2242,7 @@
                 setStreamingContent('');
 
                 try {
+                    abortControllerRef.current = new AbortController();
                     // Build conversation history for context
                     const conversationHistory = messages.map(msg => ({
                         role: msg.role,
@@ -2245,6 +2256,7 @@
                             'Content-Type': 'application/json',
                         },
                         credentials: 'include',
+                        signal: abortControllerRef.current.signal,
                         body: JSON.stringify({
                             message: trimmedMessage,
                             conversation: conversationHistory
@@ -2302,16 +2314,21 @@
                     }
 
                 } catch (streamError) {
+                    if (streamError?.name === 'AbortError') {
+                        return;
+                    }
                     console.log('Streaming failed, trying regular API:', streamError);
                     
                     // Fallback to regular API
                     try {
+                        abortControllerRef.current = new AbortController();
                         const response = await fetch(`${API_BASE}/api/ai/chat`, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                             },
                             credentials: 'include',
+                            signal: abortControllerRef.current.signal,
                             body: JSON.stringify({
                                 message: trimmedMessage,
                                 conversation: messages.map(msg => ({
@@ -2342,6 +2359,9 @@
                             }]);
                         }
                     } catch (error) {
+                        if (error?.name === 'AbortError') {
+                            return;
+                        }
                         console.error('AI Chat error:', error);
                         setMessages(prev => [...prev, { 
                             role: 'assistant', 
@@ -2353,6 +2373,7 @@
                     setIsLoading(false);
                     setIsStreaming(false);
                     setStreamingContent('');
+                    abortControllerRef.current = null;
                 }
             };
 
@@ -2497,6 +2518,27 @@
                 } catch (err) {
                     console.error('Failed to copy:', err);
                 }
+            };
+
+            const handleStopGeneration = () => {
+                if (abortControllerRef.current) {
+                    abortControllerRef.current.abort();
+                    abortControllerRef.current = null;
+                }
+                if (streamingContent && streamingContent.trim()) {
+                    const { mainContent, aiComment } = splitAIResponse(streamingContent);
+                    let sanitizedMain = sanitizeAiOutput(mainContent);
+                    sanitizedMain = sanitizeAiBold(sanitizedMain);
+                    if (sanitizedMain) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
+                    }
+                    if (aiComment) {
+                        setMessages(prev => [...prev, { role: 'assistant', content: aiComment, isComment: true }]);
+                    }
+                }
+                setIsLoading(false);
+                setIsStreaming(false);
+                setStreamingContent('');
             };
 
             const handleFormatMessage = async (content, index) => {
@@ -2723,13 +2765,13 @@
                                     rows={1}
                                 />
                                 <button
-                                    onClick={() => handleSendMessage()}
-                                    disabled={!inputValue.trim() || isLoading}
-                                    className="ai-send-button"
-                                    title="Send message"
+                                    onClick={() => (isLoading ? handleStopGeneration() : handleSendMessage())}
+                                    disabled={!isLoading && !inputValue.trim()}
+                                    className={`ai-send-button ${isLoading ? 'ai-send-button-stop' : ''}`}
+                                    title={isLoading ? "Stop generation" : "Send message"}
                                 >
                                     {isLoading ? (
-                                        <Icons.Loader size={18} />
+                                        <Icons.Stop size={18} />
                                     ) : (
                                         <Icons.Send size={18} />
                                     )}
