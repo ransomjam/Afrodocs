@@ -614,9 +614,17 @@
         }
 
         .ai-message-assistant ul, .ai-message-assistant ol {
-            margin: 0.2rem 0 0.4rem;
-            padding-left: 1.1rem;
-            line-height: 1.3;
+            margin: 0.35rem 0 0.6rem;
+            padding-left: 1.6rem;
+            line-height: 1.45;
+            list-style-position: outside;
+        }
+
+        .ai-message-assistant ul ul,
+        .ai-message-assistant ul ol,
+        .ai-message-assistant ol ul,
+        .ai-message-assistant ol ol {
+            margin-top: 0.3rem;
         }
 
         /* Responsive table wrapper for AI-generated tables */
@@ -641,7 +649,8 @@
         }
 
         .ai-message-assistant li {
-            margin: 0.1rem 0;
+            margin: 0.2rem 0;
+            padding-left: 0.15rem;
             font-weight: 400;
         }
 
