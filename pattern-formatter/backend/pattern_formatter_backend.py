@@ -959,9 +959,9 @@ AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing 
   - 5.4 Suggestions for Further Research
 
 ### RESEARCH PROPOSAL (Chapters 1-3 + Extras):
-- **Chapter One: Introduction** (same as thesis)
-- **Chapter Two: Literature Review** (same as thesis)
-- **Chapter Three: Research Methodology** (same as thesis)
+- **CHAPTER ONE**: Introduction (same as thesis)
+- **CHAPTER TWO**: Literature Review (same as thesis)
+- **CHAPTER 3**: Materials and Method (same as thesis)
 - **Budget and Timeline**
 - **References**
 
