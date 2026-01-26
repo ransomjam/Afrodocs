@@ -2100,6 +2100,15 @@
                         {!showPreview ? (
                             /* Centered Open Button with Info Message */
                             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                                {/* Done Indicator */}
+                                <div className="flex flex-col items-center gap-2 mb-4">
+                                    <div className="w-12 h-12 rounded-full bg-teal/20 border border-teal/50 flex items-center justify-center shadow-[0_0_20px_rgba(45,212,191,0.25)]">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-teal-200">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                    <span className="text-teal-200 text-xs tracking-[0.3em] font-semibold">DONE</span>
+                                </div>
                                 {/* Open Button */}
                                 <a 
                                     href={pdfUrl}
@@ -2139,17 +2148,6 @@
                                 />
                             </>
                         )}
-                    </div>
-                    {/* Open in new tab link - always visible */}
-                    <div className="flex items-center justify-center gap-3 py-3 bg-black/40 border-t border-white/10">
-                        <a 
-                            href={pdfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-teal hover:text-teal/80 flex items-center gap-1.5 font-medium"
-                        >
-                            <Icons.ExternalLink size={14} /> Open Preview
-                        </a>
                     </div>
                 </div>
             );
@@ -6781,18 +6779,6 @@
                                             {/* Action Buttons - Minimal on Mobile */}
                                             <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 md:gap-3">
                                                 <button
-                                                    onClick={() => handleDownload('docx')}
-                                                    className="flex items-center justify-center gap-1.5 px-3 py-2 md:px-4 md:py-2.5 bg-gradient-to-r from-teal to-cyan-600 text-white rounded-lg text-xs md:text-sm font-medium hover:opacity-90 transition-all"
-                                                >
-                                                    <Icons.Download /> <span className="hidden sm:inline">Download</span> DOCX
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDownload('pdf')}
-                                                    className="flex items-center justify-center gap-1.5 px-3 py-2 md:px-4 md:py-2.5 bg-gradient-to-r from-ocean to-teal text-white rounded-lg text-xs md:text-sm font-medium hover:opacity-90 transition-all"
-                                                >
-                                                    <Icons.Download /> <span className="hidden sm:inline">Download</span> PDF
-                                                </button>
-                                                <button
                                                     onClick={() => {
                                                         const currentJobId = result.job_id;
                                                         setMergeJobId(currentJobId);
@@ -6899,6 +6885,22 @@
                                                         </div>
                                                     )}
                                                 </div>
+                                            </div>
+
+                                            {/* Download Buttons - Under Preview */}
+                                            <div className="grid grid-cols-2 md:flex md:justify-center gap-2 md:gap-3">
+                                                <button
+                                                    onClick={() => handleDownload('docx')}
+                                                    className="flex items-center justify-center gap-1.5 px-3 py-2 md:px-5 md:py-2.5 bg-gradient-to-r from-teal to-cyan-600 text-white rounded-lg text-xs md:text-sm font-medium hover:opacity-90 transition-all"
+                                                >
+                                                    <Icons.Download /> <span className="hidden sm:inline">Download</span> DOCX
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDownload('pdf')}
+                                                    className="flex items-center justify-center gap-1.5 px-3 py-2 md:px-5 md:py-2.5 bg-gradient-to-r from-ocean to-teal text-white rounded-lg text-xs md:text-sm font-medium hover:opacity-90 transition-all"
+                                                >
+                                                    <Icons.Download /> <span className="hidden sm:inline">Download</span> PDF
+                                                </button>
                                             </div>
                                         </div>
                                     )}
