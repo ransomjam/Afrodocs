@@ -4577,8 +4577,9 @@
         };
 
         // Pricing Modal Component
-        const PricingModal = ({ isOpen, onClose, onSelectPlan, limitReached }) => {
+        const PricingModal = ({ isOpen, onClose, onSelectPlan, limitReached, isAuthenticated }) => {
             if (!isOpen) return null;
+            if (!isAuthenticated) return null;
 
             const plans = [
                 {
@@ -5015,8 +5016,12 @@
                         const errorData = await response.json();
                         if (errorData.error === 'LIMIT_REACHED') {
                             setError('Free tier limit reached (300 pages/month). Please upgrade to continue.');
-                            setPricingLimitReached(true);
-                            setShowPricingModal(true);
+                            if (isAuthenticated) {
+                                setPricingLimitReached(true);
+                                setShowPricingModal(true);
+                            } else {
+                                setShowAuthPrompt(true);
+                            }
                         } else {
                             throw new Error(errorData.error || 'Upload failed');
                         }
@@ -5533,6 +5538,7 @@
 
             // Auth State
             const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+            const [showAuthPrompt, setShowAuthPrompt] = React.useState(false);
             const [currentUser, setCurrentUser] = React.useState(null);
             const [checkingAuth, setCheckingAuth] = React.useState(true);
             const [showAdmin, setShowAdmin] = React.useState(false);
@@ -5563,6 +5569,7 @@
 
             const handleLogin = (username) => {
                 setIsAuthenticated(true);
+                setShowAuthPrompt(false);
                 // Fetch full user details
                 fetch(`${API_BASE}/api/auth/status`, { credentials: 'include' })
                     .then(res => res.json())
@@ -5844,6 +5851,15 @@
                         />
                     );
                 }
+                if (showAuthPrompt) {
+                    return (
+                        <AuthPage
+                            onLogin={handleLogin}
+                            isSignup={true}
+                            guestLimitMessage="Create an account to view plans and upgrade."
+                        />
+                    );
+                }
                 // Allow guest to use the app for free documents
             }
 
@@ -6046,10 +6062,15 @@
                                     <div className="app-user-plan text-left flex items-center gap-2">
                                         {currentUser?.pages_balance > 0 ? (
                                             <span className="text-teal">Pro Account</span>
-                                        ) : (
+                                        ) : isAuthenticated ? (
                                             <>
                                                 <span>Free</span>
                                                 <span className="px-1.5 py-0.5 bg-gradient-to-r from-[#1E5A8E] to-teal text-white text-[9px] font-bold rounded">UPGRADE</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>Guest</span>
+                                                <span className="px-1.5 py-0.5 bg-gradient-to-r from-[#1E5A8E] to-teal text-white text-[9px] font-bold rounded">SIGN UP</span>
                                             </>
                                         )}
                                     </div>
@@ -6084,10 +6105,18 @@
                                     </div>
                                     <div className="p-2 pt-1.5 border-t border-teal/10 space-y-2">
                                         <button
-                                            onClick={() => { setShowPricingModal(true); setShowProfile(false); setSidebarCollapsed(true); }}
+                                            onClick={() => {
+                                                if (isAuthenticated) {
+                                                    setShowPricingModal(true);
+                                                } else {
+                                                    setShowAuthPrompt(true);
+                                                }
+                                                setShowProfile(false);
+                                                setSidebarCollapsed(true);
+                                            }}
                                             className="w-full py-1.5 bg-gradient-to-r from-[#1E5A8E] to-teal text-white rounded text-[10px] font-bold hover:opacity-90 transition-all"
                                         >
-                                            Upgrade
+                                            {isAuthenticated ? 'Upgrade' : 'Sign up'}
                                         </button>
                                         {/* Referral Link */}
                                         {currentUser?.referral_code && (
@@ -6489,6 +6518,7 @@
                         onClose={() => { setShowPricingModal(false); setPricingLimitReached(false); }} 
                         onSelectPlan={handleUpgrade}
                         limitReached={pricingLimitReached}
+                        isAuthenticated={isAuthenticated}
                     />
 
                     {showSupportModal && (
