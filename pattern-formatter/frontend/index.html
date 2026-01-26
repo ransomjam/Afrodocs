@@ -2164,18 +2164,103 @@
             // Normalize line endings
             let content = text.replace(/\r\n/g, '\n');
 
+            const convertMarkdownTables = (input) => {
+                const lines = input.split('\n');
+                const output = [];
+                let tableLines = [];
+
+                const isAlignmentCell = (value) => /^:?-+:?$/.test(value);
+                const isAlignmentLine = (line) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return false;
+                    if (trimmed.includes('|')) {
+                        const parts = trimmed.split('|').map(p => p.trim());
+                        const normalized = parts.filter(p => p !== '');
+                        return normalized.length > 0 && normalized.every(isAlignmentCell);
+                    }
+                    return isAlignmentCell(trimmed);
+                };
+                const isTableLine = (line) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return false;
+                    return trimmed.includes('|') || isAlignmentCell(trimmed);
+                };
+
+                const parseCells = (line) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return [];
+                    if (trimmed.includes('|')) {
+                        const parts = trimmed.split('|').map(p => p.trim());
+                        if (parts.every(p => p === '')) return [];
+                        if (parts[0] === '') parts.shift();
+                        if (parts[parts.length - 1] === '') parts.pop();
+                        return parts;
+                    }
+                    return [trimmed];
+                };
+
+                const buildTableHtml = (linesBlock) => {
+                    const cells = linesBlock.flatMap(parseCells);
+                    const alignIndex = cells.findIndex(isAlignmentCell);
+                    if (alignIndex === -1) {
+                        return linesBlock.join('\n');
+                    }
+                    let alignCount = 0;
+                    for (let i = alignIndex; i < cells.length; i += 1) {
+                        if (!isAlignmentCell(cells[i])) break;
+                        alignCount += 1;
+                    }
+                    if (alignCount === 0) {
+                        return linesBlock.join('\n');
+                    }
+                    const columnCount = alignCount;
+                    let headerCells = cells.slice(0, alignIndex);
+                    let bodyCells = cells.slice(alignIndex + alignCount);
+                    if (headerCells.length > columnCount) {
+                        bodyCells = headerCells.slice(columnCount).concat(bodyCells);
+                        headerCells = headerCells.slice(0, columnCount);
+                    }
+                    while (headerCells.length < columnCount) {
+                        headerCells.push('');
+                    }
+                    const rows = [];
+                    for (let i = 0; i < bodyCells.length; i += columnCount) {
+                        const row = bodyCells.slice(i, i + columnCount);
+                        while (row.length < columnCount) {
+                            row.push('');
+                        }
+                        rows.push(row);
+                    }
+                    const thead = '<tr>' + headerCells.map(h => `<th>${h}</th>`).join('') + '</tr>';
+                    const tbody = rows.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
+                    return `<div class="ai-table-wrapper"><table>${thead}${tbody}</table></div>`;
+                };
+
+                const flushTable = () => {
+                    if (!tableLines.length) return;
+                    const hasAlignment = tableLines.some(isAlignmentLine);
+                    if (!hasAlignment) {
+                        output.push(tableLines.join('\n'));
+                    } else {
+                        output.push(buildTableHtml(tableLines));
+                    }
+                    tableLines = [];
+                };
+
+                for (const line of lines) {
+                    if (isTableLine(line)) {
+                        tableLines.push(line);
+                    } else {
+                        flushTable();
+                        output.push(line);
+                    }
+                }
+                flushTable();
+                return output.join('\n');
+            };
+
             // Convert markdown tables (pipe syntax) to HTML tables first
-            const tableBlockRegex = /(^\|.*\|\n\|[-: \|]*\|\n(?:\|.*\|\n?)*)/gm;
-            content = content.replace(tableBlockRegex, (match) => {
-                const lines = match.trim().split('\n');
-                if (lines.length < 2) return match;
-                const headerLine = lines[0].replace(/^\||\|$/g, '');
-                const headers = headerLine.split('|').map(h => h.trim());
-                const bodyLines = lines.slice(2).map(l => l.replace(/^\||\|$/g, '').split('|').map(c => c.trim()));
-                const thead = '<tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr>';
-                const tbody = bodyLines.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('');
-                return `<div class="ai-table-wrapper"><table>${thead}${tbody}</table></div>`;
-            });
+            content = convertMarkdownTables(content);
 
             // Convert markdown to HTML (no italics conversion per request)
             let html = content
