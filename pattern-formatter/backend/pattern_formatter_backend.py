@@ -907,6 +907,7 @@ def record_ai_request(prompt, request_type):
 DEEPSEEK_API_KEY = "sk-4a857c0c76cf4db89fef65b871da982a"
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
+AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "8192"))
 
 # System prompt for the AI assistant
 AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing assistant. Follow these guidelines strictly:
@@ -1023,7 +1024,7 @@ Requirements:
 """
 
 
-def _call_deepseek(messages, temperature=0.4, max_tokens=4096, timeout=90):
+def _call_deepseek(messages, temperature=0.4, max_tokens=AI_MAX_TOKENS, timeout=90):
     import requests
 
     response = requests.post(
@@ -1221,7 +1222,7 @@ Requirements:
 """
 
 
-def _call_deepseek(messages, temperature=0.4, max_tokens=4096, timeout=90):
+def _call_deepseek(messages, temperature=0.4, max_tokens=AI_MAX_TOKENS, timeout=90):
     import requests
 
     response = requests.post(
@@ -1256,7 +1257,6 @@ def restructure_text_with_ai(text):
         {"role": "user", "content": f"Restructure the text below into AfroDocs academic formatting:\n\n{text}"}
     ]
     return normalize_ai_output(_call_deepseek(messages))
-    return _call_deepseek(messages)
 
 
 def extract_text_from_docx_bytes(file_bytes):
@@ -1315,7 +1315,7 @@ def ai_chat():
                 "model": DEEPSEEK_MODEL,
                 "messages": messages,
                 "temperature": 0.7,
-                "max_tokens": 4096
+                "max_tokens": AI_MAX_TOKENS
             },
             timeout=60
         )
@@ -1323,7 +1323,6 @@ def ai_chat():
         if response.status_code == 200:
             result = response.json()
             ai_response = normalize_ai_output(result['choices'][0]['message']['content'])
-            ai_response = normalize_ai_bolding(result['choices'][0]['message']['content'])
             record_ai_request(raw_message, "chat")
             return jsonify({'response': ai_response, 'success': True}), 200
         else:
@@ -1400,7 +1399,7 @@ def ai_chat_stream():
                     "model": DEEPSEEK_MODEL,
                     "messages": messages,
                     "temperature": 0.7,
-                    "max_tokens": 4096,
+                    "max_tokens": AI_MAX_TOKENS,
                     "stream": True
                 },
                 stream=True,
