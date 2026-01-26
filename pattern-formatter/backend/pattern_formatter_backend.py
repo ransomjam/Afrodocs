@@ -5798,58 +5798,84 @@ class PatternEngine:
                 return True
         return False
     
-    def remove_toc_from_lines(self, lines):
+    def _front_matter_placeholder_type(self, front_matter_type):
+        placeholders = {
+            'toc': 'toc_placeholder',
+            'list_of_tables': 'list_of_tables_placeholder',
+            'list_of_figures': 'list_of_figures_placeholder',
+        }
+        return placeholders.get(front_matter_type)
+
+    def _is_front_matter_entry_line(self, front_matter_type, text):
+        if not text:
+            return False
+
+        clean_text = text.strip()
+
+        if front_matter_type == 'toc':
+            return self.is_toc_content_line(clean_text) or self.is_toc_entry(clean_text)
+
+        if front_matter_type == 'list_of_figures':
+            return bool(re.match(r'^(Figure|Fig\.)\s+\d+', clean_text, re.IGNORECASE)) or self.is_toc_content_line(clean_text)
+
+        if front_matter_type == 'list_of_tables':
+            return bool(re.match(r'^(Table|Tbl\.?|Tab\.?)\s+\d+', clean_text, re.IGNORECASE)) or self.is_toc_content_line(clean_text)
+
+        return False
+
+    def strip_front_matter_placeholders(self, lines):
         """
-        Remove Table of Contents section from document lines.
-        Returns lines without TOC.
+        Remove existing TOC/LOF/LOT content and replace it with placeholders so the
+        system-generated lists can be inserted at the same location.
         """
         cleaned_lines = []
-        in_toc = False
-        toc_blank_count = 0
-        
+        in_section = None
+        blank_count = 0
+
         for line in lines:
-            text = line.strip() if isinstance(line, str) else line.get('text', '').strip()
-            
-            # Check if this line starts TOC
-            if self.is_toc_header_line(text):
-                in_toc = True
-                toc_blank_count = 0
-                continue  # Skip TOC header
-            
-            if in_toc:
-                # Track blank lines to detect TOC end
-                if not text:
-                    toc_blank_count += 1
-                    if toc_blank_count >= 2:
-                        # Two consecutive blank lines - end of TOC
-                        in_toc = False
+            text = line if isinstance(line, str) else line.get('text', '')
+            stripped = text.strip()
+
+            while True:
+                if in_section:
+                    if not stripped:
+                        blank_count += 1
+                        if blank_count >= 2:
+                            in_section = None
+                        break
+
+                    next_section = self.get_front_matter_section_type(stripped)
+                    if next_section and next_section != in_section:
+                        in_section = None
+                        blank_count = 0
+                        continue
+
+                    if re.match(r'^#+\s+', stripped) or (stripped.isupper() and len(stripped) > 5):
+                        in_section = None
+                        blank_count = 0
+                        continue
+
+                    if self._is_front_matter_entry_line(in_section, stripped):
+                        break
+
+                    in_section = None
+                    blank_count = 0
                     continue
-                
-                # Check if still in TOC content
-                if self.is_toc_content_line(text):
-                    continue  # Skip TOC content
-                
-                # Check if this looks like a real heading (end of TOC)
-                if re.match(r'^#+\s+', text) or (text.isupper() and len(text) > 5):
-                    # Real content starting - end of TOC
-                    in_toc = False
-                    cleaned_lines.append(line)
-                    continue
-                
-                # Check if this line has chapter/section-like content (end of TOC)
-                if re.match(r'^\d+\.\s+[A-Z]', text) and not re.search(r'\.\.\.|…|\s+\d+\s*$', text):
-                    # Looks like actual content, not TOC entry
-                    in_toc = False
-                    cleaned_lines.append(line)
-                    continue
-                
-                # Fallback: If line is not blank and not TOC content, assume TOC ended
-                # This prevents deleting the whole document if headings aren't detected
-                in_toc = False
+
+                front_matter_type = self.get_front_matter_section_type(stripped)
+                placeholder_type = self._front_matter_placeholder_type(front_matter_type)
+                if placeholder_type:
+                    cleaned_lines.append({
+                        'type': placeholder_type,
+                        'text': stripped,
+                    })
+                    in_section = front_matter_type
+                    blank_count = 0
+                    break
+
                 cleaned_lines.append(line)
-            else:
-                cleaned_lines.append(line)
-        
+                break
+
         return cleaned_lines
     
     def get_key_point_type(self, text):
@@ -6389,7 +6415,7 @@ class PatternEngine:
 
     def process_short_document(self, text):
         """
-        Process a short document: remove TOC, emphasize key points, and format point-form content.
+        Process a short document: emphasize key points, and format point-form content.
         Returns processed text.
         """
         if not text:
@@ -6402,17 +6428,11 @@ class PatternEngine:
         
         lines = text.split('\n')
         
-        # Step 1: Remove Table of Contents
-        lines = self.remove_toc_from_lines(lines)
-        
-        # Convert lines back to text for point-form processing
-        text = '\n'.join([line if isinstance(line, str) else line.get('text', '') for line in lines])
-        
-        # Step 2: Process point-form content (convert serial lists to bullet points, standardize lists)
+        # Step 1: Process point-form content (convert serial lists to bullet points, standardize lists)
         if self.policy.list_numbering_mode == "assistive":
             text = self.process_point_form_content(text)
         
-        # Step 3: Process each line for key point emphasis
+        # Step 2: Process each line for key point emphasis
         if not self.policy.enable_regex_auto_bold:
             return text
         lines = text.split('\n')
@@ -10079,7 +10099,7 @@ class DocumentProcessor:
         # SECOND: Apply document-wide spacing cleanup
         text = self.engine.clean_document_spacing(text)
         
-        # THIRD: Apply short document processing (TOC removal, key point emphasis)
+        # THIRD: Apply short document processing (key point emphasis)
         text = self.engine.process_short_document(text)
         
         # THIRD: AI Content Cleaning
@@ -10113,6 +10133,7 @@ class DocumentProcessor:
     
     def process_lines(self, lines):
         """Core line-by-line processing"""
+        lines = self.engine.strip_front_matter_placeholders(lines)
         analyzed = []
         stats = {
             'total_lines': len(lines),
@@ -10166,6 +10187,20 @@ class DocumentProcessor:
             else:
                 next_line = ''
             
+            # Check for front matter placeholders FIRST (before pattern analysis)
+            if isinstance(line_data, dict) and line_data.get('type') in [
+                'toc_placeholder',
+                'list_of_tables_placeholder',
+                'list_of_figures_placeholder',
+            ]:
+                analysis = {
+                    'type': line_data['type'],
+                    'text': text,
+                    'confidence': 1.0,
+                }
+                analyzed.append(analysis)
+                continue
+
             # Check for image placeholder FIRST (before pattern analysis)
             if isinstance(line_data, dict) and line_data.get('type') == 'image_placeholder':
                 analysis = {
@@ -10473,6 +10508,22 @@ class DocumentProcessor:
                 if current_list and current_section:
                     current_section['content'].append(current_list)
                     current_list = None
+                continue
+
+            if line['type'] in ['toc_placeholder', 'list_of_tables_placeholder', 'list_of_figures_placeholder']:
+                if current_list and current_section:
+                    current_section['content'].append(current_list)
+                    current_list = None
+                if current_table and current_section:
+                    current_section['content'].append(current_table)
+                    current_table = None
+                if current_section:
+                    sections.append(current_section)
+                sections.append({
+                    'type': line['type'],
+                    'text': line.get('text', ''),
+                })
+                current_section = None
                 continue
             
             # Detect reference section
@@ -11902,6 +11953,16 @@ class WordGenerator:
         
         # TOC is included only if user explicitly enabled it
         needs_toc = include_toc
+
+        toc_placeholder_present = any(
+            isinstance(s, dict) and s.get('type') == 'toc_placeholder' for s in structured_data
+        )
+        lof_placeholder_present = any(
+            isinstance(s, dict) and s.get('type') == 'list_of_figures_placeholder' for s in structured_data
+        )
+        lot_placeholder_present = any(
+            isinstance(s, dict) and s.get('type') == 'list_of_tables_placeholder' for s in structured_data
+        )
         
         # Detect short documents that should NOT have section page breaks
         # Short documents are < 5 pages OR have < 5 sections
@@ -12019,18 +12080,18 @@ class WordGenerator:
         
         # Add TOC placeholder if needed (uses Word's built-in TOC field)
         added_toc_break = False
-        if needs_toc:
+        if needs_toc and not toc_placeholder_present:
             # Add TOC field - will be updated by Word after saving
             self._add_toc_placeholder()
             added_toc_break = True
             
             # Add List of Figures after TOC if document has figures
-            if self.has_figures:
+            if self.has_figures and not lof_placeholder_present:
                 self._add_lof_placeholder()
                 added_toc_break = True
             
             # Add List of Tables after LOF if document has tables
-            if self.has_tables:
+            if self.has_tables and not lot_placeholder_present:
                 self._add_lot_placeholder()
                 added_toc_break = True
         
@@ -12042,6 +12103,25 @@ class WordGenerator:
         # - If TOC exists: TOC already adds a page break, so adding another creates a double break
         self.is_first_section = True
         for i, section in enumerate(structured_data):
+            if section.get('type') == 'toc_placeholder':
+                if needs_toc:
+                    self._add_toc_placeholder()
+                    if self.has_figures and not lof_placeholder_present:
+                        self._add_lof_placeholder()
+                    if self.has_tables and not lot_placeholder_present:
+                        self._add_lot_placeholder()
+                continue
+
+            if section.get('type') == 'list_of_figures_placeholder':
+                if needs_toc and self.has_figures:
+                    self._add_lof_placeholder()
+                continue
+
+            if section.get('type') == 'list_of_tables_placeholder':
+                if needs_toc and self.has_tables:
+                    self._add_lot_placeholder()
+                continue
+
             # Special handling for "Document" title section (auto-generated for unstructured text)
             if section.get('heading', '').strip().lower() == 'document':
                 # Just add content, skip heading
