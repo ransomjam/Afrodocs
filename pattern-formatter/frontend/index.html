@@ -6159,6 +6159,35 @@
                                 </button>
                             </div>
 
+                            {/* Community Link */}
+                            <div className="app-nav-section">
+                                <a 
+                                    href="https://chat.whatsapp.com/CrSrujvvZj41FNvIWbkJoG?mode=gi_t" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="app-nav-item hover:text-teal"
+                                    title="Join our community"
+                                >
+                                    <span className="app-nav-item-icon">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                            <circle cx="9" cy="7" r="4"></circle>
+                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                        </svg>
+                                    </span>
+                                    <span>Join our community</span>
+                                </a>
+                                <button
+                                    onClick={openSupportModal}
+                                    className="app-nav-item hover:text-teal"
+                                    title="Contact support"
+                                >
+                                    <span className="app-nav-item-icon"><Icons.MessageSquare size={18} /></span>
+                                    <span>Contact support</span>
+                                </button>
+                            </div>
+
                             {/* User Documents Section */}
                             {userDocuments.length > 0 && (
                                 <div className="app-nav-section">
@@ -6274,35 +6303,6 @@
                                     </button>
                                 </div>
                             )}
-
-                            {/* Community Link */}
-                            <div className="app-nav-section mt-auto">
-                                <a 
-                                    href="https://chat.whatsapp.com/CrSrujvvZj41FNvIWbkJoG?mode=gi_t" 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    className="app-nav-item hover:text-teal"
-                                    title="Join our community"
-                                >
-                                    <span className="app-nav-item-icon">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                            <circle cx="9" cy="7" r="4"></circle>
-                                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                        </svg>
-                                    </span>
-                                    <span>Join our community</span>
-                                </a>
-                                <button
-                                    onClick={openSupportModal}
-                                    className="app-nav-item hover:text-teal"
-                                    title="Contact support"
-                                >
-                                    <span className="app-nav-item-icon"><Icons.MessageSquare size={18} /></span>
-                                    <span>Contact support</span>
-                                </button>
-                            </div>
                         </nav>
 
                         {/* Sidebar Footer - User */}
