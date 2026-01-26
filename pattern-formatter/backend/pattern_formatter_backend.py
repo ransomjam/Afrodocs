@@ -9964,7 +9964,7 @@ class DocumentProcessor:
 
         return combined, has_shapes
         
-    def process_docx(self, file_path):
+    def process_docx(self, file_path, strip_front_matter=True):
         """Process Word document line by line, preserving table and image positions"""
         doc = Document(file_path)
         
@@ -10169,12 +10169,12 @@ class DocumentProcessor:
                         break
                     table_index += 1
         
-        return self.process_lines(lines), self.extracted_images, self.extracted_shapes
+        return self.process_lines(lines, strip_front_matter=strip_front_matter), self.extracted_images, self.extracted_shapes
     
-    def process_text(self, text):
+    def process_text(self, text, strip_front_matter=True):
         """Process plain text (no images in plain text)"""
         if not text:
-            return self.process_lines([]), []
+            return self.process_lines([], strip_front_matter=strip_front_matter), []
 
         # Normalize line endings to ensure consistent splitting
         text = text.replace('\r\n', '\n').replace('\r', '\n')
@@ -10225,11 +10225,12 @@ class DocumentProcessor:
         # FOURTH: Optimize Page Breaks for AI
         lines = self.engine.optimize_page_breaks_for_ai(lines)
         
-        return self.process_lines(lines), [], []  # No images or shapes in plain text
+        return self.process_lines(lines, strip_front_matter=strip_front_matter), [], []  # No images or shapes in plain text
     
-    def process_lines(self, lines):
+    def process_lines(self, lines, strip_front_matter=True):
         """Core line-by-line processing"""
-        lines = self.engine.strip_front_matter_placeholders(lines)
+        if strip_front_matter:
+            lines = self.engine.strip_front_matter_placeholders(lines)
         analyzed = []
         stats = {
             'total_lines': len(lines),
@@ -16227,7 +16228,7 @@ def upload_document():
 
         if restructure_with_ai and restructured_text is not None:
             # Process restructured text in place of the original file content
-            proc_result = processor.process_text(restructured_text)
+            proc_result = processor.process_text(restructured_text, strip_front_matter=include_toc)
             if isinstance(proc_result, tuple):
                 if len(proc_result) == 3:
                     result, images, shapes = proc_result
@@ -16244,7 +16245,7 @@ def upload_document():
                 shapes = []
         elif file_ext == '.docx':
             # Robust unpacking to handle both dict and tuple returns (now returns 3-tuple with shapes)
-            proc_result = processor.process_docx(input_path)
+            proc_result = processor.process_docx(input_path, strip_front_matter=include_toc)
             if isinstance(proc_result, tuple):
                 if len(proc_result) == 3:
                     result, images, shapes = proc_result
@@ -16265,7 +16266,7 @@ def upload_document():
             with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
                 text = f.read()
             # Robust unpacking for text processing too (now returns 3-tuple with shapes)
-            proc_result = processor.process_text(text)
+            proc_result = processor.process_text(text, strip_front_matter=include_toc)
             if isinstance(proc_result, tuple):
                 if len(proc_result) == 3:
                     result, images, shapes = proc_result
