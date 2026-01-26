@@ -11522,6 +11522,27 @@ class DocumentProcessor:
                 current_section['content'].append(current_list)
         if current_table and current_section:
             current_section['content'].append(current_table)
+        if hasattr(self, '_current_table') and self._current_table and current_section:
+            if self._current_table.get('subtype') == 'word_table' or len(self._current_table.get('content', [])) >= 1:
+                current_section['content'].append(self._current_table)
+            self._current_table = None
+        if hasattr(self, '_current_plain_table') and self._current_plain_table and current_section:
+            if self._is_valid_table_block(self._current_plain_table['content']):
+                current_section['content'].append(self._current_plain_table)
+            else:
+                for row in self._current_plain_table['content']:
+                    if row.get('row_type') == 'data' and 'cells' in row:
+                        text = ' '.join(row['cells'])
+                        current_section['content'].append({
+                            'type': 'paragraph',
+                            'content': text
+                        })
+                    elif 'original_text' in row:
+                        current_section['content'].append({
+                            'type': 'paragraph',
+                            'content': row['original_text']
+                        })
+            self._current_plain_table = None
         
         # Add final section
         if current_section:
@@ -16826,6 +16847,14 @@ def generate_preview_markdown(structured):
             
             elif item.get('type') == 'table':
                 rows = item.get('rows', [])
+                if not rows and item.get('content'):
+                    content_rows = []
+                    for entry in item.get('content', []):
+                        if not isinstance(entry, dict):
+                            continue
+                        if entry.get('type') == 'row' and isinstance(entry.get('cells'), list):
+                            content_rows.append(entry['cells'])
+                    rows = content_rows
                 if rows:
                     # Header
                     markdown += '| ' + ' | '.join(str(cell) for cell in rows[0]) + ' |\n'
