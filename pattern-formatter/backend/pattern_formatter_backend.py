@@ -9835,11 +9835,9 @@ class DocumentProcessor:
                                 logger.info(f"Added image placeholder for {img['image_id']} at paragraph {paragraph_index}")
                         
                         if text:
-                            # Skip AI meta-commentary
-                            if self.engine.detect_ai_generated_content(text):
-                                paragraph_index += 1
-                                break
-                                
+                            # Detect AI meta-commentary but preserve content to avoid data loss
+                            is_ai_meta = self.engine.detect_ai_generated_content(text)
+
                             # Clean AI artifacts
                             text, metadata = self.engine.clean_ai_content(text)
 
@@ -9867,6 +9865,7 @@ class DocumentProcessor:
                                 'bold': is_bold,
                                 'bold_all': is_bold_all,
                                 'font_size': font_size,
+                                'ai_meta': is_ai_meta,
                                 'is_protected': is_certification_content,  # Preserve original content for certification/declaration pages
                             })
                         
@@ -9946,9 +9945,8 @@ class DocumentProcessor:
         # THIRD: AI Content Cleaning
         lines = []
         for line in text.split('\n'):
-            # Skip AI meta-commentary
-            if self.engine.detect_ai_generated_content(line):
-                continue
+            # Detect AI meta-commentary but preserve content to avoid data loss
+            is_ai_meta = self.engine.detect_ai_generated_content(line)
                 
             # Clean AI artifacts
             cleaned_line, metadata = self.engine.clean_ai_content(line)
@@ -9965,6 +9963,7 @@ class DocumentProcessor:
                 'bold_all': metadata.get('bold', False),
                 'font_size': 12,
                 'markdown_heading_level': heading_level,  # Preserve heading level from markdown
+                'ai_meta': is_ai_meta,
             })
             
         # FOURTH: Optimize Page Breaks for AI
