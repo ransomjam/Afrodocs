@@ -2177,6 +2177,8 @@
                 const lines = input.split('\n');
                 const output = [];
                 let tableLines = [];
+                let alignmentIndex = null;
+                let hasDataAfterAlignment = false;
 
                 const isAlignmentCell = (value) => /^:?-+:?$/.test(value);
                 const isAlignmentLine = (line) => {
@@ -2245,26 +2247,48 @@
                     return `<div class="ai-table-wrapper"><table>${thead}${tbody}</table></div>`;
                 };
 
-                const flushTable = () => {
-                    if (!tableLines.length) return;
-                    const hasAlignment = tableLines.some(isAlignmentLine);
+                const flushTable = (linesBlock = tableLines) => {
+                    if (!linesBlock.length) return;
+                    const hasAlignment = linesBlock.some(isAlignmentLine);
                     if (!hasAlignment) {
-                        output.push(tableLines.join('\n'));
+                        output.push(linesBlock.join('\n'));
                     } else {
-                        output.push(buildTableHtml(tableLines));
+                        output.push(buildTableHtml(linesBlock));
                     }
+                };
+
+                const resetTableState = () => {
                     tableLines = [];
+                    alignmentIndex = null;
+                    hasDataAfterAlignment = false;
                 };
 
                 for (const line of lines) {
                     if (isTableLine(line)) {
+                        const isAlignment = isAlignmentLine(line);
+                        if (isAlignment && alignmentIndex !== null && hasDataAfterAlignment) {
+                            const headerLine = tableLines[tableLines.length - 1];
+                            const previousTable = tableLines.slice(0, tableLines.length - 1);
+                            flushTable(previousTable);
+                            resetTableState();
+                            tableLines.push(headerLine);
+                        }
+
                         tableLines.push(line);
+                        if (isAlignment) {
+                            alignmentIndex = tableLines.length - 1;
+                            hasDataAfterAlignment = false;
+                        } else if (alignmentIndex !== null) {
+                            hasDataAfterAlignment = true;
+                        }
                     } else {
                         flushTable();
+                        resetTableState();
                         output.push(line);
                     }
                 }
                 flushTable();
+                resetTableState();
                 return output.join('\n');
             };
 
