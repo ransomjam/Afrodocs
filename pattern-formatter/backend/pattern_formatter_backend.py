@@ -14547,16 +14547,34 @@ class WordGenerator:
         # No numbering found
         return '', text
 
-    def _add_section_content(self, section):
-        """Add content of a section"""
-        # Check if this is a references section
-        is_references_section = section.get('is_references_section', False)
-        heading_lower = section.get('heading', '').lower()
-        if 'reference' in heading_lower or 'bibliography' in heading_lower or 'works cited' in heading_lower:
-            is_references_section = True
+    def _add_section_content(self, section_or_item):
+        """Add content of a section or a single content item
         
-        # Collect and sort references if this is a references section
-        content_items = list(section.get('content', []))
+        This method can receive either:
+        1. A section dict with 'content' key containing a list of items
+        2. An individual content item dict with 'type' key (paragraph, definition, etc.)
+        """
+        # Determine if we received a section dict or an individual content item
+        # Individual content items have a 'type' key like 'paragraph', 'definition', etc.
+        # Section dicts have 'content' key with a list of items
+        is_individual_item = 'type' in section_or_item and 'content' not in section_or_item
+        
+        if is_individual_item:
+            # Process single content item - wrap in a list and process
+            content_items = [section_or_item]
+            is_references_section = False
+        else:
+            # Process section dict - extract content list
+            section = section_or_item
+            # Check if this is a references section
+            is_references_section = section.get('is_references_section', False)
+            heading_lower = section.get('heading', '').lower()
+            if 'reference' in heading_lower or 'bibliography' in heading_lower or 'works cited' in heading_lower:
+                is_references_section = True
+            
+            # Collect content items from section
+            content_items = list(section.get('content', []))
+        
         if is_references_section:
             # Separate references from other content
             references = [item for item in content_items if isinstance(item, dict) and item.get('type') == 'reference']
@@ -16765,11 +16783,24 @@ def generate_preview_markdown(structured):
         if not isinstance(section, dict):
             logger.warning(f"Expected dict for section, got {type(section)}: {section}")
             continue
+        
+        section_type = section.get('type', 'section')
+        
+        # Get heading - check both 'heading' and 'title' keys (prominent_section uses 'title')
+        heading = section.get('heading', '') or section.get('title', '')
+        
+        # For chapter sections, include chapter_title if present
+        if section_type == 'chapter' and section.get('chapter_title'):
+            heading = f"{heading}: {section.get('chapter_title')}"
+        
+        # Skip sections with no valid heading
+        if not heading or heading == 'N/A':
+            heading = 'Untitled'
             
         # Add heading
         level = min(section.get('level', 1), 6)
         heading_prefix = '#' * level
-        markdown += f"{heading_prefix} {section.get('heading', 'Untitled')}\n\n"
+        markdown += f"{heading_prefix} {heading}\n\n"
         
         # Add content
         for item in section.get('content', []):
