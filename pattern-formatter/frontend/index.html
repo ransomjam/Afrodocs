@@ -467,7 +467,7 @@
             padding: 1rem;
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 1rem;
         }
 
         .ai-restructure-bar {
@@ -567,12 +567,19 @@
             border-bottom-right-radius: 0.25rem;
         }
 
+        .ai-user-text {
+            margin: 0;
+            line-height: 1.5;
+        }
+
         .ai-message-assistant {
-            background: rgba(255, 255, 255, 0.1);
-            color: #E2E8F0;
+            background: transparent;
+            color: #F7FAFC;
             align-self: flex-start;
-            border-bottom-left-radius: 0.25rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0;
+            border: none;
+            max-width: 100%;
+            padding: 0.25rem 0;
         }
 
         .ai-message-comment {
@@ -607,9 +614,9 @@
         }
 
         .ai-message-assistant ul, .ai-message-assistant ol {
-            margin: 0.2rem 0;
-            padding-left: 1.05rem;
-            line-height: 1.35;
+            margin: 0.35rem 0 0.75rem;
+            padding-left: 1.25rem;
+            line-height: 1.6;
         }
 
         /* Responsive table wrapper for AI-generated tables */
@@ -634,26 +641,28 @@
         }
 
         .ai-message-assistant li {
-            margin: 0.12rem 0;
+            margin: 0.25rem 0;
         }
 
         .ai-message-assistant h1, .ai-message-assistant h2, .ai-message-assistant h3, 
         .ai-message-assistant h4, .ai-message-assistant h5, .ai-message-assistant h6 {
-            color: #00B4A6; /* topics in green */
-            margin: 0 0 0.35rem 0;
+            color: #F7FAFC;
+            margin: 0.85rem 0 0.35rem;
             font-weight: 700;
             display: block;
-            line-height: 1.35;
+            line-height: 1.4;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
-        .ai-message-assistant h1 { font-size: 1.25rem; }
-        .ai-message-assistant h2 { font-size: 1.125rem; }
-        .ai-message-assistant h3 { font-size: 1rem; }
+        .ai-message-assistant h1 { font-size: 1.2rem; }
+        .ai-message-assistant h2 { font-size: 1.05rem; }
+        .ai-message-assistant h3 { font-size: 0.98rem; }
 
         .ai-message-assistant p {
-            margin: 0;
-            line-height: 1.35;
-            color: white; /* body in white */
+            margin: 0 0 0.75rem;
+            line-height: 1.6;
+            color: #F7FAFC;
         }
 
         .ai-message-assistant p + p {
@@ -661,7 +670,8 @@
         }
 
         .ai-message-assistant strong {
-            color: #00B4A6;
+            color: #F7FAFC;
+            font-weight: 700;
         }
 
         .ai-message-actions {
@@ -713,11 +723,70 @@
 
         .ai-input-container {
             display: flex;
-            gap: 0.5rem;
+            flex-direction: column;
+            gap: 0.75rem;
             padding: 1rem;
             background: rgba(0, 0, 0, 0.3);
             border-top: 1px solid rgba(255, 255, 255, 0.1);
+            align-items: stretch;
+        }
+
+        .ai-input-row {
+            display: flex;
+            gap: 0.5rem;
             align-items: flex-end;
+        }
+
+        .ai-upload-button {
+            width: 44px;
+            height: 44px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #F7FAFC;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .ai-upload-button:hover {
+            border-color: rgba(0, 180, 166, 0.6);
+            color: #00B4A6;
+            box-shadow: 0 4px 12px rgba(0, 180, 166, 0.25);
+        }
+
+        .ai-attachment-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .ai-attachment-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.6rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            color: #E2E8F0;
+            font-size: 0.75rem;
+        }
+
+        .ai-attachment-chip button {
+            color: inherit;
+            opacity: 0.6;
+            transition: opacity 0.2s ease;
+        }
+
+        .ai-attachment-chip button:hover {
+            opacity: 1;
+        }
+
+        .ai-attachment-error {
+            font-size: 0.75rem;
+            color: #FCA5A5;
         }
 
         .ai-input {
@@ -748,11 +817,13 @@
         }
 
         .ai-send-button {
-            background: linear-gradient(135deg, #00B4A6, #1E5A8E);
+            background: #00B4A6;
             color: white;
             border: none;
-            border-radius: 0.75rem;
-            padding: 0.75rem 1.25rem;
+            border-radius: 999px;
+            width: 44px;
+            height: 44px;
+            padding: 0;
             font-weight: 600;
             cursor: pointer;
             display: flex;
@@ -760,7 +831,7 @@
             justify-content: center;
             gap: 0.5rem;
             transition: all 0.2s ease;
-            min-width: 3rem;
+            min-width: 44px;
         }
 
         .ai-send-button.ai-send-button-stop {
@@ -2112,11 +2183,12 @@
                 .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
                 // Paragraphs (double newlines) -> wrap paragraphs
                 .replace(/\n\n+/g, '</p><p>')
-                // Single newlines -> treat as space
-                .replace(/\n+/g, ' ');
+                // Single newlines -> line breaks
+                .replace(/\n+/g, '<br>');
 
             // Wrap consecutive li elements in ul
             html = html.replace(/(<li>.*?<\/li>)+/gs, (match) => `<ul>${match}</ul>`);
+            html = html.replace(/<\/li><br\s*\/?>/g, '</li>');
 
             // Wrap in paragraph if not starting with a block element
             if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<pre') && !html.startsWith('<div')) {
@@ -2169,6 +2241,8 @@
             const [formattingIndex, setFormattingIndex] = useState(null);
             const [chatHistory, setChatHistory] = useState([]);
             const [currentChatId, setCurrentChatId] = useState(null);
+            const [attachments, setAttachments] = useState([]);
+            const [attachmentError, setAttachmentError] = useState('');
             const [internalSidebarOpen, setInternalSidebarOpen] = useState(true);
             const sidebarOpen = typeof sidebarOpenProp !== 'undefined' ? sidebarOpenProp : internalSidebarOpen;
             const setSidebarOpen = setSidebarOpenProp || setInternalSidebarOpen;
@@ -2178,6 +2252,7 @@
             const sidebarRef = useRef(null);
             const toggleRef = useRef(null);
             const abortControllerRef = useRef(null);
+            const attachmentInputRef = useRef(null);
 
             // Load chat history from localStorage on mount
             useEffect(() => {
@@ -2267,15 +2342,53 @@
                 { text: "Write my chapter one", prompt: "Write my chapter one on the topic; " }
             ];
 
+            const allowedAttachmentTypes = ['.doc', '.docx', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+
+            const handleAttachmentSelect = (event) => {
+                const files = Array.from(event.target.files || []);
+                if (files.length === 0) return;
+
+                const nextAttachments = [];
+                let nextError = '';
+
+                files.forEach((file, index) => {
+                    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+                    if (!allowedAttachmentTypes.includes(fileExt)) {
+                        nextError = 'Unsupported file type. Upload Word, PDF, or image files.';
+                        return;
+                    }
+                    nextAttachments.push({
+                        id: `${Date.now()}-${index}`,
+                        name: file.name,
+                        size: file.size,
+                        type: file.type || fileExt
+                    });
+                });
+
+                if (nextAttachments.length > 0) {
+                    setAttachments(prev => [...prev, ...nextAttachments].slice(0, 5));
+                }
+                setAttachmentError(nextError);
+
+                if (attachmentInputRef.current) {
+                    attachmentInputRef.current.value = '';
+                }
+            };
+
+            const handleRemoveAttachment = (attachmentId) => {
+                setAttachments(prev => prev.filter(item => item.id !== attachmentId));
+            };
+
             const handleSendMessage = async (messageText = inputValue) => {
                 const trimmedMessage = messageText.trim();
-                if (!trimmedMessage || isLoading) return;
+                if ((!trimmedMessage && attachments.length === 0) || isLoading) return;
+                const messageBody = trimmedMessage || 'Uploaded file(s).';
 
                 // Create a new chat if none exists
                 if (!currentChatId) {
                     const newChat = {
                         id: Date.now().toString(),
-                        title: trimmedMessage.substring(0, 30),
+                        title: messageBody.substring(0, 30),
                         messages: [],
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
@@ -2285,9 +2398,10 @@
                 }
 
                 // Add user message
-                const userMessage = { role: 'user', content: trimmedMessage };
+                const userMessage = { role: 'user', content: messageBody, attachments };
                 setMessages(prev => [...prev, userMessage]);
                 setInputValue('');
+                setAttachments([]);
                 // Reset textarea height
                 if (textareaRef.current) {
                     textareaRef.current.style.height = 'auto';
@@ -2313,8 +2427,9 @@
                         credentials: 'include',
                         signal: abortControllerRef.current.signal,
                         body: JSON.stringify({
-                            message: trimmedMessage,
-                            conversation: conversationHistory
+                            message: messageBody,
+                            conversation: conversationHistory,
+                            attachments: attachments.map(({ name, type, size }) => ({ name, type, size }))
                         })
                     });
 
@@ -2385,11 +2500,12 @@
                             credentials: 'include',
                             signal: abortControllerRef.current.signal,
                             body: JSON.stringify({
-                                message: trimmedMessage,
+                                message: messageBody,
                                 conversation: messages.map(msg => ({
                                     role: msg.role,
                                     content: msg.content
-                                }))
+                                })),
+                                attachments: attachments.map(({ name, type, size }) => ({ name, type, size }))
                             })
                         });
 
@@ -2773,7 +2889,19 @@
                                                 )}
                                             </>
                                         ) : (
-                                            message.content
+                                            <div>
+                                                <p className="ai-user-text">{message.content}</p>
+                                                {message.attachments?.length > 0 && (
+                                                    <div className="ai-attachment-list">
+                                                        {message.attachments.map((attachment) => (
+                                                            <div key={attachment.id} className="ai-attachment-chip">
+                                                                <Icons.FileText size={12} />
+                                                                <span>{attachment.name}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 ))}
@@ -2804,33 +2932,72 @@
 
                             {/* Input Area */}
                             <div className="ai-input-container">
-                                <textarea
-                                    ref={textareaRef}
-                                    value={inputValue}
-                                    onChange={(e) => {
-                                        setInputValue(e.target.value);
-                                        // Auto-resize textarea
-                                        e.target.style.height = 'auto';
-                                        e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
-                                    }}
-                                    onKeyDown={handleKeyDown}
-                                    placeholder="Ask anything..."
-                                    className="ai-input ai-textarea"
-                                    disabled={isLoading}
-                                    rows={1}
-                                />
-                                <button
-                                    onClick={() => (isLoading ? handleStopGeneration() : handleSendMessage())}
-                                    disabled={!isLoading && !inputValue.trim()}
-                                    className={`ai-send-button ${isLoading ? 'ai-send-button-stop' : ''}`}
-                                    title={isLoading ? "Stop generation" : "Send message"}
-                                >
-                                    {isLoading ? (
-                                        <Icons.Stop size={18} />
-                                    ) : (
-                                        <Icons.Send size={18} />
-                                    )}
-                                </button>
+                                {attachments.length > 0 && (
+                                    <div className="ai-attachment-list">
+                                        {attachments.map((attachment) => (
+                                            <div key={attachment.id} className="ai-attachment-chip">
+                                                <Icons.FileText size={12} />
+                                                <span>{attachment.name}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveAttachment(attachment.id)}
+                                                    aria-label={`Remove ${attachment.name}`}
+                                                >
+                                                    <Icons.X size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {attachmentError && (
+                                    <div className="ai-attachment-error">{attachmentError}</div>
+                                )}
+                                <div className="ai-input-row">
+                                    <button
+                                        type="button"
+                                        className="ai-upload-button"
+                                        onClick={() => attachmentInputRef.current?.click()}
+                                        title="Upload document"
+                                    >
+                                        <Icons.Plus size={18} />
+                                    </button>
+                                    <input
+                                        ref={attachmentInputRef}
+                                        type="file"
+                                        accept=".doc,.docx,.pdf,.png,.jpg,.jpeg,.gif,.webp,image/*"
+                                        multiple
+                                        onChange={handleAttachmentSelect}
+                                        className="hidden"
+                                    />
+                                    <textarea
+                                        ref={textareaRef}
+                                        value={inputValue}
+                                        onChange={(e) => {
+                                            setInputValue(e.target.value);
+                                            setAttachmentError('');
+                                            // Auto-resize textarea
+                                            e.target.style.height = 'auto';
+                                            e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
+                                        }}
+                                        onKeyDown={handleKeyDown}
+                                        placeholder="Ask anything..."
+                                        className="ai-input ai-textarea"
+                                        disabled={isLoading}
+                                        rows={1}
+                                    />
+                                    <button
+                                        onClick={() => (isLoading ? handleStopGeneration() : handleSendMessage())}
+                                        disabled={!isLoading && !inputValue.trim() && attachments.length === 0}
+                                        className={`ai-send-button ${isLoading ? 'ai-send-button-stop' : ''}`}
+                                        title={isLoading ? "Stop generation" : "Send message"}
+                                    >
+                                        {isLoading ? (
+                                            <Icons.Stop size={18} />
+                                        ) : (
+                                            <Icons.ArrowUp size={18} />
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
