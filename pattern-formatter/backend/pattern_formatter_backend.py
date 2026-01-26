@@ -270,6 +270,9 @@ def signup():
         
     if User.query.filter_by(username=username).first():
         return jsonify({'error': 'Username already exists'}), 400
+
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({'error': 'Email already exists'}), 400
         
     # Generate unique referral code for new user
     new_referral_code = uuid.uuid4().hex[:8].upper()
