@@ -1300,6 +1300,43 @@
             text-align: left;
         }
 
+        .app-nav-doc-item {
+            justify-content: space-between;
+        }
+
+        .app-nav-doc-button {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            min-width: 0;
+            flex: 1;
+            text-align: left;
+            background: transparent;
+            border: none;
+            color: inherit;
+            padding: 0;
+        }
+
+        .app-nav-doc-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .app-nav-doc-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            flex-shrink: 0;
+        }
+
+        @media (hover: none) and (pointer: coarse) {
+            .app-nav-doc-actions {
+                opacity: 1;
+            }
+        }
+
         .app-nav-item:hover {
             background: rgba(255, 255, 255, 0.05);
             color: white;
@@ -5349,6 +5386,23 @@
                 localStorage.setItem('afrodocs_user_documents', JSON.stringify(docs));
             }, []);
 
+            const stripFileExtension = (name) => name.replace(/\.[^/.]+$/, '');
+
+            const getFileExtension = (filename) => {
+                const match = filename?.match(/\.[^/.]+$/);
+                return match ? match[0] : '.docx';
+            };
+
+            const buildDocumentFilename = (name, baseFilename) => {
+                const cleanName = stripFileExtension(name.trim());
+                const extension = getFileExtension(baseFilename);
+                return `${cleanName}${extension}`;
+            };
+
+            const buildPdfFilename = (filename) => (
+                filename ? filename.replace(/\.docx$/i, '.pdf') : 'formatted_document.pdf'
+            );
+
             const handleRenameDocument = (doc) => {
                 setRenameDoc(doc);
                 setRenameValue(doc.name || '');
@@ -5356,7 +5410,7 @@
             };
 
             const handleApplyRename = async () => {
-                const nextName = renameValue.trim();
+                const nextName = stripFileExtension(renameValue.trim());
                 if (!nextName) {
                     setRenameError('Please enter a document name.');
                     return;
@@ -5376,10 +5430,32 @@
                             throw new Error(data.error || 'Failed to rename document');
                         }
                     }
-                    const updated = userDocuments.map(doc => (
-                        doc.id === renameDoc.id ? { ...doc, name: nextName } : doc
-                    ));
+                    const updated = userDocuments.map(doc => {
+                        if (doc.id !== renameDoc.id) {
+                            return doc;
+                        }
+                        const updatedResult = doc.result
+                            ? { ...doc.result, filename: buildDocumentFilename(nextName, doc.result?.filename) }
+                            : doc.result;
+                        const updatedPdfUrl = updatedResult?.job_id
+                            ? `${API_BASE}/download-pdf/${updatedResult.job_id}/${encodeURIComponent(buildPdfFilename(updatedResult.filename))}?inline=true`
+                            : doc.pdfUrl;
+                        return {
+                            ...doc,
+                            name: nextName,
+                            result: updatedResult,
+                            pdfUrl: updatedPdfUrl
+                        };
+                    });
                     persistUserDocuments(updated);
+                    if (result?.job_id && renameDoc?.result?.job_id === result.job_id) {
+                        const nextFilename = buildDocumentFilename(nextName, result.filename);
+                        setResult(prev => (prev ? { ...prev, filename: nextFilename } : prev));
+                        const nextPreviewUrl = `${API_BASE}/download-pdf/${result.job_id}/${encodeURIComponent(buildPdfFilename(nextFilename))}?inline=true`;
+                        setPdfPreviewLoading(true);
+                        setPdfPreviewKey(prev => prev + 1);
+                        setPdfPreviewUrl(nextPreviewUrl);
+                    }
                     setRenameDoc(null);
                 } catch (err) {
                     setRenameError(err.message);
@@ -5867,7 +5943,7 @@
                                 <div className="app-nav-section">
                                     <div className="app-nav-section-title">Your Documents</div>
                                     {(showAllDocuments ? userDocuments : userDocuments.slice(0, 4)).map((doc, index) => (
-                                        <div key={doc.id || index} className="app-nav-item group flex items-center justify-between gap-2">
+                                        <div key={doc.id || index} className="app-nav-item app-nav-doc-item group">
                                             <button
                                                 onClick={() => { 
                                                     setResult(doc.result);
@@ -5876,13 +5952,13 @@
                                                     setAppSidebarOpen(false);
                                                     setShowProfile(false);
                                                 }}
-                                                className="flex items-center gap-2 flex-1 text-left"
+                                                className="app-nav-doc-button"
                                                 title={doc.name}
                                             >
                                                 <span className="app-nav-item-icon"><Icons.File size={18} /></span>
-                                                <span className="truncate text-xs">{doc.name}</span>
+                                                <span className="app-nav-doc-name text-xs">{doc.name}</span>
                                             </button>
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="app-nav-doc-actions opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
                                                     onClick={(event) => { event.stopPropagation(); handleRenameDocument(doc); }}
                                                     className="p-1 text-mist hover:text-white hover:bg-white/10 rounded"
