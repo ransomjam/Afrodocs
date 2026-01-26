@@ -7,6 +7,7 @@ from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
 from werkzeug.security import generate_password_hash, check_password_hash
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor, Emu
@@ -175,6 +176,7 @@ class User(UserMixin, db.Model):
     documents_generated = db.Column(db.Integer, default=0)
     documents = db.relationship('DocumentRecord', backref='user', lazy=True, cascade="all, delete-orphan")
     support_requests = db.relationship('SupportRequest', backref='user', lazy=True, cascade="all, delete-orphan")
+    ai_requests = db.relationship('AIRequest', backref='user', lazy=True, cascade="all, delete-orphan")
 
 class DocumentRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -211,6 +213,14 @@ class SupportRequest(db.Model):
     subject = db.Column(db.String(200), nullable=True)
     message = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(20), default='open')  # open, resolved
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class AIRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    request_type = db.Column(db.String(30), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    prompt = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 @login_manager.user_loader
@@ -516,8 +526,13 @@ def payment_webhook():
 def list_users():
     if not current_user.is_admin:
         return jsonify({'error': 'Unauthorized - Admin access required'}), 403
-        
+
     users = User.query.all()
+    ai_request_counts = dict(
+        db.session.query(AIRequest.user_id, func.count(AIRequest.id))
+        .group_by(AIRequest.user_id)
+        .all()
+    )
     return jsonify([{
         'id': u.id,
         'username': u.username,
@@ -529,6 +544,7 @@ def list_users():
         'pages_balance': u.pages_balance,
         'pages_this_month': u.pages_this_month,
         'documents_generated': u.documents_generated,
+        'ai_requests_count': ai_request_counts.get(u.id, 0),
         'created_at': u.last_reset_date.isoformat() if u.last_reset_date else None
     } for u in users]), 200
 
@@ -623,6 +639,21 @@ def list_user_documents(user_id):
         'created_at': d.created_at.isoformat() if d.created_at else None,
         'job_id': d.job_id
     } for d in docs]), 200
+
+@app.route('/api/admin/users/<int:user_id>/ai-requests', methods=['GET'])
+@login_required
+def list_user_ai_requests(user_id):
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized - Admin access required'}), 403
+
+    requests = AIRequest.query.filter_by(user_id=user_id).order_by(AIRequest.created_at.desc()).all()
+    return jsonify([{
+        'id': req.id,
+        'request_type': req.request_type,
+        'title': req.title,
+        'prompt': req.prompt,
+        'created_at': req.created_at.isoformat() if req.created_at else None
+    } for req in requests]), 200
 
 @app.route('/api/admin/check', methods=['GET'])
 @login_required
@@ -839,6 +870,35 @@ def auth_status():
 # ============================================================
 # AI CHAT ENDPOINTS - DeepSeek Integration
 # ============================================================
+def _ai_request_title(prompt, max_length=80):
+    if not prompt:
+        return "AI Request"
+    for line in prompt.splitlines():
+        stripped = line.strip()
+        if stripped:
+            title = stripped
+            break
+    else:
+        title = prompt.strip()
+    if len(title) > max_length:
+        return title[:max_length].rstrip() + "..."
+    return title
+
+def record_ai_request(prompt, request_type):
+    if not current_user.is_authenticated:
+        return
+    try:
+        ai_request = AIRequest(
+            user_id=current_user.id,
+            request_type=request_type,
+            title=_ai_request_title(prompt),
+            prompt=prompt
+        )
+        db.session.add(ai_request)
+        db.session.commit()
+    except Exception as exc:
+        logger.warning(f"Failed to record AI request: {exc}")
+        db.session.rollback()
 
 # DeepSeek API Configuration
 DEEPSEEK_API_KEY = "sk-4a857c0c76cf4db89fef65b871da982a"
@@ -1175,6 +1235,7 @@ def ai_chat():
             result = response.json()
             ai_response = normalize_ai_output(result['choices'][0]['message']['content'])
             ai_response = normalize_ai_bolding(result['choices'][0]['message']['content'])
+            record_ai_request(message, "chat")
             return jsonify({'response': ai_response, 'success': True}), 200
         else:
             logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
@@ -1198,6 +1259,7 @@ def ai_restructure():
 
     try:
         restructured = restructure_text_with_ai(text)
+        record_ai_request(text, "restructure")
         return jsonify({'response': restructured, 'success': True}), 200
     except Exception as e:
         logger.error(f"AI restructure error: {str(e)}")
@@ -1226,6 +1288,8 @@ def ai_chat_stream():
     
     # Add current message
     messages.append({"role": "user", "content": message})
+
+    record_ai_request(message, "stream")
     
     def generate():
         try:
