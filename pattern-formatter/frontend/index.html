@@ -4857,6 +4857,7 @@
             const [pastedText, setPastedText] = useState('');
             const [isRestructuringPaste, setIsRestructuringPaste] = useState(false);
             const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+            const successTimeoutRef = useRef(null);
             const [elapsedTime, setElapsedTime] = useState(0);
             const [showShare, setShowShare] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
@@ -5210,7 +5211,13 @@
                     setStatus('Complete!');
                     setResult(data);
                     setPreview(data.preview || '');
+                    if (successTimeoutRef.current) {
+                        clearTimeout(successTimeoutRef.current);
+                    }
                     setShowSuccessMessage(true);
+                    successTimeoutRef.current = setTimeout(() => {
+                        setShowSuccessMessage(false);
+                    }, 3000);
 
                     // Track guest document formatting
                     if (!isAuthenticated) {
@@ -6530,9 +6537,9 @@
                                         <div className="space-y-6">
                                             {/* Success Banner */}
                                             {showSuccessMessage && (
-                                                <div className="bg-teal/20 border border-teal/50 rounded-xl p-3 text-center">
-                                                    <p className="font-medium text-white">Document formatted successfully.</p>
-                                                </div>
+                                                <p className="text-xs text-teal-200 text-center">
+                                                    Document formatted successfully.
+                                                </p>
                                             )}
 
                                             {/* Action Buttons - Minimal on Mobile */}
