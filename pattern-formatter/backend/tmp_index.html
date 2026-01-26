@@ -2475,25 +2475,12 @@
                                                             </>
                                                         )}
                                                     </button>
-                                                    <button
-                                                        onClick={() => handleFormatMessage(message.content, idx)}
-                                                        className="ai-action-button ai-action-button-format"
-                                                        title="Format as document"
-                                                        disabled={formattingIndex === idx}
-                                                    >
-                                                        {formattingIndex === idx ? (
-                                                            <>
-                                                                <Icons.Loader size={14} />
-                                                                Formatting...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Icons.FileText size={14} />
-                                                                Format Document
-                                                            </>
-                                                        )}
-                                                    </button>
                                                 </div>
+                                                )}
+                                                {!message.isComment && (
+                                                    <div className="text-xs text-mist/70 mt-2">
+                                                        Copy to the document formatter to create a document
+                                                    </div>
                                                 )}
                                             </>
                                         ) : (
