@@ -5021,11 +5021,16 @@
                 
                 // Switch to formatter view to show processing
                 setViewMode('formatter');
+                setResult(null);
+                setProcessing(false);
+                setStatus('');
+                setProgress(0);
+                setError(null);
+                setPreview(null);
+                setFile(null);
+                setPendingFile(null);
+                setShowFormattingModal(false);
                 
-                // Create a file from the AI response text
-                // Generate a timestamp-based name instead of "ai_generated_document"
-                const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-                const docName = `document_${timestamp}.txt`;
                 // Post-process AI text for formatting:
                 // 1) Ensure References header is uppercase and starts on its own page
                 // 2) Italicize journal names inside the References block using markdown emphasis
@@ -5099,12 +5104,7 @@
                 // Simple heuristic: look for lines containing multiple '|' segments and force surrounding newlines
                 processed = processed.replace(/\s*\|\s*([^\n]+?)\s*\|\s*/g, (m) => '\n' + m.trim() + '\n');
 
-                const blob = new Blob([processed], { type: 'text/plain' });
-                const file = new File([blob], docName, { type: "text/plain" });
-                
-                // Store pending file and show formatting modal
-                setPendingFile(file);
-                setShowFormattingModal(true);
+                setPastedText(processed);
             };
 
             // File input change handler
