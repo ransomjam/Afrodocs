@@ -189,6 +189,17 @@
             stroke-dasharray: 8 120; /* short lit segment, long gap */
             animation: trace-outline 0.6s linear infinite; /* slightly slower */
         }
+
+        @keyframes loading-text-reveal {
+            0% { opacity: 0; transform: translateY(4px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        .loading-text-delayed {
+            opacity: 0;
+            animation: loading-text-reveal 0.4s ease forwards;
+            animation-delay: 0.6s;
+        }
         
         .processing-glow {
             animation: pulse-glow 2s infinite;
@@ -257,10 +268,15 @@
 
         /* Short informational note shown above previews */
         .document-preview-note {
-            font-size: 0.95rem;
-            color: #C6E7F2;
-            margin: 0 0 0.5rem 0;
-            line-height: 1.35;
+            font-size: 0.85rem;
+            color: #B8D5E3;
+            margin: 0 0 0.75rem 0;
+            line-height: 1.45;
+            padding: 0.6rem 0.9rem;
+            border-radius: 0.75rem;
+            background: rgba(15, 23, 42, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            max-width: 42rem;
         }
         @media (max-width: 640px) {
             .document-preview-note {
@@ -268,7 +284,7 @@
                 -webkit-line-clamp: 3;
                 -webkit-box-orient: vertical;
                 overflow: hidden;
-                font-size: 0.95rem;
+                font-size: 0.8rem;
             }
         }
 
@@ -1964,8 +1980,10 @@
                                 </a>
                                 
                                 {/* Info Message - minimal transparent box */}
-                                <div className="w-full max-w-xs bg-white/5 border border-white/10 rounded-md p-3 text-center">
-                                    <p className="text-mist text-sm leading-relaxed">Document display may vary on mobile devices depending on your document reader. For the best layout and full access to the Table of Contents, please download and open this file on a PC.</p>
+                                <div className="w-full max-w-xs bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-center">
+                                    <p className="text-mist/90 text-xs leading-relaxed">
+                                        Mobile previews can vary by reader. For the best layout and Table of Contents, open on desktop.
+                                    </p>
                                 </div>
                                 
                                 {/* Inline preview option removed for clarity */}
@@ -1978,7 +1996,7 @@
                                         <div className="lightning-loading">
                                             <Icons.Zap />
                                         </div>
-                                        <p className="text-sm">Loading PDF...</p>
+                                        <p className="text-sm loading-text-delayed">Loading PDF...</p>
                                     </div>
                                 )}
                                 <iframe
@@ -4061,7 +4079,7 @@
                                                                                             <div className="lightning-loading">
                                                                                                 <Icons.Zap />
                                                                                             </div>
-                                                                                            <p className="text-sm sm:text-base">Generating preview...</p>
+                                                                                            <p className="text-sm sm:text-base loading-text-delayed">Generating preview...</p>
                                                                                         </div>
                                                     </div>
                                                                                 ) : pdfPreviewUrl ? (
@@ -4082,7 +4100,7 @@
                                                         <div className="lightning-loading">
                                                             <Icons.Zap />
                                                         </div>
-                                                        <p className="text-sm sm:text-base">Loading preview...</p>
+                                                        <p className="text-sm sm:text-base loading-text-delayed">Loading preview...</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -4109,7 +4127,7 @@
             return (
                 <>
                 <div className="document-preview-note">
-                    Preview may vary on mobile depending on your document viewer. Table of contents appears on PC.
+                    Mobile previews can vary by viewer. For the best layout and Table of Contents, open on desktop.
                 </div>
                 <div className="document-preview-container custom-scrollbar">
                     <div className="document-page">
@@ -6187,7 +6205,7 @@
                                                                     <div className="lightning-loading">
                                                                         <Icons.Zap />
                                                                     </div>
-                                                                    <p>Loading preview...</p>
+                                                                    <p className="loading-text-delayed">Loading preview...</p>
                                                                 </div>
                                                             )}
                                                             {pdfPreviewError ? (
@@ -6232,7 +6250,7 @@
                                                             <div className="lightning-loading">
                                                                 <Icons.Zap />
                                                             </div>
-                                                            <p>Loading preview...</p>
+                                                            <p className="loading-text-delayed">Loading preview...</p>
                                                         </div>
                                                     )}
                                                 </div>
