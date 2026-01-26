@@ -4660,50 +4660,76 @@
             };
 
             useEffect(() => {
-                const userAgent = navigator.userAgent || navigator.vendor || window.opera;
-                const ios = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-                setIsIosDevice(ios);
+                let cancelled = false;
+                let handleBeforeInstallPrompt = null;
+                let handleAppInstalled = null;
+                let idleId = null;
+                let timeoutId = null;
 
-                const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-                setIsInstalled(Boolean(isStandalone));
+                const runInstallSetup = () => {
+                    if (cancelled) return;
+                    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+                    const ios = /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
+                    setIsIosDevice(ios);
 
-                const handleBeforeInstallPrompt = (event) => {
-                    event.preventDefault();
-                    setDeferredInstallPrompt(event);
-                    setCanInstall(true);
-                };
+                    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+                    setIsInstalled(Boolean(isStandalone));
 
-                const handleAppInstalled = () => {
-                    setIsInstalled(true);
-                    setCanInstall(false);
-                    setDeferredInstallPrompt(null);
-                };
+                    handleBeforeInstallPrompt = (event) => {
+                        event.preventDefault();
+                        setDeferredInstallPrompt(event);
+                        setCanInstall(true);
+                    };
 
-                window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-                window.addEventListener('appinstalled', handleAppInstalled);
+                    handleAppInstalled = () => {
+                        setIsInstalled(true);
+                        setCanInstall(false);
+                        setDeferredInstallPrompt(null);
+                    };
 
-                if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('sw.js')
-                        .then((registration) => {
-                            setServiceWorkerRegistration(registration);
-                            registration.addEventListener('updatefound', () => {
-                                const newWorker = registration.installing;
-                                if (!newWorker) return;
-                                newWorker.addEventListener('statechange', () => {
-                                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                        setUpdateAvailable(true);
-                                    }
+                    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+                    window.addEventListener('appinstalled', handleAppInstalled);
+
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.register('sw.js')
+                            .then((registration) => {
+                                setServiceWorkerRegistration(registration);
+                                registration.addEventListener('updatefound', () => {
+                                    const newWorker = registration.installing;
+                                    if (!newWorker) return;
+                                    newWorker.addEventListener('statechange', () => {
+                                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                            setUpdateAvailable(true);
+                                        }
+                                    });
                                 });
+                            })
+                            .catch((err) => {
+                                console.warn('Service worker registration failed', err);
                             });
-                        })
-                        .catch((err) => {
-                            console.warn('Service worker registration failed', err);
-                        });
+                    }
+                };
+
+                if ('requestIdleCallback' in window) {
+                    idleId = window.requestIdleCallback(runInstallSetup, { timeout: 1500 });
+                } else {
+                    timeoutId = window.setTimeout(runInstallSetup, 0);
                 }
 
                 return () => {
-                    window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-                    window.removeEventListener('appinstalled', handleAppInstalled);
+                    cancelled = true;
+                    if (idleId !== null && 'cancelIdleCallback' in window) {
+                        window.cancelIdleCallback(idleId);
+                    }
+                    if (timeoutId !== null) {
+                        window.clearTimeout(timeoutId);
+                    }
+                    if (handleBeforeInstallPrompt) {
+                        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+                    }
+                    if (handleAppInstalled) {
+                        window.removeEventListener('appinstalled', handleAppInstalled);
+                    }
                 };
             }, []);
 
