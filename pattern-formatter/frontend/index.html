@@ -2355,6 +2355,8 @@
             ];
 
             const allowedAttachmentTypes = ['.doc', '.docx', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp'];
+            const maxAttachmentSizeMb = 10;
+            const maxAttachmentSizeBytes = maxAttachmentSizeMb * 1024 * 1024;
 
             const handleAttachmentSelect = (event) => {
                 const files = Array.from(event.target.files || []);
@@ -2369,11 +2371,16 @@
                         nextError = 'Unsupported file type. Upload Word, PDF, or image files.';
                         return;
                     }
+                    if (file.size > maxAttachmentSizeBytes) {
+                        nextError = `File "${file.name}" exceeds ${maxAttachmentSizeMb}MB. Please upload a smaller file.`;
+                        return;
+                    }
                     nextAttachments.push({
                         id: `${Date.now()}-${index}`,
                         name: file.name,
                         size: file.size,
-                        type: file.type || fileExt
+                        type: file.type || fileExt,
+                        file
                     });
                 });
 
@@ -2389,6 +2396,44 @@
 
             const handleRemoveAttachment = (attachmentId) => {
                 setAttachments(prev => prev.filter(item => item.id !== attachmentId));
+            };
+
+            const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(file);
+            });
+
+            const buildAttachmentPayload = async (items) => {
+                const payload = [];
+                for (const attachment of items) {
+                    if (!attachment.file) {
+                        payload.push({
+                            name: attachment.name,
+                            type: attachment.type,
+                            size: attachment.size
+                        });
+                        continue;
+                    }
+                    try {
+                        const dataUrl = await readFileAsDataUrl(attachment.file);
+                        payload.push({
+                            name: attachment.name,
+                            type: attachment.type,
+                            size: attachment.size,
+                            dataUrl
+                        });
+                    } catch (err) {
+                        console.error('Failed to read attachment', err);
+                        payload.push({
+                            name: attachment.name,
+                            type: attachment.type,
+                            size: attachment.size
+                        });
+                    }
+                }
+                return payload;
             };
 
             const handleSendMessage = async (messageText = inputValue) => {
@@ -2410,7 +2455,11 @@
                 }
 
                 // Add user message
-                const userMessage = { role: 'user', content: messageBody, attachments };
+                const userMessage = { 
+                    role: 'user', 
+                    content: messageBody, 
+                    attachments: attachments.map(({ id, name, size, type }) => ({ id, name, size, type }))
+                };
                 setMessages(prev => [...prev, userMessage]);
                 setInputValue('');
                 setAttachments([]);
@@ -2422,8 +2471,10 @@
                 setIsStreaming(true);
                 setStreamingContent('');
 
+                let attachmentPayload = [];
                 try {
                     abortControllerRef.current = new AbortController();
+                    attachmentPayload = await buildAttachmentPayload(attachments);
                     // Build conversation history for context
                     const conversationHistory = messages.map(msg => ({
                         role: msg.role,
@@ -2441,7 +2492,7 @@
                         body: JSON.stringify({
                             message: messageBody,
                             conversation: conversationHistory,
-                            attachments: attachments.map(({ name, type, size }) => ({ name, type, size }))
+                            attachments: attachmentPayload
                         })
                     });
 
@@ -2517,7 +2568,7 @@
                                     role: msg.role,
                                     content: msg.content
                                 })),
-                                attachments: attachments.map(({ name, type, size }) => ({ name, type, size }))
+                                attachments: attachmentPayload
                             })
                         });
 
