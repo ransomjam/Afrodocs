@@ -15753,13 +15753,15 @@ class WordGenerator:
     def _calculate_table_column_widths(self, total_table_width, col_max_lengths):
         """Calculate stable column widths that fit within margins."""
         num_cols = len(col_max_lengths) if col_max_lengths else 1
-        total_content_length = sum(col_max_lengths) if sum(col_max_lengths) > 0 else num_cols
-        min_col_width = Inches(0.5)
+        min_chars = 6
+        adjusted_lengths = [max(length, min_chars) for length in (col_max_lengths or [1])]
+        total_content_length = sum(adjusted_lengths) if sum(adjusted_lengths) > 0 else num_cols
+        min_col_width = Inches(0.6)
         if min_col_width * num_cols > total_table_width:
             min_col_width = total_table_width / num_cols
 
         widths = []
-        for length in col_max_lengths:
+        for length in adjusted_lengths:
             proportion = length / total_content_length if total_content_length > 0 else 1 / num_cols
             col_width = total_table_width * proportion
             if col_width < min_col_width:
