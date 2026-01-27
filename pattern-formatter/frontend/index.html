@@ -1748,6 +1748,8 @@
             font-size: 0.9375rem;
             resize: vertical;
             outline: none;
+            position: relative;
+            z-index: 2;
             transition: all 0.2s ease;
         }
 
@@ -1766,6 +1768,37 @@
 
         .paste-textarea-wrapper {
             position: relative;
+        }
+
+        .unified-textarea.preview-active {
+            color: transparent;
+            caret-color: #F7FAFC;
+            background: transparent;
+        }
+
+        .paste-textarea-overlay {
+            position: absolute;
+            inset: 0;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: rgba(0, 0, 0, 0.3);
+            pointer-events: none;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            z-index: 1;
+            font-size: 0.9375rem;
+            line-height: 1.6;
+            color: #E2E8F0;
+        }
+
+        .paste-textarea-overlay::-webkit-scrollbar {
+            display: none;
+        }
+
+        .paste-textarea-overlay {
+            scrollbar-width: none;
         }
 
         .paste-image-button {
@@ -1798,21 +1831,10 @@
             border-color: rgba(0, 180, 166, 0.6);
         }
 
-        .paste-preview {
-            margin-top: 1rem;
-            border-radius: 0.75rem;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            background: rgba(6, 20, 32, 0.6);
-            padding: 1rem;
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
         .paste-preview-line {
-            color: #E2E8F0;
-            font-size: 0.875rem;
-            line-height: 1.6;
+            color: inherit;
+            font-size: inherit;
+            line-height: inherit;
             white-space: pre-wrap;
             word-break: break-word;
         }
@@ -1820,20 +1842,23 @@
         .paste-preview-figure {
             display: flex;
             flex-direction: column;
-            gap: 0.5rem;
+            gap: 0.25rem;
             align-items: flex-start;
         }
 
-        .paste-preview-image {
-            max-width: 100%;
-            border-radius: 0.75rem;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        .paste-inline-image {
+            max-width: 160px;
+            height: 1.6em;
+            object-fit: cover;
+            border-radius: 0.4rem;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
         }
 
         .paste-preview-caption {
             font-size: 0.75rem;
             color: rgba(255, 255, 255, 0.65);
+            line-height: 1.6;
         }
 
         /* Quick Actions */
@@ -5442,6 +5467,7 @@
             const [showProfile, setShowProfile] = useState(false);
             const fileInputRef = useRef(null);
             const pasteTextareaRef = useRef(null);
+            const pasteOverlayRef = useRef(null);
             const pasteImageInputRef = useRef(null);
             const pasteSelectionRef = useRef({ start: 0, end: 0 });
             const pasteImageCounterRef = useRef(1);
@@ -5709,6 +5735,12 @@
                 };
             }, []);
 
+            const handlePasteScroll = useCallback(() => {
+                if (!pasteTextareaRef.current || !pasteOverlayRef.current) return;
+                pasteOverlayRef.current.scrollTop = pasteTextareaRef.current.scrollTop;
+                pasteOverlayRef.current.scrollLeft = pasteTextareaRef.current.scrollLeft;
+            }, []);
+
             useEffect(() => {
                 adjustPasteTextareaHeight();
             }, [pastedText]);
@@ -5734,17 +5766,22 @@
                     if (imageMatch) {
                         const imageId = imageMatch[1].trim();
                         let title = '';
+                        let hasTitleLine = false;
                         const nextLine = lines[i + 1];
                         const titleMatch = nextLine?.match(/^\s*\[IMAGE_TITLE:(.+?)\]\s*(.*)$/i);
                         if (titleMatch && titleMatch[1].trim().toLowerCase() === imageId.toLowerCase()) {
                             title = titleMatch[2] || '';
+                            hasTitleLine = true;
                             i += 1;
                         }
+                        const showTitle = title.trim() && title.trim().toLowerCase() !== 'optional title';
                         nodes.push({
                             type: 'image',
                             id: imageId,
                             url: pasteImageUrls[imageId],
-                            title
+                            title,
+                            showTitle,
+                            hasTitleLine
                         });
                         continue;
                     }
@@ -5756,6 +5793,11 @@
                 () => pastePreviewNodes.some((node) => node.type === 'image'),
                 [pastePreviewNodes]
             );
+
+            useEffect(() => {
+                if (!hasPastePreviewImages) return;
+                handlePasteScroll();
+            }, [hasPastePreviewImages, pastedText, handlePasteScroll]);
 
             const handlePasteImageClick = () => {
                 updatePasteSelection();
@@ -7244,18 +7286,52 @@
                                                 </div>
                                                 <div className="content-card-body">
                                                     <div className="paste-textarea-wrapper">
+                                                        {hasPastePreviewImages && (
+                                                            <div ref={pasteOverlayRef} className="paste-textarea-overlay">
+                                                                {pastePreviewNodes.map((node, index) => {
+                                                                    if (node.type === 'image') {
+                                                                        return (
+                                                                            <figure key={`${node.id}-${index}`} className="paste-preview-figure">
+                                                                                {node.url ? (
+                                                                                    <img
+                                                                                        src={node.url}
+                                                                                        alt={node.showTitle ? node.title : `Image ${node.id}`}
+                                                                                        className="paste-inline-image"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <div className="paste-preview-line">
+                                                                                        Image preview unavailable for {node.id}.
+                                                                                    </div>
+                                                                                )}
+                                                                                {node.hasTitleLine && (
+                                                                                    <figcaption className="paste-preview-caption">
+                                                                                        {node.showTitle ? node.title : '\u00A0'}
+                                                                                    </figcaption>
+                                                                                )}
+                                                                            </figure>
+                                                                        );
+                                                                    }
+                                                                    return (
+                                                                        <div key={`line-${index}`} className="paste-preview-line">
+                                                                            {node.text || '\u00A0'}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
                                                         <textarea
                                                             ref={pasteTextareaRef}
                                                             value={pastedText}
                                                             onChange={(e) => setPastedText(e.target.value)}
                                                             onPaste={adjustPasteTextareaHeight}
+                                                            onScroll={handlePasteScroll}
                                                             onClick={updatePasteSelection}
                                                             onKeyUp={updatePasteSelection}
                                                             onSelect={updatePasteSelection}
                                                             onFocus={() => setPasteTextFocused(true)}
                                                             onBlur={() => setPasteTextFocused(false)}
                                                             placeholder="Paste your document content here..."
-                                                            className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''}`}
+                                                            className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''} ${hasPastePreviewImages ? 'preview-active' : ''}`}
                                                         />
                                                         <button
                                                             type="button"
@@ -7283,39 +7359,6 @@
                                                             </span>
                                                         )}
                                                     </div>
-                                                    {hasPastePreviewImages && (
-                                                        <div className="paste-preview">
-                                                            {pastePreviewNodes.map((node, index) => {
-                                                                if (node.type === 'image') {
-                                                                    const titleText = node.title?.trim();
-                                                                    const showTitle = titleText && titleText.toLowerCase() !== 'optional title';
-                                                                    return (
-                                                                        <figure key={`${node.id}-${index}`} className="paste-preview-figure">
-                                                                            {node.url ? (
-                                                                                <img
-                                                                                    src={node.url}
-                                                                                    alt={showTitle ? titleText : `Image ${node.id}`}
-                                                                                    className="paste-preview-image"
-                                                                                />
-                                                                            ) : (
-                                                                                <div className="paste-preview-line">
-                                                                                    Image preview unavailable for {node.id}.
-                                                                                </div>
-                                                                            )}
-                                                                            {showTitle && (
-                                                                                <figcaption className="paste-preview-caption">{titleText}</figcaption>
-                                                                            )}
-                                                                        </figure>
-                                                                    );
-                                                                }
-                                                                return (
-                                                                    <div key={`line-${index}`} className="paste-preview-line">
-                                                                        {node.text || '\u00A0'}
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
                                                     {pastedText && (
                                                         <div className="quick-actions">
                                                             <button
