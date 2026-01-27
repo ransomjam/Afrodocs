@@ -1927,7 +1927,7 @@
     <div id="root"></div>
     
     <script type="text/babel">
-        const { useState, useRef, useCallback, useEffect } = React;
+        const { useState, useRef, useCallback, useEffect, useMemo } = React;
 
         // Icon components (simplified SVG icons)
         const Icons = {
@@ -2540,6 +2540,7 @@
             const [isStreaming, setIsStreaming] = useState(false);
             const [streamingContent, setStreamingContent] = useState('');
             const [copiedIndex, setCopiedIndex] = useState(null);
+            const [copiedAllIndex, setCopiedAllIndex] = useState(null);
             const [formattingIndex, setFormattingIndex] = useState(null);
             const [chatHistory, setChatHistory] = useState([]);
             const [currentChatId, setCurrentChatId] = useState(null);
@@ -3147,6 +3148,32 @@
                 }
             };
 
+            const latestAssistantSegments = useMemo(() => {
+                const lastUserIndex = messages.reduce((acc, message, index) => (
+                    message.role === 'user' ? index : acc
+                ), -1);
+                return messages
+                    .slice(lastUserIndex + 1)
+                    .filter(message => message.role === 'assistant' && !message.isComment)
+                    .map(message => message.content)
+                    .filter(content => content && content.trim());
+            }, [messages]);
+
+            const handleCopyAllSegments = async (index) => {
+                const combinedContent = latestAssistantSegments
+                    .map(content => content.trim())
+                    .filter(Boolean)
+                    .join('\n\n');
+                if (!combinedContent) return;
+                try {
+                    await navigator.clipboard.writeText(combinedContent);
+                    setCopiedAllIndex(index);
+                    setTimeout(() => setCopiedAllIndex(null), 2000);
+                } catch (err) {
+                    console.error('Failed to copy all:', err);
+                }
+            };
+
             const handleStopGeneration = () => {
                 if (abortControllerRef.current) {
                     abortControllerRef.current.abort();
@@ -3336,6 +3363,25 @@
                                                             </>
                                                         )}
                                                     </button>
+                                                    {latestAssistantSegments.length > 1 && idx === lastAssistantIndex && !isLoading && !isStreaming && (
+                                                        <button
+                                                            onClick={() => handleCopyAllSegments(idx)}
+                                                            className={`ai-action-button ${copiedAllIndex === idx ? 'copied' : ''}`}
+                                                            title="Copy all generated segments"
+                                                        >
+                                                            {copiedAllIndex === idx ? (
+                                                                <>
+                                                                    <Icons.Check size={14} />
+                                                                    Copied all!
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Icons.Copy size={14} />
+                                                                    Copy all
+                                                                </>
+                                                            )}
+                                                        </button>
+                                                    )}
                                                     {message.canContinue && idx === lastAssistantIndex && !isLoading && (
                                                         <button
                                                             onClick={() => handleContinueMessage(message.content, idx)}
