@@ -2603,16 +2603,14 @@
             const attachmentTypeOptions = [
                 {
                     id: 'word',
-                    label: 'Word documents',
+                    label: 'Document',
                     description: 'DOCX, PDF, TXT, MD',
-                    provider: 'DeepSeek',
                     accept: ['.docx', '.pdf', '.txt', '.md']
                 },
                 {
                     id: 'photo',
-                    label: 'Photos',
+                    label: 'Photo',
                     description: 'PNG, JPG, JPEG, GIF, WEBP',
-                    provider: 'Gemini',
                     accept: ['.png', '.jpg', '.jpeg', '.gif', '.webp']
                 }
             ];
@@ -3301,11 +3299,6 @@
                                 {attachmentError && (
                                     <div className="ai-attachment-error">{attachmentError}</div>
                                 )}
-                                {activeAttachmentType && (
-                                    <div className="text-xs text-mist/70">
-                                        Uploading {activeAttachmentType.label.toLowerCase()} using {activeAttachmentType.provider}.
-                                    </div>
-                                )}
                                 {showAttachmentTypePicker && (
                                     <div className="ai-upload-picker">
                                         <div className="ai-upload-picker-header">
@@ -3329,13 +3322,8 @@
                                                 >
                                                     <span className="ai-upload-card-title">{option.label}</span>
                                                     <span className="ai-upload-card-meta">{option.description}</span>
-                                                    <span className="ai-upload-card-meta">Handled by {option.provider}</span>
                                                 </button>
                                             ))}
-                                            <div className="ai-upload-card ai-upload-card-disabled">
-                                                <span className="ai-upload-card-title">More types soon</span>
-                                                <span className="ai-upload-card-meta">Additional providers will appear here.</span>
-                                            </div>
                                         </div>
                                     </div>
                                 )}
