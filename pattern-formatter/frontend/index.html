@@ -1771,34 +1771,53 @@
         }
 
         .unified-textarea.preview-active {
-            color: transparent;
+            /* Keep text visible but dimmed so cursor positioning works */
+            color: rgba(226, 232, 240, 0.35);
             caret-color: #F7FAFC;
-            background: transparent;
+            background: rgba(0, 0, 0, 0.3);
         }
 
         .paste-textarea-overlay {
-            position: absolute;
-            inset: 0;
+            /* Position as a preview panel below the textarea instead of overlapping */
+            position: relative;
             padding: 1rem;
+            margin-top: 0.75rem;
             border-radius: 0.75rem;
-            background: rgba(0, 0, 0, 0.3);
-            pointer-events: none;
+            background: rgba(0, 20, 40, 0.5);
+            border: 1px solid rgba(0, 180, 166, 0.25);
             overflow: auto;
+            max-height: 400px;
             display: flex;
             flex-direction: column;
-            gap: 0.35rem;
-            z-index: 1;
+            gap: 0.75rem;
             font-size: 0.9375rem;
             line-height: 1.6;
             color: #E2E8F0;
         }
 
         .paste-textarea-overlay::-webkit-scrollbar {
-            display: none;
+            width: 6px;
         }
 
-        .paste-textarea-overlay {
-            scrollbar-width: none;
+        .paste-textarea-overlay::-webkit-scrollbar-thumb {
+            background: rgba(0, 180, 166, 0.4);
+            border-radius: 3px;
+        }
+
+        .paste-preview-header {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: rgba(125, 211, 192, 0.9);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .paste-preview-header::before {
+            content: '📷';
         }
 
         .paste-image-button {
@@ -1840,26 +1859,84 @@
             word-break: break-word;
         }
 
+        .paste-preview-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
         .paste-preview-figure {
             display: flex;
             flex-direction: column;
-            gap: 0.25rem;
-            align-items: flex-start;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.75rem;
+            background: rgba(0, 180, 166, 0.08);
+            border: 1px solid rgba(0, 180, 166, 0.25);
+            border-radius: 0.75rem;
+            min-width: 140px;
+            max-width: 320px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .paste-preview-figure:hover {
+            border-color: rgba(0, 180, 166, 0.5);
+            box-shadow: 0 4px 16px rgba(0, 180, 166, 0.15);
+        }
+
+        .paste-preview-label {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: rgba(125, 211, 192, 0.85);
+            background: rgba(0, 180, 166, 0.15);
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            letter-spacing: 0.3px;
+        }
+
+        .paste-preview-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 140px;
+            height: 100px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.75rem;
         }
 
         .paste-inline-image {
-            max-width: 160px;
-            height: 1.6em;
-            object-fit: cover;
-            border-radius: 0.4rem;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+            max-width: 280px;
+            max-height: 180px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 0.5rem;
+            border: 2px solid rgba(0, 180, 166, 0.4);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+            background: rgba(0, 0, 0, 0.2);
         }
 
         .paste-preview-caption {
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.65);
-            line-height: 1.6;
+            font-size: 0.8125rem;
+            color: rgba(125, 211, 192, 0.9);
+            line-height: 1.5;
+            font-style: italic;
+            padding: 0.25rem 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.25rem;
+            max-width: 280px;
+            word-wrap: break-word;
+        }
+
+        .paste-preview-caption:empty,
+        .paste-preview-caption.empty {
+            display: none;
         }
 
         /* Quick Actions */
@@ -2206,6 +2283,13 @@
                     <path d="M19 17v4"></path>
                     <path d="M3 5h4"></path>
                     <path d="M17 19h4"></path>
+                </svg>
+            ),
+            Image: ({ size = 28 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <path d="M21 15l-5-5-8 8"></path>
                 </svg>
             ),
             ChatExpand: ({ size = 20 }) => (
@@ -7287,39 +7371,6 @@
                                                 </div>
                                                 <div className="content-card-body">
                                                     <div className="paste-textarea-wrapper">
-                                                        {hasPastePreviewImages && (
-                                                            <div ref={pasteOverlayRef} className="paste-textarea-overlay">
-                                                                {pastePreviewNodes.map((node, index) => {
-                                                                    if (node.type === 'image') {
-                                                                        return (
-                                                                            <figure key={`${node.id}-${index}`} className="paste-preview-figure">
-                                                                                {node.url ? (
-                                                                                    <img
-                                                                                        src={node.url}
-                                                                                        alt={node.showTitle ? node.title : `Image ${node.id}`}
-                                                                                        className="paste-inline-image"
-                                                                                    />
-                                                                                ) : (
-                                                                                    <div className="paste-preview-line">
-                                                                                        Image preview unavailable for {node.id}.
-                                                                                    </div>
-                                                                                )}
-                                                                                {node.hasTitleLine && (
-                                                                                    <figcaption className="paste-preview-caption">
-                                                                                        {node.showTitle ? node.title : '\u00A0'}
-                                                                                    </figcaption>
-                                                                                )}
-                                                                            </figure>
-                                                                        );
-                                                                    }
-                                                                    return (
-                                                                        <div key={`line-${index}`} className="paste-preview-line">
-                                                                            {node.text || '\u00A0'}
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )}
                                                         <textarea
                                                             ref={pasteTextareaRef}
                                                             value={pastedText}
@@ -7332,7 +7383,7 @@
                                                             onFocus={() => setPasteTextFocused(true)}
                                                             onBlur={() => setPasteTextFocused(false)}
                                                             placeholder="Paste your document content here..."
-                                                            className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''} ${hasPastePreviewImages ? 'preview-active' : ''}`}
+                                                            className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''}`}
                                                         />
                                                         <button
                                                             type="button"
@@ -7352,6 +7403,38 @@
                                                             onChange={handlePasteImageSelected}
                                                         />
                                                     </div>
+                                                    {/* Image Preview Panel - Shows below textarea when images are attached */}
+                                                    {hasPastePreviewImages && (
+                                                        <div ref={pasteOverlayRef} className="paste-textarea-overlay">
+                                                            <div className="paste-preview-header">Image Previews</div>
+                                                            <div className="paste-preview-grid">
+                                                                {pastePreviewNodes
+                                                                    .filter((node) => node.type === 'image')
+                                                                    .map((node, index) => (
+                                                                        <figure key={`${node.id}-${index}`} className="paste-preview-figure">
+                                                                            <div className="paste-preview-label">{node.id}</div>
+                                                                            {node.url ? (
+                                                                                <img
+                                                                                    src={node.url}
+                                                                                    alt={node.showTitle ? node.title : `Image ${node.id}`}
+                                                                                    className="paste-inline-image"
+                                                                                />
+                                                                            ) : (
+                                                                                <div className="paste-preview-placeholder">
+                                                                                    <Icons.Image size={32} />
+                                                                                    <span>No preview</span>
+                                                                                </div>
+                                                                            )}
+                                                                            {node.hasTitleLine && node.showTitle && (
+                                                                                <figcaption className="paste-preview-caption">
+                                                                                    {node.title}
+                                                                                </figcaption>
+                                                                            )}
+                                                                        </figure>
+                                                                    ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                     <div className="mt-2 text-xs text-mist flex flex-wrap items-center gap-2">
                                                         <span>Click the + icon to insert an image placeholder and optional title.</span>
                                                         {pasteImageFiles.length > 0 && (
@@ -8285,7 +8368,7 @@
                                                 No institution requests yet.
                                             </div>
                                         )}
-                                    </div>}
+                                    </div>)
                                 </div>
                                 )}
 
@@ -8490,6 +8573,14 @@
                 </div>
             );
         };
+
+        // Global handlers to capture uncaught promise rejections and errors (helps debugging)
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('Unhandled promise rejection:', e.reason);
+        });
+        window.addEventListener('error', (e) => {
+            console.error('Uncaught error:', e.error || e.message, e);
+        });
 
         // Render the application
         const root = ReactDOM.createRoot(document.getElementById('root'));
