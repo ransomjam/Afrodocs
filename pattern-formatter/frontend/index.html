@@ -2833,9 +2833,10 @@
                         const { mainContent, aiComment } = splitAIResponse(fullContent);
                         let sanitizedMain = sanitizeAiOutput(mainContent);
                         sanitizedMain = sanitizeAiBold(sanitizedMain);
+                        const shouldOfferContinue = !streamDone && isLikelyTruncated(mainContent);
                         // Add main content first (this is what can be formatted/copied)
                         if (sanitizedMain) {
-                            setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
+                            setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true, canContinue: shouldOfferContinue }]);
                         }
                         // Add AI comment separately (no format/copy buttons)
                         if (aiComment) {
@@ -3032,6 +3033,23 @@
             };
 
             const sanitizeAiOutput = (content) => sanitizeAiStructure(sanitizeAiBold(content));
+            const isLikelyTruncated = (content) => {
+                const trimmed = (content || '').trim();
+                if (!trimmed) return false;
+                if (/```$/.test(trimmed)) return false;
+                if (/[.!?]["')\]]?\s*$/.test(trimmed)) return false;
+                if (/[,:;—-]\s*$/.test(trimmed)) return true;
+                if (/\b(and|or|but|with|to|for|because)\s*$/i.test(trimmed)) return true;
+                return trimmed.length > 120;
+            };
+
+            const buildContinuePrompt = (content) => {
+                const snippet = (content || '')
+                    .trim()
+                    .replace(/\s+/g, ' ')
+                    .slice(-180);
+                return `Continue from where you stopped. Do not repeat previous text. Resume after: "${snippet}"`;
+            };
 
             const handleSuggestionClick = (suggestion) => {
                 // Put the suggestion prompt in the input box for user to complete
@@ -3061,7 +3079,8 @@
                     let sanitizedMain = sanitizeAiOutput(mainContent);
                     sanitizedMain = sanitizeAiBold(sanitizedMain);
                     if (sanitizedMain) {
-                        setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true }]);
+                        const shouldOfferContinue = isLikelyTruncated(mainContent);
+                        setMessages(prev => [...prev, { role: 'assistant', content: sanitizedMain, isContent: true, canContinue: shouldOfferContinue }]);
                     }
                     if (aiComment) {
                         setMessages(prev => [...prev, { role: 'assistant', content: aiComment, isComment: true }]);
@@ -3070,6 +3089,14 @@
                 setIsLoading(false);
                 setIsStreaming(false);
                 setStreamingContent('');
+            };
+
+            const handleContinueMessage = (content, index) => {
+                const prompt = buildContinuePrompt(content);
+                setMessages(prev => prev.map((msg, idx) => (
+                    idx === index ? { ...msg, canContinue: false } : msg
+                )));
+                handleSendMessage(prompt);
             };
 
             const handleFormatMessage = async (content, index) => {
@@ -3087,6 +3114,10 @@
                 // When collapsed we render nothing — the AI is opened from the main header
                 return null;
             }
+
+            const lastAssistantIndex = messages.reduce((acc, message, index) => (
+                message.role === 'assistant' && !message.isComment ? index : acc
+            ), -1);
 
             return (
                 <>
@@ -3227,6 +3258,16 @@
                                                             </>
                                                         )}
                                                     </button>
+                                                    {message.canContinue && idx === lastAssistantIndex && !isLoading && (
+                                                        <button
+                                                            onClick={() => handleContinueMessage(message.content, idx)}
+                                                            className="ai-action-button"
+                                                            title="Continue generating"
+                                                        >
+                                                            <Icons.ArrowUp size={14} />
+                                                            Continue
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 )}
                                                 {!message.isComment && (
