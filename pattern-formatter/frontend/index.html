@@ -1757,6 +1757,40 @@
             color: rgba(255, 255, 255, 0.4);
         }
 
+        .paste-textarea-wrapper {
+            position: relative;
+        }
+
+        .paste-image-button {
+            position: absolute;
+            right: 0.75rem;
+            top: 0.75rem;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(10, 25, 41, 0.9);
+            color: #7DD3C0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transform: translateX(6px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .paste-image-button.visible {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: auto;
+        }
+
+        .paste-image-button:hover {
+            border-color: rgba(0, 180, 166, 0.6);
+        }
+
         /* Quick Actions */
         .quick-actions {
             display: flex;
@@ -5285,6 +5319,9 @@
             const [showProfile, setShowProfile] = useState(false);
             const fileInputRef = useRef(null);
             const pasteTextareaRef = useRef(null);
+            const pasteImageInputRef = useRef(null);
+            const pasteSelectionRef = useRef({ start: 0, end: 0 });
+            const pasteImageCounterRef = useRef(1);
             const [shareBlob, setShareBlob] = useState(null);
             const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
             const [showPdfModal, setShowPdfModal] = useState(false);
@@ -5319,6 +5356,9 @@
             const [showFormattingModal, setShowFormattingModal] = useState(false);
             const [pendingFile, setPendingFile] = useState(null);
             const RESTRUCTURE_PASTE_MAX_CHARS = 6000;
+            const [pasteImageFiles, setPasteImageFiles] = useState([]);
+            const [pendingPasteImages, setPendingPasteImages] = useState([]);
+            const [pasteTextFocused, setPasteTextFocused] = useState(false);
             const isPastedTextWithinAiLimit = pastedText.trim().length > 0
                 && pastedText.length <= RESTRUCTURE_PASTE_MAX_CHARS;
             const defaultFormattingOptions = {
@@ -5537,9 +5577,61 @@
                 pasteTextareaRef.current.style.height = Math.min(pasteTextareaRef.current.scrollHeight, maxHeight) + 'px';
             };
 
+            const updatePasteSelection = useCallback(() => {
+                if (!pasteTextareaRef.current) return;
+                pasteSelectionRef.current = {
+                    start: pasteTextareaRef.current.selectionStart || 0,
+                    end: pasteTextareaRef.current.selectionEnd || 0
+                };
+            }, []);
+
             useEffect(() => {
                 adjustPasteTextareaHeight();
             }, [pastedText]);
+
+            const handlePasteImageClick = () => {
+                updatePasteSelection();
+                if (pasteImageInputRef.current) {
+                    pasteImageInputRef.current.value = '';
+                    pasteImageInputRef.current.click();
+                }
+            };
+
+            const handlePasteImageSelected = (event) => {
+                const files = Array.from(event.target.files || []);
+                if (!files.length) return;
+
+                const newEntries = files.map((file) => {
+                    const id = `paste_img_${String(pasteImageCounterRef.current).padStart(3, '0')}`;
+                    pasteImageCounterRef.current += 1;
+                    return { id, file };
+                });
+
+                setPasteImageFiles((prev) => [...prev, ...newEntries]);
+
+                const selection = pasteSelectionRef.current || { start: pastedText.length, end: pastedText.length };
+                const start = selection.start ?? pastedText.length;
+                const end = selection.end ?? pastedText.length;
+                const before = pastedText.slice(0, start);
+                const after = pastedText.slice(end);
+                const placeholderBlock = newEntries
+                    .map((entry) => `[IMAGE:${entry.id}]\n[IMAGE_TITLE:${entry.id}] Optional title`)
+                    .join('\n');
+                const needsLeadingBreak = Boolean(before && !before.endsWith('\n'));
+                const needsTrailingBreak = Boolean(after && !after.startsWith('\n'));
+                const nextText = `${before}${needsLeadingBreak ? '\n' : ''}${placeholderBlock}${needsTrailingBreak ? '\n' : ''}${after}`;
+
+                setPastedText(nextText);
+
+                requestAnimationFrame(() => {
+                    if (!pasteTextareaRef.current) return;
+                    pasteTextareaRef.current.focus();
+                    const cursorPos = (before + (needsLeadingBreak ? '\n' : '') + placeholderBlock).length;
+                    pasteTextareaRef.current.selectionStart = cursorPos;
+                    pasteTextareaRef.current.selectionEnd = cursorPos;
+                    pasteSelectionRef.current = { start: cursorPos, end: cursorPos };
+                });
+            };
 
             // Stop generation handler
             const handleStopGeneration = useCallback(() => {
@@ -5569,6 +5661,8 @@
                 // Store pending file and show formatting modal
                 setPendingFile(selectedFile);
                 setPastedText(''); // Clear pasted text if any
+                setPasteImageFiles([]);
+                setPendingPasteImages([]);
                 setError(null);
                 setShowFormattingModal(true);
             }, []);
@@ -5610,6 +5704,13 @@
                         formData.append('margin_right', String(options.marginRight));
                     } else {
                         formData.append('margin_cm', String(options.marginCm));
+                    }
+                    
+                    if (pendingPasteImages.length && selectedFile?.name?.includes('pasted_document')) {
+                        pendingPasteImages.forEach((entry) => {
+                            formData.append('paste_images', entry.file, entry.file.name);
+                        });
+                        formData.append('paste_image_ids', JSON.stringify(pendingPasteImages.map(entry => entry.id)));
                     }
 
                     setStatus('Processing...');
@@ -5760,6 +5861,7 @@
                 
                 // Store pending file and show formatting modal
                 setPendingFile(file);
+                setPendingPasteImages(pasteImageFiles);
                 setShowFormattingModal(true);
             };
 
@@ -5999,6 +6101,9 @@
                 setMergeJobId(null);
                 setShowSuccessMessage(false);
                 setShowShare(false);
+                setPastedText('');
+                setPasteImageFiles([]);
+                setPendingPasteImages([]);
                 if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                 }
@@ -6970,14 +7075,46 @@
                                                     </div>
                                                 </div>
                                                 <div className="content-card-body">
-                                                    <textarea
-                                                        ref={pasteTextareaRef}
-                                                        value={pastedText}
-                                                        onChange={(e) => setPastedText(e.target.value)}
-                                                        onPaste={adjustPasteTextareaHeight}
-                                                        placeholder="Paste your document content here..."
-                                                        className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''}`}
-                                                    />
+                                                    <div className="paste-textarea-wrapper">
+                                                        <textarea
+                                                            ref={pasteTextareaRef}
+                                                            value={pastedText}
+                                                            onChange={(e) => setPastedText(e.target.value)}
+                                                            onPaste={adjustPasteTextareaHeight}
+                                                            onClick={updatePasteSelection}
+                                                            onKeyUp={updatePasteSelection}
+                                                            onSelect={updatePasteSelection}
+                                                            onFocus={() => setPasteTextFocused(true)}
+                                                            onBlur={() => setPasteTextFocused(false)}
+                                                            placeholder="Paste your document content here..."
+                                                            className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''}`}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            className={`paste-image-button ${pasteTextFocused ? 'visible' : ''}`}
+                                                            onMouseDown={(event) => event.preventDefault()}
+                                                            onClick={handlePasteImageClick}
+                                                            aria-label="Insert image placeholder"
+                                                        >
+                                                            <Icons.Plus size={18} />
+                                                        </button>
+                                                        <input
+                                                            ref={pasteImageInputRef}
+                                                            type="file"
+                                                            accept="image/*"
+                                                            multiple
+                                                            className="hidden"
+                                                            onChange={handlePasteImageSelected}
+                                                        />
+                                                    </div>
+                                                    <div className="mt-2 text-xs text-mist flex flex-wrap items-center gap-2">
+                                                        <span>Click the + icon to insert an image placeholder and optional title.</span>
+                                                        {pasteImageFiles.length > 0 && (
+                                                            <span className="px-2 py-0.5 rounded-full bg-white/10 text-white">
+                                                                {pasteImageFiles.length} image{pasteImageFiles.length > 1 ? 's' : ''} queued
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     {pastedText && (
                                                         <div className="quick-actions">
                                                             <button
