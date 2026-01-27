@@ -1187,6 +1187,16 @@ def extract_text_from_attachment(attachment):
     return None, f"{name}: unsupported attachment type"
 
 
+IMAGE_ATTACHMENT_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+
+
+def attachment_is_image(attachment):
+    name = attachment.get('name') or ''
+    ext = os.path.splitext(name)[1].lower()
+    mime = (attachment.get('type') or '').lower()
+    return ext in IMAGE_ATTACHMENT_EXTENSIONS or mime.startswith('image/')
+
+
 def build_attachment_context(attachments, max_chars=12000):
     if not attachments:
         return "", ""
@@ -1376,7 +1386,7 @@ def ai_chat():
     attachments = data.get('attachments', [])
     raw_message = message
 
-    use_gemini = bool(attachments)
+    use_gemini = any(attachment_is_image(attachment) for attachment in attachments)
 
     try:
         if use_gemini:
@@ -1474,7 +1484,7 @@ def ai_chat_stream():
     attachments = data.get('attachments', [])
     raw_message = message
 
-    use_gemini = bool(attachments)
+    use_gemini = any(attachment_is_image(attachment) for attachment in attachments)
     
     if not use_gemini:
         attachment_context, attachment_issues = build_attachment_context(attachments)
