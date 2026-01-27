@@ -904,14 +904,15 @@ def record_ai_request(prompt, request_type):
         db.session.rollback()
 
 # DeepSeek API Configuration
-DEEPSEEK_API_KEY = "sk-4a857c0c76cf4db89fef65b871da982a"
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
-DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-4a857c0c76cf4db89fef65b871da982a")
+DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "8192"))
 
 # Gemini API Configuration (used for image/document attachments)
-GEMINI_API_KEY = "AIzaSyDAhVQzICAXDE91bSqNzKgjlG1sBfGfP8A"
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+# Set the Gemini key in environment variable `GEMINI_API_KEY` for security.
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDAhVQzICAXDE91bSqNzKgjlG1sBfGfP8A")
+GEMINI_API_URL = os.getenv("GEMINI_API_URL", "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent")
 
 # System prompt for the AI assistant
 AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing assistant. Follow these guidelines strictly:
@@ -1286,9 +1287,19 @@ def _extract_gemini_text(result):
 def _call_gemini(contents, temperature=0.7, max_tokens=AI_MAX_TOKENS, timeout=90):
     import requests
 
+    url = GEMINI_API_URL
+    headers = {"Content-Type": "application/json"}
+
+    # Prefer Bearer Authorization if a key is provided via env var
+    if GEMINI_API_KEY:
+        headers["Authorization"] = f"Bearer {GEMINI_API_KEY}"
+    else:
+        # fallback to query param if no Authorization header is available
+        url = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
+
     response = requests.post(
-        f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
-        headers={"Content-Type": "application/json"},
+        url,
+        headers=headers,
         json={
             "system_instruction": {"parts": [{"text": AI_SYSTEM_PROMPT}]},
             "contents": contents,
