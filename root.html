@@ -1395,6 +1395,10 @@
             transition: all 0.2s ease;
         }
 
+        .unified-textarea.expanded {
+            min-height: 70vh;
+        }
+
         .unified-textarea:focus {
             border-color: #00B4A6;
             box-shadow: 0 0 0 2px rgba(0, 180, 166, 0.2);
@@ -5487,7 +5491,7 @@
                                                         value={pastedText}
                                                         onChange={(e) => setPastedText(e.target.value)}
                                                         placeholder="Paste your document content here..."
-                                                        className="unified-textarea"
+                                                        className={`unified-textarea ${pastedText.trim() ? 'expanded' : ''}`}
                                                     />
                                                     {pastedText && (
                                                         <div className="quick-actions">
