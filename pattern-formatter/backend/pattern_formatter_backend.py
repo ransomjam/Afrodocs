@@ -2873,7 +2873,9 @@ class HeadingNumberer:
         """Align internal counters with existing numbering to avoid drift."""
         if not existing_num:
             return
-        normalized = existing_num.rstrip('.)')
+        normalized = existing_num.strip()
+        normalized = re.sub(r'^[\(\[]', '', normalized)
+        normalized = re.sub(r'[\)\]\.]$', '', normalized)
         if re.match(r'^[A-Z]\.', normalized):
             parts = normalized.split('.')
             self.in_appendix = True
@@ -3140,19 +3142,19 @@ class HeadingNumberer:
 
         numbering_patterns = [
             # Hierarchical numeric (1.2, 1.2.3)
-            (r'^((?:\d+\.)+\d+)[\.)]?\s+(.+)$', None),
+            (r'^((?:\d+\.)+\d+[\.)]?)\s+(.+)$', None),
             # Appendix style (A.1, A.1.2)
-            (r'^([A-Z]\.(?:\d+\.)*\d+)[\.)]?\s+(.+)$', None),
+            (r'^([A-Z]\.(?:\d+\.)*\d+[\.)]?)\s+(.+)$', None),
             # Mixed numeric + letter (5.f, 2.A)
-            (r'^(\d+\.[A-Za-z])[\.)]?\s+(.+)$', re.IGNORECASE),
+            (r'^(\d+\.[A-Za-z][\.)]?)\s+(.+)$', re.IGNORECASE),
             # Single-level numeric/alpha/roman (1., A., I.)
-            (r'^(\d+)[\.)]\s+(.+)$', None),
-            (r'^([A-Z])[\.)]\s+(.+)$', None),
-            (r'^([IVXLCDM]+)[\.)]\s+(.+)$', re.IGNORECASE),
+            (r'^(\d+[\.)])\s+(.+)$', None),
+            (r'^([A-Z][\.)])\s+(.+)$', None),
+            (r'^([IVXLCDM]+[\.)])\s+(.+)$', re.IGNORECASE),
             # Parenthesized numbering ((1), (a), (i))
-            (r'^\((\d+|[A-Z]|[IVXLCDM]+)\)\s+(.+)$', re.IGNORECASE),
+            (r'^(\((?:\d+|[A-Z]|[IVXLCDM]+)\))\s+(.+)$', re.IGNORECASE),
             # Bracketed numbering ([1], [A], [i])
-            (r'^\[(\d+|[A-Z]|[IVXLCDM]+)\]\s+(.+)$', re.IGNORECASE),
+            (r'^(\[(?:\d+|[A-Z]|[IVXLCDM]+)\])\s+(.+)$', re.IGNORECASE),
         ]
 
         for pattern, flags in numbering_patterns:
@@ -13844,7 +13846,7 @@ class WordGenerator:
         if section_type == 'shortdoc_section':
             header_text = section.get('title', '')
             if section.get('numbering'):
-                header_text = f"{section.get('numbering')}. {header_text}"
+                header_text = self._format_numbered_heading(section.get('numbering'), header_text)
 
             heading = self.doc.add_heading(header_text, level=min(section.get('level', 3), 4))
             
@@ -14063,6 +14065,17 @@ class WordGenerator:
         else:
             # Default: add content normally
             self._add_section_content(section)
+
+    def _format_numbered_heading(self, numbering, title):
+        """Format numbered headings without duplicating punctuation."""
+        if not numbering:
+            return title
+        clean_numbering = str(numbering).strip()
+        if not clean_numbering:
+            return title
+        if re.search(r'[.)\]:]$', clean_numbering) or '.' in clean_numbering:
+            return f"{clean_numbering} {title}".strip()
+        return f"{clean_numbering}. {title}".strip()
     
     def _add_shortdoc_subheader(self, item):
         """Add short document subheaders (questions, tasks, etc.)"""
@@ -14092,7 +14105,7 @@ class WordGenerator:
             run.bold = True
             run.italic = False
         else:
-            prefix = f"{numbering}. "
+            prefix = self._format_numbered_heading(numbering, '').rstrip() + ' ' if numbering else ''
             run = p.add_run(prefix)
             run.bold = True
 
