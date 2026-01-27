@@ -1110,6 +1110,8 @@
             display: flex;
             height: 100%;
             min-height: 500px;
+            --ai-sidebar-top: 0px;
+            --ai-sidebar-bottom: 0px;
         }
 
         .ai-sidebar {
@@ -1121,6 +1123,9 @@
             flex-shrink: 0;
             transition: width 0.2s ease, transform 0.2s ease;
             overflow: hidden;
+            margin-top: var(--ai-sidebar-top, 0px);
+            margin-bottom: var(--ai-sidebar-bottom, 0px);
+            height: calc(100% - var(--ai-sidebar-top, 0px) - var(--ai-sidebar-bottom, 0px));
         }
 
         .ai-sidebar:not(.open) {
@@ -1269,6 +1274,8 @@
                 transform: translateX(-100%);
                 transition: transform 0.2s ease;
                 box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+                margin: 0;
+                height: auto;
             }
 
             .ai-sidebar.open {
@@ -2513,9 +2520,20 @@
             const inputRef = useRef(null);
             const textareaRef = useRef(null);
             const sidebarRef = useRef(null);
+            const layoutRef = useRef(null);
+            const headerRef = useRef(null);
+            const inputContainerRef = useRef(null);
             const toggleRef = useRef(null);
             const abortControllerRef = useRef(null);
             const attachmentInputRef = useRef(null);
+            const updateSidebarOffsets = useCallback(() => {
+                const layoutEl = layoutRef.current;
+                if (!layoutEl) return;
+                const headerHeight = headerRef.current?.offsetHeight || 0;
+                const inputHeight = inputContainerRef.current?.offsetHeight || 0;
+                layoutEl.style.setProperty('--ai-sidebar-top', `${headerHeight}px`);
+                layoutEl.style.setProperty('--ai-sidebar-bottom', `${inputHeight}px`);
+            }, []);
 
             // Load chat history from localStorage on mount
             useEffect(() => {
@@ -2559,6 +2577,27 @@
             useEffect(() => {
                 adjustTextareaHeight();
             }, [inputValue]);
+
+            useEffect(() => {
+                updateSidebarOffsets();
+            }, [
+                updateSidebarOffsets,
+                attachments.length,
+                attachmentError,
+                showAttachmentTypePicker,
+                messages.length,
+                isStreaming
+            ]);
+
+            useEffect(() => {
+                const headerEl = headerRef.current;
+                const inputEl = inputContainerRef.current;
+                if (!headerEl && !inputEl) return undefined;
+                const observer = new ResizeObserver(() => updateSidebarOffsets());
+                if (headerEl) observer.observe(headerEl);
+                if (inputEl) observer.observe(inputEl);
+                return () => observer.disconnect();
+            }, [updateSidebarOffsets]);
 
             // Click-away handler: close sidebar when clicking outside (capture-phase pointer for reliability)
             useEffect(() => {
@@ -3127,7 +3166,7 @@
             return (
                 <>
                 <div className="ai-chat-container">
-                    <div className="ai-layout-container">
+                    <div className="ai-layout-container" ref={layoutRef}>
                         {/* Overlay for mobile - click to close sidebar */}
                         <div 
                             className={`ai-sidebar-overlay ${sidebarOpen ? 'open' : ''}`}
@@ -3181,7 +3220,7 @@
                         {/* Main chat area */}
                         <div className="ai-main-content">
                             {/* Header */}
-                            <div className="ai-header">
+                            <div className="ai-header" ref={headerRef}>
                                 <div className="ai-header-title">
                                         <button 
                                             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -3324,7 +3363,7 @@
                             </div>
 
                             {/* Input Area */}
-                            <div className="ai-input-container">
+                            <div className="ai-input-container" ref={inputContainerRef}>
                                 {attachments.length > 0 && (
                                     <div className="ai-attachment-list">
                                         {attachments.map((attachment) => (
