@@ -10329,6 +10329,8 @@ class DocumentProcessor:
 
         # Normalize line endings to ensure consistent splitting
         text = text.replace('\r\n', '\n').replace('\r', '\n')
+
+        image_placeholder_pattern = re.compile(r'^\s*\[IMAGE:(?P<image_id>[^\]]+)\]\s*$', re.IGNORECASE)
         
         # PREPROCESSING: Apply regex-based text formatting for consistent numbering/bulleting
         # This fixes common formatting inconsistencies across documents (opt-in via policy).
@@ -10352,6 +10354,15 @@ class DocumentProcessor:
         # THIRD: AI Content Cleaning
         lines = []
         for line in text.split('\n'):
+            image_match = image_placeholder_pattern.match(line)
+            if image_match:
+                image_id = image_match.group('image_id').strip()
+                lines.append({
+                    'text': f'[IMAGE:{image_id}]',
+                    'type': 'image_placeholder',
+                    'image_id': image_id
+                })
+                continue
             # Detect AI meta-commentary but preserve content to avoid data loss
             is_ai_meta = self.engine.detect_ai_generated_content(line)
                 
@@ -16253,6 +16264,68 @@ def health_check():
         'patterns_loaded': 40
     })
 
+def extract_paste_image_titles(text):
+    if not text:
+        return text, {}
+
+    title_pattern = re.compile(r'^\s*\[IMAGE_TITLE:(?P<image_id>[^\]]+)\]\s*(?P<title>.*)$', re.IGNORECASE)
+    cleaned_lines = []
+    titles = {}
+
+    for line in text.split('\n'):
+        match = title_pattern.match(line)
+        if match:
+            image_id = match.group('image_id').strip()
+            title = match.group('title').strip()
+            if title:
+                normalized = title.strip().lower()
+                if normalized not in {'optional title', '(optional title)', 'optional', '(optional)'}:
+                    titles[image_id] = title
+            continue
+        cleaned_lines.append(line)
+
+    return '\n'.join(cleaned_lines), titles
+
+def build_paste_images(image_files, image_ids, titles, placeholder_ids):
+    images = []
+    if not image_files:
+        return images
+
+    for idx, image_file in enumerate(image_files):
+        image_id = image_ids[idx] if idx < len(image_ids) else f'paste_img_{idx + 1:03d}'
+        if placeholder_ids and image_id not in placeholder_ids:
+            continue
+
+        image_bytes = image_file.read()
+        if not image_bytes:
+            continue
+
+        _, ext = os.path.splitext(image_file.filename or '')
+        ext = ext.lstrip('.').lower()
+        mime = (image_file.mimetype or '').lower()
+        if not ext:
+            if 'png' in mime:
+                ext = 'png'
+            elif 'jpg' in mime or 'jpeg' in mime:
+                ext = 'jpeg'
+            elif 'gif' in mime:
+                ext = 'gif'
+            elif 'webp' in mime:
+                ext = 'webp'
+            else:
+                ext = 'png'
+
+        images.append({
+            'image_id': image_id,
+            'data': image_bytes,
+            'format': ext,
+            'width': 4.0,
+            'height': 3.0,
+            'caption': titles.get(image_id)
+        })
+
+    return images
+
 
 @app.route('/upload', methods=['POST'])
 @allow_guest
@@ -16265,6 +16338,16 @@ def upload_document():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'Empty filename'}), 400
+
+    paste_image_files = request.files.getlist('paste_images')
+    paste_image_ids = []
+    paste_image_titles = {}
+    paste_image_placeholder_ids = set()
+    if request.form.get('paste_image_ids'):
+        try:
+            paste_image_ids = json.loads(request.form.get('paste_image_ids'))
+        except (TypeError, json.JSONDecodeError) as exc:
+            logger.warning(f"Invalid paste_image_ids payload: {exc}")
     
     # Extract formatting options from request
     include_toc = request.form.get('include_toc', 'false').lower() == 'true'
@@ -16486,7 +16569,10 @@ def upload_document():
 
         if restructure_with_ai and restructured_text is not None:
             # Process restructured text in place of the original file content
-            proc_result = processor.process_text(restructured_text, strip_front_matter=include_toc)
+            cleaned_text, paste_image_titles = extract_paste_image_titles(restructured_text)
+            paste_image_placeholder_ids = set(re.findall(r'\[IMAGE:([^\]]+)\]', cleaned_text, flags=re.IGNORECASE))
+            paste_images = build_paste_images(paste_image_files, paste_image_ids, paste_image_titles, paste_image_placeholder_ids)
+            proc_result = processor.process_text(cleaned_text, strip_front_matter=include_toc)
             if isinstance(proc_result, tuple):
                 if len(proc_result) == 3:
                     result, images, shapes = proc_result
@@ -16501,6 +16587,8 @@ def upload_document():
                 result = proc_result
                 images = []
                 shapes = []
+            if paste_images:
+                images = paste_images
         elif file_ext == '.docx':
             # Robust unpacking to handle both dict and tuple returns (now returns 3-tuple with shapes)
             proc_result = processor.process_docx(input_path, strip_front_matter=include_toc)
@@ -16524,7 +16612,10 @@ def upload_document():
             with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
                 text = f.read()
             # Robust unpacking for text processing too (now returns 3-tuple with shapes)
-            proc_result = processor.process_text(text, strip_front_matter=include_toc)
+            cleaned_text, paste_image_titles = extract_paste_image_titles(text)
+            paste_image_placeholder_ids = set(re.findall(r'\[IMAGE:([^\]]+)\]', cleaned_text, flags=re.IGNORECASE))
+            paste_images = build_paste_images(paste_image_files, paste_image_ids, paste_image_titles, paste_image_placeholder_ids)
+            proc_result = processor.process_text(cleaned_text, strip_front_matter=include_toc)
             if isinstance(proc_result, tuple):
                 if len(proc_result) == 3:
                     result, images, shapes = proc_result
@@ -16539,6 +16630,8 @@ def upload_document():
                 result = proc_result
                 images = []
                 shapes = []
+            if paste_images:
+                images = paste_images
         
         # Validate result format
         if not isinstance(result, dict) or 'structured' not in result:
