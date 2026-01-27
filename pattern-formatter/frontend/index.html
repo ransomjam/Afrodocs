@@ -614,9 +614,9 @@
         }
 
         .ai-message-assistant ul, .ai-message-assistant ol {
-            margin: 0.35rem 0 0.6rem;
-            padding-left: 1.6rem;
-            line-height: 1.45;
+            margin: 0.25rem 0 0.45rem;
+            padding-left: 1.25rem;
+            line-height: 1.4;
             list-style-position: outside;
         }
 
@@ -649,9 +649,13 @@
         }
 
         .ai-message-assistant li {
-            margin: 0.2rem 0;
+            margin: 0.15rem 0;
             padding-left: 0.15rem;
             font-weight: 400;
+        }
+
+        .ai-message-assistant li p {
+            margin: 0;
         }
 
         .ai-message-assistant h1, .ai-message-assistant h2, .ai-message-assistant h3, 
@@ -2340,6 +2344,9 @@
             // Wrap consecutive li elements in ul
             html = html.replace(/(<li>.*?<\/li>)+/gs, (match) => `<ul>${match}</ul>`);
             html = html.replace(/<\/li><br\s*\/?>/g, '</li>');
+            html = html.replace(/<\/li>(?:\s|<br\s*\/?>|<\/p>\s*<p>)+<li>/g, '</li><li>');
+            html = html.replace(/<p>\s*(<ul>)/g, '$1');
+            html = html.replace(/(<\/ul>)\s*<\/p>/g, '$1');
 
             // Wrap in paragraph if not starting with a block element
             if (!html.startsWith('<h') && !html.startsWith('<ul') && !html.startsWith('<pre') && !html.startsWith('<div')) {
