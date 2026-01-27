@@ -14709,6 +14709,12 @@ class WordGenerator:
             (r'^([a-z][\.\)])\s+', ''),
             (r'^([A-Z][\.\)])\s+', ''),
             (r'^([ivxlcdm]+[\.\)])\s+', re.IGNORECASE),
+
+            # Standard period/paren without required whitespace (e.g., "8)Intro")
+            (r'^(\d+[\.\)])(?=\s*[A-Za-z(])\s*', ''),
+            (r'^([a-z][\.\)])(?=\s*[A-Za-z(])\s*', ''),
+            (r'^([A-Z][\.\)])(?=\s*[A-Za-z(])\s*', ''),
+            (r'^([ivxlcdm]+[\.\)])(?=\s*[A-Za-z(])\s*', re.IGNORECASE),
             
             # Parenthesized: (1), (a), (i), etc.
             (r'^(\(\d+\))\s+', ''),
