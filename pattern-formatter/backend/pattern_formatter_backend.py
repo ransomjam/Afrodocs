@@ -14454,6 +14454,27 @@ class WordGenerator:
             return label, remainder
         return None
 
+    def _split_numbered_title_block(self, text, min_body_lines=2, max_title_words=20, max_title_chars=120):
+        """
+        Detect numbered items where the first line is a short title and the body spans multiple lines.
+
+        Returns (title, body_lines) when:
+        - There are at least min_body_lines lines after the title.
+        - The title is reasonably short (acts like a heading).
+        """
+        if not text or '\n' not in text:
+            return None
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        if len(lines) < 1 + min_body_lines:
+            return None
+        title = lines[0]
+        if len(title.split()) > max_title_words or len(title) > max_title_chars:
+            return None
+        body_lines = lines[1:]
+        if len(body_lines) < min_body_lines:
+            return None
+        return title, body_lines
+
     def _is_main_research_question_heading(self, heading_text):
         """Return True when the heading is exactly 'Main Research Question(s)'."""
         if not heading_text:
@@ -14503,6 +14524,9 @@ class WordGenerator:
             (r'^(\d+:)\s+', ''),
             (r'^([a-zA-Z]:)\s+', ''),
             (r'^([ivxlcdm]+:)\s+', re.IGNORECASE),
+
+            # With comma: 1, 2, etc.
+            (r'^(\d+,)\s+', ''),
             
             # Ordinal numbers: 1st, 2nd, 3rd, 4th, etc.
             (r'^(\d+(?:st|nd|rd|th)[\.\)]?)\s+', ''),
@@ -14938,6 +14962,33 @@ class WordGenerator:
                         para.paragraph_format.space_after = Pt(0)
                         para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75))
                     else:
+                        title_block = self._split_numbered_title_block(content_after_num) if numbering else None
+                        if title_block:
+                            title_line, body_lines = title_block
+                            title_para = self.doc.add_paragraph()
+                            prefix_run = title_para.add_run(f"{numbering} ")
+                            title_run = title_para.add_run(title_line)
+                            title_run.bold = True
+                            for run in (prefix_run, title_run):
+                                run.font.name = 'Times New Roman'
+                                run.font.size = Pt(self.font_size)
+                            title_para.paragraph_format.left_indent = Pt(0)
+                            title_para.paragraph_format.first_line_indent = Pt(0)
+                            title_para.paragraph_format.space_after = Pt(3)
+                            for body_line in body_lines:
+                                label_split = self._split_label_for_bold(body_line)
+                                if label_split and not list_item.get('original_bold', False):
+                                    para = self.doc.add_paragraph()
+                                    self._add_label_bold_runs(para, label_split[0], label_split[1])
+                                else:
+                                    para = self.doc.add_paragraph(body_line)
+                                para.paragraph_format.left_indent = Pt(0)
+                                para.paragraph_format.first_line_indent = Pt(0)
+                                para.paragraph_format.space_after = Pt(3)
+                                for run in para.runs:
+                                    run.font.name = 'Times New Roman'
+                                    run.font.size = Pt(self.font_size)
+                            continue
                         # SUBSTANTIVE ITEM: Render as plain paragraph(s) with minimal label bolding.
                         paragraphs = content_after_num.split('\n') if '\n' in content_after_num else [content_after_num]
                         for idx, para_text in enumerate(paragraphs):
@@ -14977,22 +15028,49 @@ class WordGenerator:
                     else:
                         list_counter = 0
                     paragraphs = clean_item.split('\n') if '\n' in clean_item else [clean_item]
-                    for idx, para_text in enumerate(paragraphs):
-                        if not para_text.strip():
-                            continue
-                        prefix = f"{numbering} " if idx == 0 else ''
-                        label_split = self._split_label_for_bold(para_text)
-                        if label_split and not original_bold:
-                            para = self.doc.add_paragraph()
-                            self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
-                        else:
-                            para = self.doc.add_paragraph(prefix + para_text)
-                        para.paragraph_format.left_indent = Pt(0)
-                        para.paragraph_format.first_line_indent = Pt(0)
-                        para.paragraph_format.space_after = Pt(3)
-                        for run in para.runs:
+                    title_block = self._split_numbered_title_block(clean_item)
+                    if title_block:
+                        title_line, body_lines = title_block
+                        title_para = self.doc.add_paragraph()
+                        prefix_run = title_para.add_run(f"{numbering} ")
+                        title_run = title_para.add_run(title_line)
+                        title_run.bold = True
+                        for run in (prefix_run, title_run):
                             run.font.name = 'Times New Roman'
                             run.font.size = Pt(self.font_size)
+                        title_para.paragraph_format.left_indent = Pt(0)
+                        title_para.paragraph_format.first_line_indent = Pt(0)
+                        title_para.paragraph_format.space_after = Pt(3)
+                        for body_line in body_lines:
+                            label_split = self._split_label_for_bold(body_line)
+                            if label_split and not original_bold:
+                                para = self.doc.add_paragraph()
+                                self._add_label_bold_runs(para, label_split[0], label_split[1])
+                            else:
+                                para = self.doc.add_paragraph(body_line)
+                            para.paragraph_format.left_indent = Pt(0)
+                            para.paragraph_format.first_line_indent = Pt(0)
+                            para.paragraph_format.space_after = Pt(3)
+                            for run in para.runs:
+                                run.font.name = 'Times New Roman'
+                                run.font.size = Pt(self.font_size)
+                    else:
+                        for idx, para_text in enumerate(paragraphs):
+                            if not para_text.strip():
+                                continue
+                            prefix = f"{numbering} " if idx == 0 else ''
+                            label_split = self._split_label_for_bold(para_text)
+                            if label_split and not original_bold:
+                                para = self.doc.add_paragraph()
+                                self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
+                            else:
+                                para = self.doc.add_paragraph(prefix + para_text)
+                            para.paragraph_format.left_indent = Pt(0)
+                            para.paragraph_format.first_line_indent = Pt(0)
+                            para.paragraph_format.space_after = Pt(3)
+                            for run in para.runs:
+                                run.font.name = 'Times New Roman'
+                                run.font.size = Pt(self.font_size)
             
             elif item.get('type') == 'table':
                 self._add_table(item)
