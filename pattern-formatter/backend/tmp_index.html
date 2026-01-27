@@ -1109,10 +1109,16 @@
             flex: 1;
             padding: 0.75rem;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
         }
 
         .app-nav-section {
             margin-bottom: 1.5rem;
+        }
+
+        .app-nav-community {
+            margin-top: auto;
         }
 
         .app-nav-section-title {
@@ -5343,7 +5349,7 @@
                             )}
 
                             {/* Community Link */}
-                            <div className="app-nav-section mt-auto">
+                            <div className="app-nav-section app-nav-community">
                                 <a 
                                     href="https://chat.whatsapp.com/CrSrujvvZj41FNvIWbkJoG?mode=gi_t" 
                                     target="_blank" 
@@ -5361,6 +5367,14 @@
                                     </span>
                                     <span>Join our community</span>
                                 </a>
+                                <button
+                                    onClick={openSupportModal}
+                                    className="app-nav-item hover:text-teal"
+                                    title="Contact support"
+                                >
+                                    <span className="app-nav-item-icon"><Icons.MessageSquare size={18} /></span>
+                                    <span>Contact support</span>
+                                </button>
                             </div>
                         </nav>
 
