@@ -3363,7 +3363,7 @@
                                                             </>
                                                         )}
                                                     </button>
-                                                    {latestAssistantSegments.length > 1 && idx === lastAssistantIndex && !isLoading && !isStreaming && (
+                                                    {latestAssistantSegments.length > 1 && idx === lastAssistantIndex && !isLoading && !isStreaming && !message.canContinue && (
                                                         <button
                                                             onClick={() => handleCopyAllSegments(idx)}
                                                             className={`ai-action-button ${copiedAllIndex === idx ? 'copied' : ''}`}
