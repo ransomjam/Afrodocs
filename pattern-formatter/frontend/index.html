@@ -1798,6 +1798,44 @@
             border-color: rgba(0, 180, 166, 0.6);
         }
 
+        .paste-preview {
+            margin-top: 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(6, 20, 32, 0.6);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .paste-preview-line {
+            color: #E2E8F0;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .paste-preview-figure {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+
+        .paste-preview-image {
+            max-width: 100%;
+            border-radius: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        }
+
+        .paste-preview-caption {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.65);
+        }
+
         /* Quick Actions */
         .quick-actions {
             display: flex;
@@ -5444,6 +5482,7 @@
             const [pasteImageFiles, setPasteImageFiles] = useState([]);
             const [pendingPasteImages, setPendingPasteImages] = useState([]);
             const [pasteTextFocused, setPasteTextFocused] = useState(false);
+            const [pasteImageUrls, setPasteImageUrls] = useState({});
             const isPastedTextWithinAiLimit = pastedText.trim().length > 0
                 && pastedText.length <= RESTRUCTURE_PASTE_MAX_CHARS;
             const defaultFormattingOptions = {
@@ -5673,6 +5712,50 @@
             useEffect(() => {
                 adjustPasteTextareaHeight();
             }, [pastedText]);
+
+            useEffect(() => {
+                const nextUrls = {};
+                pasteImageFiles.forEach((entry) => {
+                    nextUrls[entry.id] = URL.createObjectURL(entry.file);
+                });
+                setPasteImageUrls(nextUrls);
+                return () => {
+                    Object.values(nextUrls).forEach((url) => URL.revokeObjectURL(url));
+                };
+            }, [pasteImageFiles]);
+
+            const pastePreviewNodes = useMemo(() => {
+                if (!pastedText.trim()) return [];
+                const lines = pastedText.split('\n');
+                const nodes = [];
+                for (let i = 0; i < lines.length; i += 1) {
+                    const line = lines[i];
+                    const imageMatch = line.match(/^\s*\[IMAGE:(.+?)\]\s*$/i);
+                    if (imageMatch) {
+                        const imageId = imageMatch[1].trim();
+                        let title = '';
+                        const nextLine = lines[i + 1];
+                        const titleMatch = nextLine?.match(/^\s*\[IMAGE_TITLE:(.+?)\]\s*(.*)$/i);
+                        if (titleMatch && titleMatch[1].trim().toLowerCase() === imageId.toLowerCase()) {
+                            title = titleMatch[2] || '';
+                            i += 1;
+                        }
+                        nodes.push({
+                            type: 'image',
+                            id: imageId,
+                            url: pasteImageUrls[imageId],
+                            title
+                        });
+                        continue;
+                    }
+                    nodes.push({ type: 'text', text: line });
+                }
+                return nodes;
+            }, [pastedText, pasteImageUrls]);
+            const hasPastePreviewImages = useMemo(
+                () => pastePreviewNodes.some((node) => node.type === 'image'),
+                [pastePreviewNodes]
+            );
 
             const handlePasteImageClick = () => {
                 updatePasteSelection();
@@ -7200,6 +7283,39 @@
                                                             </span>
                                                         )}
                                                     </div>
+                                                    {hasPastePreviewImages && (
+                                                        <div className="paste-preview">
+                                                            {pastePreviewNodes.map((node, index) => {
+                                                                if (node.type === 'image') {
+                                                                    const titleText = node.title?.trim();
+                                                                    const showTitle = titleText && titleText.toLowerCase() !== 'optional title';
+                                                                    return (
+                                                                        <figure key={`${node.id}-${index}`} className="paste-preview-figure">
+                                                                            {node.url ? (
+                                                                                <img
+                                                                                    src={node.url}
+                                                                                    alt={showTitle ? titleText : `Image ${node.id}`}
+                                                                                    className="paste-preview-image"
+                                                                                />
+                                                                            ) : (
+                                                                                <div className="paste-preview-line">
+                                                                                    Image preview unavailable for {node.id}.
+                                                                                </div>
+                                                                            )}
+                                                                            {showTitle && (
+                                                                                <figcaption className="paste-preview-caption">{titleText}</figcaption>
+                                                                            )}
+                                                                        </figure>
+                                                                    );
+                                                                }
+                                                                return (
+                                                                    <div key={`line-${index}`} className="paste-preview-line">
+                                                                        {node.text || '\u00A0'}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
                                                     {pastedText && (
                                                         <div className="quick-actions">
                                                             <button
