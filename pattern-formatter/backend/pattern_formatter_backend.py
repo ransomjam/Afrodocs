@@ -909,6 +909,10 @@ DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 DEEPSEEK_MODEL = "deepseek-chat"
 AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "8192"))
 
+# Gemini API Configuration (used for image/document attachments)
+GEMINI_API_KEY = "AIzaSyDAhVQzICAXDE91bSqNzKgjlG1sBfGfP8A"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+
 # System prompt for the AI assistant
 AI_SYSTEM_PROMPT = """You are AfroDocs AI Assistant, an expert academic writing assistant. Follow these guidelines strictly:
 
@@ -1206,6 +1210,93 @@ def build_attachment_context(attachments, max_chars=12000):
 
     return "\n\n".join(extracted_blocks), "\n".join(issues)
 
+def _infer_mime_type_from_name(name):
+    ext = os.path.splitext(name or "")[1].lower()
+    if ext in {'.png'}:
+        return "image/png"
+    if ext in {'.jpg', '.jpeg'}:
+        return "image/jpeg"
+    if ext in {'.gif'}:
+        return "image/gif"
+    if ext in {'.webp'}:
+        return "image/webp"
+    if ext in {'.pdf'}:
+        return "application/pdf"
+    if ext in {'.docx'}:
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if ext in {'.txt'}:
+        return "text/plain"
+    if ext in {'.md'}:
+        return "text/markdown"
+    return None
+
+
+def _attachment_inline_data(attachment):
+    data_url = attachment.get('dataUrl') or attachment.get('data_url') or attachment.get('content')
+    name = attachment.get('name') or 'attachment'
+    if not data_url:
+        return None, None
+    if data_url.startswith("data:"):
+        try:
+            header, encoded = data_url.split(",", 1)
+        except ValueError:
+            return None, None
+        mime_type = header.split(";")[0].replace("data:", "").strip() or None
+        return mime_type, encoded
+    return _infer_mime_type_from_name(name), data_url
+
+
+def build_gemini_parts(message, attachments):
+    parts = []
+    if message:
+        parts.append({"text": message})
+
+    attachment_context, attachment_issues = build_attachment_context(attachments)
+    if attachment_context:
+        parts.append({"text": f"Attached content (extracted):\n{attachment_context}"})
+    elif attachment_issues:
+        parts.append({"text": f"Attachment notes:\n{attachment_issues}"})
+
+    for attachment in attachments:
+        mime_type, data_b64 = _attachment_inline_data(attachment)
+        if mime_type and data_b64 and mime_type.startswith("image/"):
+            parts.append({"inline_data": {"mime_type": mime_type, "data": data_b64}})
+
+    return parts
+
+
+def _extract_gemini_text(result):
+    candidates = result.get('candidates') or []
+    if not candidates:
+        return ""
+    parts = candidates[0].get('content', {}).get('parts', [])
+    return "".join(part.get('text', '') for part in parts if part.get('text'))
+
+
+def _call_gemini(contents, temperature=0.7, max_tokens=AI_MAX_TOKENS, timeout=90):
+    import requests
+
+    response = requests.post(
+        f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
+        headers={"Content-Type": "application/json"},
+        json={
+            "system_instruction": {"parts": [{"text": AI_SYSTEM_PROMPT}]},
+            "contents": contents,
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens
+            }
+        },
+        timeout=timeout
+    )
+
+    if response.status_code != 200:
+        logger.error(f"Gemini API error: {response.status_code} - {response.text}")
+        raise RuntimeError(f"AI service error: {response.status_code}")
+
+    result = response.json()
+    return _extract_gemini_text(result)
+
 AI_RESTRUCTURE_SYSTEM_PROMPT = """You are AfroDocs AI Restructuring Assistant.
 
 Task: Restructure the provided text to match AfroDocs academic formatting standards.
@@ -1285,26 +1376,43 @@ def ai_chat():
     attachments = data.get('attachments', [])
     raw_message = message
 
-    attachment_context, attachment_issues = build_attachment_context(attachments)
-    if attachment_context:
-        message = f"{message}\n\nAttached content (extracted):\n{attachment_context}"
-    if attachment_issues and not attachment_context:
-        message = f"{message}\n\nAttachment notes:\n{attachment_issues}"
-    
-    # Build messages array
-    messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
-    
-    # Add conversation history
-    for msg in conversation[-10:]:  # Keep last 10 messages for context
-        messages.append({
-            "role": msg.get('role', 'user'),
-            "content": msg.get('content', '')
-        })
-    
-    # Add current message
-    messages.append({"role": "user", "content": message})
-    
+    use_gemini = bool(attachments)
+
     try:
+        if use_gemini:
+            gemini_contents = []
+            for msg in conversation[-10:]:
+                role = "model" if msg.get('role') in {"assistant", "model"} else "user"
+                content = msg.get('content', '')
+                if content:
+                    gemini_contents.append({"role": role, "parts": [{"text": content}]})
+            gemini_contents.append({
+                "role": "user",
+                "parts": build_gemini_parts(message, attachments)
+            })
+            ai_response = normalize_ai_output(_call_gemini(gemini_contents, temperature=0.7, max_tokens=AI_MAX_TOKENS))
+            record_ai_request(raw_message, "chat")
+            return jsonify({'response': ai_response, 'success': True}), 200
+
+        attachment_context, attachment_issues = build_attachment_context(attachments)
+        if attachment_context:
+            message = f"{message}\n\nAttached content (extracted):\n{attachment_context}"
+        if attachment_issues and not attachment_context:
+            message = f"{message}\n\nAttachment notes:\n{attachment_issues}"
+
+        # Build messages array
+        messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
+        
+        # Add conversation history
+        for msg in conversation[-10:]:  # Keep last 10 messages for context
+            messages.append({
+                "role": msg.get('role', 'user'),
+                "content": msg.get('content', '')
+            })
+        
+        # Add current message
+        messages.append({"role": "user", "content": message})
+
         response = requests.post(
             DEEPSEEK_API_URL,
             headers={
@@ -1325,9 +1433,9 @@ def ai_chat():
             ai_response = normalize_ai_output(result['choices'][0]['message']['content'])
             record_ai_request(raw_message, "chat")
             return jsonify({'response': ai_response, 'success': True}), 200
-        else:
-            logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
-            return jsonify({'error': f'AI service error: {response.status_code}', 'success': False}), 500
+
+        logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+        return jsonify({'error': f'AI service error: {response.status_code}', 'success': False}), 500
             
     except requests.exceptions.Timeout:
         return jsonify({'error': 'AI service timeout. Please try again.', 'success': False}), 504
@@ -1366,29 +1474,49 @@ def ai_chat_stream():
     attachments = data.get('attachments', [])
     raw_message = message
 
-    attachment_context, attachment_issues = build_attachment_context(attachments)
-    if attachment_context:
-        message = f"{message}\n\nAttached content (extracted):\n{attachment_context}"
-    if attachment_issues and not attachment_context:
-        message = f"{message}\n\nAttachment notes:\n{attachment_issues}"
+    use_gemini = bool(attachments)
     
-    # Build messages array
-    messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
-    
-    # Add conversation history
-    for msg in conversation[-10:]:  # Keep last 10 messages for context
-        messages.append({
-            "role": msg.get('role', 'user'),
-            "content": msg.get('content', '')
-        })
-    
-    # Add current message
-    messages.append({"role": "user", "content": message})
+    if not use_gemini:
+        attachment_context, attachment_issues = build_attachment_context(attachments)
+        if attachment_context:
+            message = f"{message}\n\nAttached content (extracted):\n{attachment_context}"
+        if attachment_issues and not attachment_context:
+            message = f"{message}\n\nAttachment notes:\n{attachment_issues}"
+        
+        # Build messages array
+        messages = [{"role": "system", "content": AI_SYSTEM_PROMPT}]
+        
+        # Add conversation history
+        for msg in conversation[-10:]:  # Keep last 10 messages for context
+            messages.append({
+                "role": msg.get('role', 'user'),
+                "content": msg.get('content', '')
+            })
+        
+        # Add current message
+        messages.append({"role": "user", "content": message})
 
     record_ai_request(raw_message, "stream")
     
     def generate():
         try:
+            if use_gemini:
+                gemini_contents = []
+                for msg in conversation[-10:]:
+                    role = "model" if msg.get('role') in {"assistant", "model"} else "user"
+                    content = msg.get('content', '')
+                    if content:
+                        gemini_contents.append({"role": role, "parts": [{"text": content}]})
+                gemini_contents.append({
+                    "role": "user",
+                    "parts": build_gemini_parts(message, attachments)
+                })
+                ai_response = normalize_ai_output(_call_gemini(gemini_contents, temperature=0.7, max_tokens=AI_MAX_TOKENS))
+                if ai_response:
+                    yield f"data: {json.dumps({'content': ai_response})}\n\n"
+                yield f"data: {json.dumps({'done': True})}\n\n"
+                return
+
             response = requests.post(
                 DEEPSEEK_API_URL,
                 headers={
