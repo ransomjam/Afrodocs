@@ -1255,7 +1255,9 @@
         .app-sidebar.collapsed .sidebar-collapse-text,
         .app-sidebar.collapsed .app-sidebar-header > div:not(.app-sidebar-logo):not(:last-child),
         .app-sidebar.collapsed .app-sidebar-header > button,
-        .app-sidebar.collapsed .app-sidebar-actions {
+        .app-sidebar.collapsed .app-sidebar-actions,
+        .app-sidebar.collapsed .app-user-button,
+        .app-sidebar.collapsed .app-nav-documents {
             display: none;
         }
 
@@ -6444,7 +6446,7 @@
 
                             {/* User Documents Section */}
                             {userDocuments.length > 0 && (
-                                <div className="app-nav-section">
+                                <div className="app-nav-section app-nav-documents">
                                     <div className="app-nav-section-title">Your Documents</div>
                                     {(showAllDocuments ? userDocuments : userDocuments.slice(0, 4)).map((doc, index) => {
                                         const isRenaming = renameDoc?.id === doc.id;
