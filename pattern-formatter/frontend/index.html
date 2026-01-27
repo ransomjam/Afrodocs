@@ -2434,7 +2434,6 @@
             const messagesEndRef = useRef(null);
             const inputRef = useRef(null);
             const textareaRef = useRef(null);
-            const pasteTextareaRef = useRef(null);
             const sidebarRef = useRef(null);
             const toggleRef = useRef(null);
             const abortControllerRef = useRef(null);
@@ -2482,19 +2481,6 @@
             useEffect(() => {
                 adjustTextareaHeight();
             }, [inputValue]);
-
-            const adjustPasteTextareaHeight = () => {
-                if (!pasteTextareaRef.current) return;
-                const maxHeight = typeof window !== 'undefined'
-                    ? Math.max(window.innerHeight * 0.6, 360)
-                    : 520;
-                pasteTextareaRef.current.style.height = 'auto';
-                pasteTextareaRef.current.style.height = Math.min(pasteTextareaRef.current.scrollHeight, maxHeight) + 'px';
-            };
-
-            useEffect(() => {
-                adjustPasteTextareaHeight();
-            }, [pastedText]);
 
             // Click-away handler: close sidebar when clicking outside (capture-phase pointer for reliability)
             useEffect(() => {
@@ -5125,6 +5111,7 @@
             const [showShare, setShowShare] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
             const fileInputRef = useRef(null);
+            const pasteTextareaRef = useRef(null);
             const [shareBlob, setShareBlob] = useState(null);
             const [pdfPreviewUrl, setPdfPreviewUrl] = useState(null);
             const [showPdfModal, setShowPdfModal] = useState(false);
@@ -5367,6 +5354,19 @@
                 }
                 return () => clearInterval(interval);
             }, [processing]);
+
+            const adjustPasteTextareaHeight = () => {
+                if (!pasteTextareaRef.current) return;
+                const maxHeight = typeof window !== 'undefined'
+                    ? Math.max(window.innerHeight * 0.6, 360)
+                    : 520;
+                pasteTextareaRef.current.style.height = 'auto';
+                pasteTextareaRef.current.style.height = Math.min(pasteTextareaRef.current.scrollHeight, maxHeight) + 'px';
+            };
+
+            useEffect(() => {
+                adjustPasteTextareaHeight();
+            }, [pastedText]);
 
             // Stop generation handler
             const handleStopGeneration = useCallback(() => {
