@@ -1123,9 +1123,9 @@
             flex-shrink: 0;
             transition: width 0.2s ease, transform 0.2s ease;
             overflow: hidden;
-            margin-top: 56px; /* Start below the main menu bar (adjust if your menu bar is taller) */
+            margin-top: var(--ai-sidebar-top, 0px);
             margin-bottom: var(--ai-sidebar-bottom, 0px);
-            height: calc(100% - 56px - var(--ai-sidebar-bottom, 0px));
+            height: calc(100% - var(--ai-sidebar-top, 0px) - var(--ai-sidebar-bottom, 0px));
         }
 
         .ai-sidebar:not(.open) {
