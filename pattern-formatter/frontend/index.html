@@ -1748,6 +1748,25 @@
             padding: 1.25rem;
         }
 
+        .paste-card-reset {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.25);
+            color: rgba(255, 255, 255, 0.8);
+            transition: all 0.2s ease;
+        }
+
+        .paste-card-reset:hover {
+            border-color: rgba(255, 255, 255, 0.4);
+            color: white;
+            background: rgba(0, 0, 0, 0.35);
+        }
+
         /* Unified Input Area */
         .unified-input-area {
             max-width: 800px;
@@ -6381,6 +6400,17 @@
                 setShowFormattingModal(true);
             };
 
+            const handlePasteRefresh = () => {
+                setPastedText('');
+                setPasteImageFiles([]);
+                setPendingPasteImages([]);
+                setPasteImageUrls({});
+                setPasteTextFocused(false);
+                setActiveProjectId(null);
+                setProjectTitle('');
+                window.location.reload();
+            };
+
             const handleRestructurePastedText = async () => {
                 if (!pastedText.trim() || isRestructuringPaste) return;
                 setIsRestructuringPaste(true);
@@ -7649,6 +7679,15 @@
                                                     <div className="content-card-title">
                                                         <Icons.FileText size={18} /> Or Paste Text
                                                     </div>
+                                                    <button
+                                                        type="button"
+                                                        className="paste-card-reset"
+                                                        onClick={handlePasteRefresh}
+                                                        aria-label="Refresh formatter and clear paste"
+                                                        title="Refresh formatter"
+                                                    >
+                                                        <Icons.X size={14} />
+                                                    </button>
                                                 </div>
                                                 <div className="content-card-body">
                                                     <div className="paste-textarea-wrapper">
