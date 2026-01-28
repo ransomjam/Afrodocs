@@ -1127,16 +1127,28 @@
             margin-top: var(--ai-sidebar-top, 0px);
             margin-bottom: var(--ai-sidebar-bottom, 0px);
             height: calc(100% - var(--ai-sidebar-top, 0px) - var(--ai-sidebar-bottom, 0px));
+            position: absolute;
+            left: 0;
+            top: var(--ai-sidebar-top, 0px);
+            bottom: var(--ai-sidebar-bottom, 0px);
+            height: auto;
+            z-index: 30;
+            transform: translateX(-100%);
+            box-shadow: 4px 0 20px rgba(0, 0, 0, 0.35);
         }
 
         .ai-sidebar:not(.open) {
-            width: 0;
             border-right: none;
+            pointer-events: none;
         }
 
         .ai-sidebar:not(.open) .ai-sidebar-header,
         .ai-sidebar:not(.open) .ai-chat-list {
             display: none;
+        }
+
+        .ai-sidebar.open {
+            transform: translateX(0);
         }
 
         .ai-sidebar-header {
