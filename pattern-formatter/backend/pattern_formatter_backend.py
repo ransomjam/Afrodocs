@@ -12365,6 +12365,13 @@ class WordGenerator:
         self.table_entries = []  # Reset table entries
         self.has_figures = False  # Reset figure flag
         self.has_tables = False  # Reset table flag
+
+        # Account for pasted images with captions before scanning structured data.
+        if self.image_lookup:
+            for img in self.image_lookup.values():
+                if img.get('caption'):
+                    self.has_figures = True
+                    break
         
         # Scan content for figures and tables to determine if LOF/LOT is needed
         for section in structured_data:
@@ -12384,6 +12391,11 @@ class WordGenerator:
                     # Only count if it has a caption
                     if item.get('caption'):
                         self.has_figures = True
+                    else:
+                        image_id = item.get('image_id')
+                        if image_id and image_id in self.image_lookup:
+                            if self.image_lookup[image_id].get('caption'):
+                                self.has_figures = True
                 elif item_type == 'figure':
                     # Only count if it has a caption
                     if item.get('caption'):
@@ -12396,6 +12408,10 @@ class WordGenerator:
                     # Only count if it has a caption (tables usually do, but check to be safe)
                     if item.get('caption') or item.get('title'):
                         self.has_tables = True
+                    elif item.get('content') or item.get('rows'):
+                        self.has_tables = True
+                elif item_type == 'plain_text_table':
+                    self.has_tables = True
                 elif item_type == 'table_caption':
                     self.has_tables = True
                 
