@@ -7221,11 +7221,62 @@
                                 </button>
                             </div>
 
+                            <div className="app-nav-section app-nav-projects">
+                                <div className="app-nav-section-title">Projects</div>
+                                {pasteProjects.length === 0 ? (
+                                    <div className="px-3 py-2 text-xs text-mist">No saved projects yet.</div>
+                                ) : (
+                                    <>
+                                        {(showAllProjects ? pasteProjects : pasteProjects.slice(0, 3)).map((project) => (
+                                            <div
+                                                key={project.id}
+                                                className={`app-nav-item app-nav-doc-item group ${activeProjectId === project.id ? 'active' : ''}`}
+                                            >
+                                                <button
+                                                    onClick={() => handleLoadPasteProject(project)}
+                                                    className="app-nav-doc-button"
+                                                    title={project.name}
+                                                >
+                                                    <span className="app-nav-item-icon"><Icons.FileText size={18} /></span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="app-nav-doc-name text-xs">{project.name}</span>
+                                                        <span className="text-[10px] text-mist">
+                                                            {formatProjectDate(project.updatedAt || project.createdAt)}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                                <div className="app-nav-doc-actions flex items-center gap-1">
+                                                    <button
+                                                        onClick={(event) => { event.stopPropagation(); handleDeletePasteProject(project.id); }}
+                                                        className="p-1 text-mist hover:text-coral hover:bg-white/10 rounded"
+                                                        title="Delete project"
+                                                    >
+                                                        <Icons.Trash size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {pasteProjects.length > 3 && (
+                                            <button
+                                                onClick={() => setShowAllProjects(!showAllProjects)}
+                                                className="app-nav-item text-teal hover:text-teal-light"
+                                                title={showAllProjects ? "Show fewer projects" : "See more projects"}
+                                            >
+                                                <span className="app-nav-item-icon">
+                                                    {showAllProjects ? <Icons.ChevronUp size={18} /> : <Icons.ChevronDown size={18} />}
+                                                </span>
+                                                <span className="text-xs">{showAllProjects ? 'Show Less' : `See More (${pasteProjects.length - 3})`}</span>
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
                             {/* User Documents Section */}
                             {userDocuments.length > 0 && (
                                 <div className="app-nav-section app-nav-documents">
                                     <div className="app-nav-section-title">Your Documents</div>
-                                    {(showAllDocuments ? userDocuments : userDocuments.slice(0, 4)).map((doc, index) => {
+                                    {(showAllDocuments ? userDocuments : userDocuments.slice(0, 3)).map((doc, index) => {
                                         const isRenaming = renameDoc?.id === doc.id;
                                         return (
                                             <div key={doc.id || index} className="app-nav-item app-nav-doc-item group">
@@ -7311,7 +7362,7 @@
                                             </div>
                                         );
                                     })}
-                                    {userDocuments.length > 4 && (
+                                    {userDocuments.length > 3 && (
                                         <button
                                             onClick={() => setShowAllDocuments(!showAllDocuments)}
                                             className="app-nav-item text-teal hover:text-teal-light"
@@ -7320,62 +7371,11 @@
                                             <span className="app-nav-item-icon">
                                                 {showAllDocuments ? <Icons.ChevronUp size={18} /> : <Icons.ChevronDown size={18} />}
                                             </span>
-                                            <span className="text-xs">{showAllDocuments ? 'Show Less' : `See More (${userDocuments.length - 4})`}</span>
+                                            <span className="text-xs">{showAllDocuments ? 'Show Less' : `See More (${userDocuments.length - 3})`}</span>
                                         </button>
                                     )}
                                 </div>
                             )}
-
-                            <div className="app-nav-section app-nav-projects">
-                                <div className="app-nav-section-title">Projects</div>
-                                {pasteProjects.length === 0 ? (
-                                    <div className="px-3 py-2 text-xs text-mist">No saved projects yet.</div>
-                                ) : (
-                                    <>
-                                        {(showAllProjects ? pasteProjects : pasteProjects.slice(0, 4)).map((project) => (
-                                            <div
-                                                key={project.id}
-                                                className={`app-nav-item app-nav-doc-item group ${activeProjectId === project.id ? 'active' : ''}`}
-                                            >
-                                                <button
-                                                    onClick={() => handleLoadPasteProject(project)}
-                                                    className="app-nav-doc-button"
-                                                    title={project.name}
-                                                >
-                                                    <span className="app-nav-item-icon"><Icons.FileText size={18} /></span>
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className="app-nav-doc-name text-xs">{project.name}</span>
-                                                        <span className="text-[10px] text-mist">
-                                                            {formatProjectDate(project.updatedAt || project.createdAt)}
-                                                        </span>
-                                                    </div>
-                                                </button>
-                                                <div className="app-nav-doc-actions flex items-center gap-1">
-                                                    <button
-                                                        onClick={(event) => { event.stopPropagation(); handleDeletePasteProject(project.id); }}
-                                                        className="p-1 text-mist hover:text-coral hover:bg-white/10 rounded"
-                                                        title="Delete project"
-                                                    >
-                                                        <Icons.Trash size={12} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        {pasteProjects.length > 4 && (
-                                            <button
-                                                onClick={() => setShowAllProjects(!showAllProjects)}
-                                                className="app-nav-item text-teal hover:text-teal-light"
-                                                title={showAllProjects ? "Show fewer projects" : "See more projects"}
-                                            >
-                                                <span className="app-nav-item-icon">
-                                                    {showAllProjects ? <Icons.ChevronUp size={18} /> : <Icons.ChevronDown size={18} />}
-                                                </span>
-                                                <span className="text-xs">{showAllProjects ? 'Show Less' : `See More (${pasteProjects.length - 4})`}</span>
-                                            </button>
-                                        )}
-                                    </>
-                                )}
-                            </div>
 
                             {/* Admin Section */}
                             {currentUser?.username === 'admin' && (
