@@ -1510,6 +1510,10 @@
             justify-content: space-between;
         }
 
+        .app-nav-project-item {
+            padding: 0.375rem 0.75rem;
+        }
+
         .app-nav-doc-button {
             display: flex;
             align-items: center;
@@ -7230,7 +7234,7 @@
                                         {(showAllProjects ? pasteProjects : pasteProjects.slice(0, 3)).map((project) => (
                                             <div
                                                 key={project.id}
-                                                className={`app-nav-item app-nav-doc-item group ${activeProjectId === project.id ? 'active' : ''}`}
+                                                className="app-nav-item app-nav-doc-item app-nav-project-item group"
                                             >
                                                 <button
                                                     onClick={() => handleLoadPasteProject(project)}
@@ -7734,22 +7738,12 @@
                                                         >
                                                             <Icons.Save size={16} /> Save Project
                                                         </button>
-                                                        {activeProjectId && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleSavePasteProject(true)}
-                                                                className="quick-action-btn compact"
-                                                                disabled={!pastedText.trim()}
-                                                            >
-                                                                <Icons.Copy size={16} /> Save Copy
-                                                            </button>
-                                                        )}
                                                         <button
                                                             onClick={handlePasteSubmit}
                                                             className="quick-action-btn compact primary"
                                                             disabled={!pastedText.trim()}
                                                         >
-                                                            <Icons.Zap /> Format Document
+                                                            <Icons.Zap size={16} /> Format Document
                                                         </button>
                                                     </div>
                                                     {(projectStatus || projectError) && (
