@@ -7690,8 +7690,8 @@
                                                             <div className="paste-preview-grid">
                                                                 {pastePreviewNodes
                                                                     .filter((node) => node.type === 'image')
-                                                                    .map((node, index) => (
-                                                                        <figure key={`${node.id}-${index}`} className="paste-preview-figure">
+                                                                    .map((node) => (
+                                                                        <figure key={node.id} className="paste-preview-figure">
                                                                             <button
                                                                                 type="button"
                                                                                 className="paste-preview-delete"
