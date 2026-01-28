@@ -1806,22 +1806,6 @@
             border-radius: 3px;
         }
 
-        .paste-preview-header {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: rgba(125, 211, 192, 0.9);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.25rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .paste-preview-header::before {
-            content: '📷';
-        }
-
         .paste-image-button {
             position: absolute;
             right: 0.75rem;
@@ -7422,13 +7406,11 @@
                                                     {/* Image Preview Panel - Shows below textarea when images are attached */}
                                                     {hasPastePreviewImages && (
                                                         <div ref={pasteOverlayRef} className="paste-textarea-overlay">
-                                                            <div className="paste-preview-header">Image Previews</div>
                                                             <div className="paste-preview-grid">
                                                                 {pastePreviewNodes
                                                                     .filter((node) => node.type === 'image')
                                                                     .map((node, index) => (
                                                                         <figure key={`${node.id}-${index}`} className="paste-preview-figure">
-                                                                            <div className="paste-preview-label">{node.id}</div>
                                                                             {node.url ? (
                                                                                 <img
                                                                                     src={node.url}
@@ -7451,14 +7433,6 @@
                                                             </div>
                                                         </div>
                                                     )}
-                                                    <div className="mt-2 text-xs text-mist flex flex-wrap items-center gap-2">
-                                                        <span>Click the + icon to insert an image placeholder and optional title.</span>
-                                                        {pasteImageFiles.length > 0 && (
-                                                            <span className="px-2 py-0.5 rounded-full bg-white/10 text-white">
-                                                                {pasteImageFiles.length} image{pasteImageFiles.length > 1 ? 's' : ''} queued
-                                                            </span>
-                                                        )}
-                                                    </div>
                                                     {pastedText && (
                                                         <div className="quick-actions">
                                                             <button
