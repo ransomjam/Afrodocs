@@ -4799,13 +4799,16 @@ class ImpliedBulletDetector:
             # Thresholds
             DEFINITE_THRESHOLD = 85
             LIKELY_THRESHOLD = 70
+            CONTINUATION_THRESHOLD = 55
             
             if score >= LIKELY_THRESHOLD:
                 if current_block_start == -1:
                     current_block_start = i
                 current_block_scores.append(score)
             else:
-                if current_block_start != -1:
+                if current_block_start != -1 and score >= CONTINUATION_THRESHOLD:
+                    current_block_scores.append(score)
+                elif current_block_start != -1:
                     # End of block
                     # Validate block: needs at least 2 items or 1 very high confidence item
                     if len(current_block_scores) >= 2 or (len(current_block_scores) == 1 and current_block_scores[0] >= DEFINITE_THRESHOLD):
