@@ -11905,8 +11905,8 @@ class WordGenerator:
     COVER_LOGO_PATH = os.path.join(os.path.dirname(__file__), 'coverpage_template', 'cover_logo.png')
     LIST_HANGING_INDENT_INCHES = 0.4
     LIST_NESTED_INDENT_INCREMENT_INCHES = 0.25
-    LIST_BULLET_OFFSET_INCHES = 0.15
-    LIST_BULLET_TEXT_INDENT_INCHES = 0.35
+    LIST_BULLET_OFFSET_INCHES = 0.25
+    LIST_BULLET_TEXT_INDENT_INCHES = 0.45
     
     def __init__(self, policy=None):
         self.policy = policy or FormatPolicy()
