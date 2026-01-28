@@ -2381,8 +2381,24 @@
         };
 
         // API Configuration
-        // Use current origin to ensure same-origin requests (avoids CORS issues)
-        const API_BASE = window.location.origin || 'http://localhost:5000';
+        // Prefer explicit overrides (meta tag or global), then fall back to same-origin.
+        const resolveApiBase = () => {
+            const metaBase = document.querySelector('meta[name="afrodocs-api-base"]')?.content?.trim();
+            if (metaBase) return metaBase;
+            if (window.__AFRODOCS_API_BASE__) return window.__AFRODOCS_API_BASE__;
+            if (window.API_BASE) return window.API_BASE;
+            if (window.location?.origin && window.location.origin !== 'null') {
+                return window.location.origin;
+            }
+            const host = window.location?.hostname;
+            if (host) {
+                const protocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
+                const port = window.location.port ? `:${window.location.port}` : '';
+                return `${protocol}//${host}${port}`;
+            }
+            return 'http://localhost:5000';
+        };
+        const API_BASE = resolveApiBase();
         const REMEMBERED_USER_KEY = 'afrodocs_remembered_user';
 
         // ============================================================================
