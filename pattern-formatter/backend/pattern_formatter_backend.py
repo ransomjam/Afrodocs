@@ -7213,6 +7213,19 @@ class PatternEngine:
             return False
         return title[0].isupper()
 
+    def _is_short_numbered_list_item(self, text):
+        """Check if a numbered line is short enough to be treated as a list item."""
+        if not text:
+            return False
+        match = re.match(r'^\s*\(?[0-9ivxA-Za-z]+[\.)]\s+(.+)$', text)
+        if not match:
+            return False
+        content = match.group(1).strip()
+        if not content:
+            return False
+        word_count = len(content.split())
+        return word_count <= 24
+
     def _rewrite_numeric_bullet_markers(self, text):
         """Rewrite numeric + asterisk markers into bullets before list parsing."""
         if not text:
@@ -7812,7 +7825,8 @@ class PatternEngine:
                     return analysis
                 if (self._matches_heading_patterns(trimmed)
                         or (self._is_heading_like_numbered_line(trimmed)
-                            and not self._has_adjacent_list_context(prev_line, next_line))):
+                            and not self._has_adjacent_list_context(prev_line, next_line)
+                            and not self._is_short_numbered_list_item(trimmed))):
                     analysis['type'] = 'heading'
                     analysis['level'] = 2
                     analysis['confidence'] = 0.90
@@ -11889,6 +11903,9 @@ class WordGenerator:
     
     # Path to cover page logo
     COVER_LOGO_PATH = os.path.join(os.path.dirname(__file__), 'coverpage_template', 'cover_logo.png')
+    LIST_HANGING_INDENT_INCHES = 0.4
+    LIST_MARKER_GAP_INCHES = 0.12
+    LIST_NESTED_INDENT_INCREMENT_INCHES = 0.25
     
     def __init__(self, policy=None):
         self.policy = policy or FormatPolicy()
@@ -11992,6 +12009,22 @@ class WordGenerator:
         else:
             # Non-bold paragraph resets the counter
             self._consecutive_bold_count = 0
+
+    def _apply_list_hanging_indent(self, para, indent_level=0):
+        base_indent = self.LIST_HANGING_INDENT_INCHES + (
+            self.LIST_NESTED_INDENT_INCREMENT_INCHES * indent_level
+        )
+        marker_gap = min(self.LIST_MARKER_GAP_INCHES, base_indent)
+        para.paragraph_format.left_indent = Inches(base_indent)
+        para.paragraph_format.first_line_indent = Inches(-marker_gap)
+        para.paragraph_format.tab_stops.add_tab_stop(Inches(base_indent))
+
+    def _apply_list_body_indent(self, para, indent_level=0):
+        base_indent = self.LIST_HANGING_INDENT_INCHES + (
+            self.LIST_NESTED_INDENT_INCREMENT_INCHES * indent_level
+        )
+        para.paragraph_format.left_indent = Inches(base_indent)
+        para.paragraph_format.first_line_indent = Pt(0)
 
     def _enforce_no_italics(self, doc):
         """Force italics off for all styles and runs (except references)."""
@@ -15135,24 +15168,21 @@ class WordGenerator:
                         content_run.font.size = Pt(self.font_size)
                         
                         # Set paragraph formatting
-                        para.paragraph_format.left_indent = Inches(0.5)
-                        para.paragraph_format.first_line_indent = Pt(0)
+                        self._apply_list_hanging_indent(para)
                         para.paragraph_format.line_spacing = self.line_spacing
                         para.paragraph_format.space_after = Pt(0)
-                        para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75))
                     else:
                         title_block = self._split_numbered_title_block(content_after_num) if numbering else None
                         if title_block:
                             title_line, body_lines = title_block
                             title_para = self.doc.add_paragraph()
-                            prefix_run = title_para.add_run(f"{numbering} ")
+                            prefix_run = title_para.add_run(f"{numbering}\t")
                             title_run = title_para.add_run(title_line)
                             title_run.bold = True
                             for run in (prefix_run, title_run):
                                 run.font.name = 'Times New Roman'
                                 run.font.size = Pt(self.font_size)
-                            title_para.paragraph_format.left_indent = Pt(0)
-                            title_para.paragraph_format.first_line_indent = Pt(0)
+                            self._apply_list_hanging_indent(title_para)
                             title_para.paragraph_format.space_after = Pt(3)
                             for body_line in body_lines:
                                 label_split = self._split_label_for_bold(body_line)
@@ -15161,8 +15191,7 @@ class WordGenerator:
                                     self._add_label_bold_runs(para, label_split[0], label_split[1])
                                 else:
                                     para = self.doc.add_paragraph(body_line)
-                                para.paragraph_format.left_indent = Pt(0)
-                                para.paragraph_format.first_line_indent = Pt(0)
+                                self._apply_list_body_indent(para)
                                 para.paragraph_format.space_after = Pt(3)
                                 for run in para.runs:
                                     run.font.name = 'Times New Roman'
@@ -15173,15 +15202,17 @@ class WordGenerator:
                         for idx, para_text in enumerate(paragraphs):
                             if not para_text.strip():
                                 continue
-                            prefix = f"{numbering} " if numbering and idx == 0 else ''
+                            prefix = f"{numbering}\t" if numbering and idx == 0 else ''
                             label_split = self._split_label_for_bold(para_text)
                             if label_split and not list_item.get('original_bold', False):
                                 para = self.doc.add_paragraph()
                                 self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
                             else:
                                 para = self.doc.add_paragraph(prefix + para_text)
-                            para.paragraph_format.left_indent = Pt(0)
-                            para.paragraph_format.first_line_indent = Pt(0)
+                            if numbering and idx == 0:
+                                self._apply_list_hanging_indent(para)
+                            else:
+                                self._apply_list_body_indent(para)
                             para.paragraph_format.space_after = Pt(3)
                             for run in para.runs:
                                 run.font.name = 'Times New Roman'
@@ -15211,14 +15242,13 @@ class WordGenerator:
                     if title_block:
                         title_line, body_lines = title_block
                         title_para = self.doc.add_paragraph()
-                        prefix_run = title_para.add_run(f"{numbering} ")
+                        prefix_run = title_para.add_run(f"{numbering}\t")
                         title_run = title_para.add_run(title_line)
                         title_run.bold = True
                         for run in (prefix_run, title_run):
                             run.font.name = 'Times New Roman'
                             run.font.size = Pt(self.font_size)
-                        title_para.paragraph_format.left_indent = Pt(0)
-                        title_para.paragraph_format.first_line_indent = Pt(0)
+                        self._apply_list_hanging_indent(title_para)
                         title_para.paragraph_format.space_after = Pt(3)
                         for body_line in body_lines:
                             label_split = self._split_label_for_bold(body_line)
@@ -15227,8 +15257,7 @@ class WordGenerator:
                                 self._add_label_bold_runs(para, label_split[0], label_split[1])
                             else:
                                 para = self.doc.add_paragraph(body_line)
-                            para.paragraph_format.left_indent = Pt(0)
-                            para.paragraph_format.first_line_indent = Pt(0)
+                            self._apply_list_body_indent(para)
                             para.paragraph_format.space_after = Pt(3)
                             for run in para.runs:
                                 run.font.name = 'Times New Roman'
@@ -15237,15 +15266,17 @@ class WordGenerator:
                         for idx, para_text in enumerate(paragraphs):
                             if not para_text.strip():
                                 continue
-                            prefix = f"{numbering} " if idx == 0 else ''
+                            prefix = f"{numbering}\t" if idx == 0 else ''
                             label_split = self._split_label_for_bold(para_text)
                             if label_split and not original_bold:
                                 para = self.doc.add_paragraph()
                                 self._add_label_bold_runs(para, label_split[0], label_split[1], prefix=prefix)
                             else:
                                 para = self.doc.add_paragraph(prefix + para_text)
-                            para.paragraph_format.left_indent = Pt(0)
-                            para.paragraph_format.first_line_indent = Pt(0)
+                            if idx == 0:
+                                self._apply_list_hanging_indent(para)
+                            else:
+                                self._apply_list_body_indent(para)
                             para.paragraph_format.space_after = Pt(3)
                             for run in para.runs:
                                 run.font.name = 'Times New Roman'
@@ -15752,9 +15783,7 @@ class WordGenerator:
                     content_run.font.name = 'Times New Roman'
                     content_run.font.size = Pt(self.font_size)
                     
-                    para.paragraph_format.left_indent = Inches(0.5 + (0.25 * indent))
-                    para.paragraph_format.first_line_indent = Pt(0)
-                    para.paragraph_format.tab_stops.add_tab_stop(Inches(0.75 + (0.25 * indent)))
+                    self._apply_list_hanging_indent(para, indent)
             
             # ================================================================
             # DISSERTATION-SPECIFIC CONTENT RENDERING (December 30, 2025)
