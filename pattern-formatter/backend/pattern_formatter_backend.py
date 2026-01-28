@@ -9991,6 +9991,14 @@ class TextFormatterWithRegex:
                 'name': 'Simple numbered items (1., 2., 3.)',
                 'flags': re.MULTILINE
             },
+
+            # Pattern 2b: Parenthesized numbered topics (1), 2), 10))
+            {
+                'regex': r'^(\d+\))(\s+)([A-Z][A-Za-z0-9\s\-:]*?)(?=\n|$)',
+                'replacement': r'**\1\2\3**',
+                'name': 'Parenthesized numbered items (1), 2), 10))',
+                'flags': re.MULTILINE
+            },
             
             # Pattern 3: Roman numerals with title (I., II., III.)
             {
@@ -10060,6 +10068,8 @@ class TextFormatterWithRegex:
         if re.search(r'^\d+\.\d+\s+[A-Z]', text, re.MULTILINE):
             return True
         if re.search(r'^\d+\.\s+[A-Z]', text, re.MULTILINE):
+            return True
+        if re.search(r'^\d+\)\s+[A-Z]', text, re.MULTILINE):
             return True
         
         # Check for bulleted items without bold
