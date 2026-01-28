@@ -11904,7 +11904,6 @@ class WordGenerator:
     # Path to cover page logo
     COVER_LOGO_PATH = os.path.join(os.path.dirname(__file__), 'coverpage_template', 'cover_logo.png')
     LIST_HANGING_INDENT_INCHES = 0.4
-    LIST_MARKER_GAP_INCHES = 0.12
     LIST_NESTED_INDENT_INCREMENT_INCHES = 0.25
     
     def __init__(self, policy=None):
@@ -12014,9 +12013,8 @@ class WordGenerator:
         base_indent = self.LIST_HANGING_INDENT_INCHES + (
             self.LIST_NESTED_INDENT_INCREMENT_INCHES * indent_level
         )
-        marker_gap = min(self.LIST_MARKER_GAP_INCHES, base_indent)
         para.paragraph_format.left_indent = Inches(base_indent)
-        para.paragraph_format.first_line_indent = Inches(-marker_gap)
+        para.paragraph_format.first_line_indent = Inches(-self.LIST_HANGING_INDENT_INCHES)
         para.paragraph_format.tab_stops.add_tab_stop(Inches(base_indent))
 
     def _apply_list_body_indent(self, para, indent_level=0):
@@ -13589,14 +13587,15 @@ class WordGenerator:
             
             # Add caption if exists
             if img_data.get('caption'):
-                caption_para = self.doc.add_paragraph()
-                caption_run = caption_para.add_run(img_data['caption'])
-                caption_run.italic = False
-                caption_run.font.name = 'Times New Roman'
-                caption_run.font.size = Pt(max(8, self.font_size - 2))
-                caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                caption_para.paragraph_format.space_before = Pt(0)
-                caption_para.paragraph_format.space_after = Pt(6)  # Reduced spacing
+                caption_text = img_data['caption'].strip()
+                if caption_text:
+                    figure_info = self.figure_formatter.detect_figure_caption(caption_text)
+                    if figure_info:
+                        self._add_figure_caption(figure_info['number'], figure_info['title'])
+                    else:
+                        next_number = str(len(self.figure_entries) + 1)
+                        self._add_figure_caption(next_number, caption_text)
+                    self.has_figures = True
             
         except Exception as e:
             logger.error(f"Error inserting image {image_id}: {str(e)}")
