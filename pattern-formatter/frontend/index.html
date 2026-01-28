@@ -1859,8 +1859,12 @@
 
         .paste-preview-grid {
             display: flex;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
             gap: 1rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
         }
 
         .paste-preview-figure {
@@ -1874,6 +1878,8 @@
             border-radius: 0.75rem;
             min-width: 140px;
             max-width: 320px;
+            position: relative;
+            scroll-snap-align: start;
             transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
 
@@ -1918,6 +1924,29 @@
             border: 2px solid rgba(0, 180, 166, 0.4);
             box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
             background: rgba(0, 0, 0, 0.2);
+        }
+
+        .paste-preview-delete {
+            position: absolute;
+            top: 0.4rem;
+            right: 0.4rem;
+            width: 1.6rem;
+            height: 1.6rem;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(8, 22, 33, 0.85);
+            color: rgba(255, 255, 255, 0.85);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .paste-preview-delete:hover {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.5);
+            color: #f87171;
         }
 
         .paste-preview-caption {
@@ -1977,6 +2006,11 @@
             transform: translateY(-1px);
         }
 
+        .quick-action-btn.compact {
+            padding: 0.45rem 0.75rem;
+            font-size: 0.75rem;
+        }
+
         .paste-project-row {
             display: flex;
             flex-wrap: wrap;
@@ -1994,6 +2028,23 @@
             border: 1px solid rgba(255, 255, 255, 0.12);
             color: #E2E8F0;
             font-size: 0.8125rem;
+        }
+
+        @media (max-width: 640px) {
+            .paste-preview-grid {
+                gap: 0.75rem;
+            }
+
+            .paste-preview-figure {
+                padding: 0.6rem;
+                min-width: 120px;
+                max-width: 220px;
+            }
+
+            .paste-inline-image {
+                max-width: 200px;
+                max-height: 130px;
+            }
         }
 
         .paste-project-input:focus {
@@ -5995,6 +6046,31 @@
                 });
             };
 
+            const stripPasteImagePlaceholder = useCallback((text, imageId) => {
+                if (!text) return '';
+                const lines = text.split('\n');
+                const nextLines = [];
+                for (let i = 0; i < lines.length; i += 1) {
+                    const line = lines[i];
+                    const imageMatch = line.match(/^\s*\[IMAGE:(.+?)\]\s*$/i);
+                    if (imageMatch && imageMatch[1].trim().toLowerCase() === imageId.toLowerCase()) {
+                        const nextLine = lines[i + 1];
+                        const titleMatch = nextLine?.match(/^\s*\[IMAGE_TITLE:(.+?)\]\s*/i);
+                        if (titleMatch && titleMatch[1].trim().toLowerCase() === imageId.toLowerCase()) {
+                            i += 1;
+                        }
+                        continue;
+                    }
+                    nextLines.push(line);
+                }
+                return nextLines.join('\n');
+            }, []);
+
+            const handlePasteImageDelete = useCallback((imageId) => {
+                setPasteImageFiles((prev) => prev.filter((entry) => entry.id !== imageId));
+                setPastedText((prev) => stripPasteImagePlaceholder(prev, imageId));
+            }, [stripPasteImagePlaceholder]);
+
             // Stop generation handler
             const handleStopGeneration = useCallback(() => {
                 if (abortControllerRef.current) {
@@ -7612,6 +7688,14 @@
                                                                     .filter((node) => node.type === 'image')
                                                                     .map((node, index) => (
                                                                         <figure key={`${node.id}-${index}`} className="paste-preview-figure">
+                                                                            <button
+                                                                                type="button"
+                                                                                className="paste-preview-delete"
+                                                                                onClick={() => handlePasteImageDelete(node.id)}
+                                                                                aria-label={`Remove ${node.showTitle ? node.title : node.id}`}
+                                                                            >
+                                                                                <Icons.X size={12} />
+                                                                            </button>
                                                                             {node.url ? (
                                                                                 <img
                                                                                     src={node.url}
@@ -7645,7 +7729,7 @@
                                                         <button
                                                             type="button"
                                                             onClick={() => handleSavePasteProject(false)}
-                                                            className="quick-action-btn"
+                                                            className="quick-action-btn compact"
                                                             disabled={!pastedText.trim()}
                                                         >
                                                             <Icons.Save size={16} /> Save Project
@@ -7654,12 +7738,19 @@
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleSavePasteProject(true)}
-                                                                className="quick-action-btn"
+                                                                className="quick-action-btn compact"
                                                                 disabled={!pastedText.trim()}
                                                             >
                                                                 <Icons.Copy size={16} /> Save Copy
                                                             </button>
                                                         )}
+                                                        <button
+                                                            onClick={handlePasteSubmit}
+                                                            className="quick-action-btn compact primary"
+                                                            disabled={!pastedText.trim()}
+                                                        >
+                                                            <Icons.Zap /> Format Document
+                                                        </button>
                                                     </div>
                                                     {(projectStatus || projectError) && (
                                                         <div className={`paste-project-status ${projectError ? 'error' : ''}`}>
@@ -7668,12 +7759,6 @@
                                                     )}
                                                     {pastedText && (
                                                         <div className="quick-actions">
-                                                            <button
-                                                                onClick={handlePasteSubmit}
-                                                                className="quick-action-btn primary"
-                                                            >
-                                                                <Icons.Zap /> Format Document
-                                                            </button>
                                                             {isPastedTextWithinAiLimit && (
                                                                 <button
                                                                     onClick={handleRestructurePastedText}
