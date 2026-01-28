@@ -13556,14 +13556,15 @@ class WordGenerator:
             
             # Add caption if exists
             if img_data.get('caption'):
-                caption_para = self.doc.add_paragraph()
-                caption_run = caption_para.add_run(img_data['caption'])
-                caption_run.italic = False
-                caption_run.font.name = 'Times New Roman'
-                caption_run.font.size = Pt(max(8, self.font_size - 2))
-                caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                caption_para.paragraph_format.space_before = Pt(0)
-                caption_para.paragraph_format.space_after = Pt(6)  # Reduced spacing
+                caption_text = img_data['caption'].strip()
+                if caption_text:
+                    figure_info = self.figure_formatter.detect_figure_caption(caption_text)
+                    if figure_info:
+                        self._add_figure_caption(figure_info['number'], figure_info['title'])
+                    else:
+                        next_number = str(len(self.figure_entries) + 1)
+                        self._add_figure_caption(next_number, caption_text)
+                    self.has_figures = True
             
         except Exception as e:
             logger.error(f"Error inserting image {image_id}: {str(e)}")
