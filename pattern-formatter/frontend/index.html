@@ -1977,6 +1977,40 @@
             transform: translateY(-1px);
         }
 
+        .paste-project-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            align-items: center;
+        }
+
+        .paste-project-input {
+            flex: 1 1 220px;
+            min-width: 200px;
+            padding: 0.55rem 0.75rem;
+            border-radius: 0.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #E2E8F0;
+            font-size: 0.8125rem;
+        }
+
+        .paste-project-input:focus {
+            border-color: rgba(0, 180, 166, 0.6);
+            outline: none;
+        }
+
+        .paste-project-status {
+            font-size: 0.75rem;
+            color: #8FB8C6;
+            margin-top: 0.5rem;
+        }
+
+        .paste-project-status.error {
+            color: #FF6B6B;
+        }
+
         /* File Drop Zone */
         .file-drop-zone {
             border: 2px dashed rgba(255, 255, 255, 0.15);
@@ -2116,6 +2150,13 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+            ),
+            Save: ({ size = 24 }) => (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
                 </svg>
             ),
             History: ({ size = 20 }) => (
@@ -5540,6 +5581,14 @@
                 const saved = localStorage.getItem('afrodocs_user_documents');
                 return saved ? JSON.parse(saved) : [];
             });
+            const [pasteProjects, setPasteProjects] = useState(() => {
+                const saved = localStorage.getItem('afrodocs_paste_projects');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [projectTitle, setProjectTitle] = useState('');
+            const [projectStatus, setProjectStatus] = useState('');
+            const [projectError, setProjectError] = useState('');
+            const [activeProjectId, setActiveProjectId] = useState(null);
             const [renameDoc, setRenameDoc] = useState(null);
             const [renameValue, setRenameValue] = useState('');
             const [renameError, setRenameError] = useState('');
@@ -5559,6 +5608,7 @@
             const [isRestructuringPaste, setIsRestructuringPaste] = useState(false);
             const [showSuccessMessage, setShowSuccessMessage] = useState(false);
             const successTimeoutRef = useRef(null);
+            const projectStatusTimeoutRef = useRef(null);
             const [elapsedTime, setElapsedTime] = useState(0);
             const [showShare, setShowShare] = useState(false);
             const [showProfile, setShowProfile] = useState(false);
@@ -5596,6 +5646,7 @@
             const [aiSidebarOpen, setAiSidebarOpen] = useState(false);
             // Documents expansion state
             const [showAllDocuments, setShowAllDocuments] = useState(false);
+            const [showAllProjects, setShowAllProjects] = useState(false);
             // Payment success modal state
             const [showPaymentSuccessModal, setShowPaymentSuccessModal] = useState(false);
             // Formatting options states
@@ -5628,6 +5679,10 @@
                     setPdfPreviewLoading(false);
                 }
             }, [pdfPreviewUrl]);
+
+            useEffect(() => {
+                localStorage.setItem('afrodocs_paste_projects', JSON.stringify(pasteProjects));
+            }, [pasteProjects]);
 
             const handleUpgrade = async (pages, amount) => {
                 setShowPricingModal(false);
@@ -6160,6 +6215,80 @@
                 }
             };
 
+            const buildDefaultProjectName = () => {
+                const now = new Date();
+                const date = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                const time = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                return `Untitled Paste ${date} ${time}`;
+            };
+
+            const updateProjectFeedback = (message, isError = false) => {
+                if (projectStatusTimeoutRef.current) {
+                    clearTimeout(projectStatusTimeoutRef.current);
+                }
+                if (isError) {
+                    setProjectError(message);
+                    setProjectStatus('');
+                } else {
+                    setProjectStatus(message);
+                    setProjectError('');
+                }
+                projectStatusTimeoutRef.current = setTimeout(() => {
+                    setProjectStatus('');
+                    setProjectError('');
+                }, 3000);
+            };
+
+            const handleSavePasteProject = (forceNew = false) => {
+                const trimmedText = pastedText.trim();
+                if (!trimmedText) {
+                    updateProjectFeedback('Add some pasted text before saving.', true);
+                    return;
+                }
+                const name = projectTitle.trim() || buildDefaultProjectName();
+                const timestamp = new Date().toISOString();
+                setPasteProjects((prev) => {
+                    if (activeProjectId && !forceNew) {
+                        const updated = prev.map((project) => (
+                            project.id === activeProjectId
+                                ? { ...project, name, text: trimmedText, updatedAt: timestamp }
+                                : project
+                        ));
+                        updateProjectFeedback('Project updated.');
+                        return updated;
+                    }
+                    const newProject = {
+                        id: Date.now(),
+                        name,
+                        text: trimmedText,
+                        createdAt: timestamp,
+                        updatedAt: timestamp
+                    };
+                    setActiveProjectId(newProject.id);
+                    updateProjectFeedback('Project saved.');
+                    return [newProject, ...prev].slice(0, 25);
+                });
+                setProjectTitle(name);
+            };
+
+            const handleLoadPasteProject = (project) => {
+                setPastedText(project.text || '');
+                setProjectTitle(project.name || '');
+                setActiveProjectId(project.id);
+                setViewMode('formatter');
+                setAppSidebarOpen(false);
+                setShowProfile(false);
+                updateProjectFeedback('Project loaded.');
+            };
+
+            const handleDeletePasteProject = (projectId) => {
+                setPasteProjects((prev) => prev.filter((project) => project.id !== projectId));
+                if (activeProjectId === projectId) {
+                    setActiveProjectId(null);
+                }
+                updateProjectFeedback('Project removed.');
+            };
+
             const handlePasteSubmit = () => {
                 if (!pastedText.trim()) return;
                 
@@ -6411,6 +6540,10 @@
                 setPastedText('');
                 setPasteImageFiles([]);
                 setPendingPasteImages([]);
+                setProjectTitle('');
+                setActiveProjectId(null);
+                setProjectStatus('');
+                setProjectError('');
                 if (fileInputRef.current) {
                     fileInputRef.current.value = '';
                 }
@@ -6437,6 +6570,11 @@
             const buildPdfFilename = (filename) => (
                 filename ? filename.replace(/\.docx$/i, '.pdf') : 'formatted_document.pdf'
             );
+
+            const formatProjectDate = (timestamp) => {
+                if (!timestamp) return '';
+                return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            };
 
             const handleRenameDocument = (doc) => {
                 setRenameDoc(doc);
@@ -7112,6 +7250,57 @@
                                 </div>
                             )}
 
+                            <div className="app-nav-section app-nav-projects">
+                                <div className="app-nav-section-title">Projects</div>
+                                {pasteProjects.length === 0 ? (
+                                    <div className="px-3 py-2 text-xs text-mist">No saved projects yet.</div>
+                                ) : (
+                                    <>
+                                        {(showAllProjects ? pasteProjects : pasteProjects.slice(0, 4)).map((project) => (
+                                            <div
+                                                key={project.id}
+                                                className={`app-nav-item app-nav-doc-item group ${activeProjectId === project.id ? 'active' : ''}`}
+                                            >
+                                                <button
+                                                    onClick={() => handleLoadPasteProject(project)}
+                                                    className="app-nav-doc-button"
+                                                    title={project.name}
+                                                >
+                                                    <span className="app-nav-item-icon"><Icons.FileText size={18} /></span>
+                                                    <div className="flex flex-col min-w-0">
+                                                        <span className="app-nav-doc-name text-xs">{project.name}</span>
+                                                        <span className="text-[10px] text-mist">
+                                                            {formatProjectDate(project.updatedAt || project.createdAt)}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                                <div className="app-nav-doc-actions flex items-center gap-1">
+                                                    <button
+                                                        onClick={(event) => { event.stopPropagation(); handleDeletePasteProject(project.id); }}
+                                                        className="p-1 text-mist hover:text-coral hover:bg-white/10 rounded"
+                                                        title="Delete project"
+                                                    >
+                                                        <Icons.Trash size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {pasteProjects.length > 4 && (
+                                            <button
+                                                onClick={() => setShowAllProjects(!showAllProjects)}
+                                                className="app-nav-item text-teal hover:text-teal-light"
+                                                title={showAllProjects ? "Show fewer projects" : "See more projects"}
+                                            >
+                                                <span className="app-nav-item-icon">
+                                                    {showAllProjects ? <Icons.ChevronUp size={18} /> : <Icons.ChevronDown size={18} />}
+                                                </span>
+                                                <span className="text-xs">{showAllProjects ? 'Show Less' : `See More (${pasteProjects.length - 4})`}</span>
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
                             {/* Admin Section */}
                             {currentUser?.username === 'admin' && (
                                 <div className="app-nav-section">
@@ -7443,6 +7632,38 @@
                                                                         </figure>
                                                                     ))}
                                                             </div>
+                                                        </div>
+                                                    )}
+                                                    <div className="paste-project-row">
+                                                        <input
+                                                            type="text"
+                                                            value={projectTitle}
+                                                            onChange={(e) => setProjectTitle(e.target.value)}
+                                                            placeholder="Project name (optional)"
+                                                            className="paste-project-input"
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSavePasteProject(false)}
+                                                            className="quick-action-btn"
+                                                            disabled={!pastedText.trim()}
+                                                        >
+                                                            <Icons.Save size={16} /> Save Project
+                                                        </button>
+                                                        {activeProjectId && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleSavePasteProject(true)}
+                                                                className="quick-action-btn"
+                                                                disabled={!pastedText.trim()}
+                                                            >
+                                                                <Icons.Copy size={16} /> Save Copy
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {(projectStatus || projectError) && (
+                                                        <div className={`paste-project-status ${projectError ? 'error' : ''}`}>
+                                                            {projectError || projectStatus}
                                                         </div>
                                                     )}
                                                     {pastedText && (
